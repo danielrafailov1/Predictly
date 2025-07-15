@@ -48,7 +48,7 @@ struct FriendsView: View {
                                         AsyncProfileImage(userId: friend.user_id, supabaseClient: supabaseClient)
                                             .frame(width: 40, height: 40)
                                             .clipShape(Circle())
-                                        Text(friend.username)
+                                        Text("\(friend.username)#\(friend.identifier)")
                                             .foregroundColor(.white)
                                         Spacer()
                                         Button(action: {
@@ -113,7 +113,7 @@ struct FriendsView: View {
             }
             .sheet(isPresented: $showPartyPicker) {
                 VStack(spacing: 20) {
-                    Text("Invite \(inviteTarget?.username ?? "Friend") to a Party")
+                    Text("Invite \(inviteTarget != nil ? "\(inviteTarget!.username)#\(inviteTarget!.identifier)" : "Friend") to a Party")
                         .font(.title2)
                         .padding(.top, 24)
                     if isLoadingParties {
@@ -261,6 +261,7 @@ struct FriendsView: View {
 struct FriendUser: Decodable, Identifiable {
     let user_id: String
     let username: String
+    let identifier: String
     var id: String { user_id }
 }
 

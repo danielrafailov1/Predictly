@@ -33,7 +33,7 @@ struct AddFriendView: View {
                 } else {
                     List(results, id: \.user_id) { user in
                         HStack {
-                            Text(user.username).foregroundColor(.white)
+                            Text("\(user.username)#\(user.identifier)").foregroundColor(.white)
                             Spacer()
                             if sentRequestTo == user.user_id {
                                 Text("Request Sent").foregroundColor(.green)
@@ -87,7 +87,7 @@ struct AddFriendView: View {
         do {
             let resp = try await supabaseClient
                 .from("Username")
-                .select("user_id, username")
+                .select("user_id, username, identifier")
                 .ilike("username", pattern: "%\(searchText)%")
                 .neq("user_id", value: userId)
                 .execute()
@@ -139,4 +139,5 @@ struct AddFriendView: View {
 struct UserSearchResult: Decodable {
     let user_id: String
     let username: String
+    let identifier: String
 } 

@@ -255,7 +255,8 @@ struct ProfileView: View {
                 isEditing: $isEditingUsername,
                 onSave: { updatedUsername in
                     Task { await updateUsername(newUsername: updatedUsername) }
-                }
+                },
+                identifier: identifier
             )
             
             // Email Field
@@ -585,6 +586,7 @@ struct EditableInfoRow: View {
     @Binding var value: String
     @Binding var isEditing: Bool
     let onSave: (String) -> Void
+    var identifier: String? = nil
     
     @State private var draftValue: String = ""
 
@@ -620,6 +622,10 @@ struct EditableInfoRow: View {
                 if title == "Email" {
                     Text(value)
                         .font(.system(size: 12))
+                        .foregroundColor(.white)
+                } else if let identifier = identifier, !identifier.isEmpty {
+                    Text("\(value)#\(identifier)")
+                        .font(.system(size: 16))
                         .foregroundColor(.white)
                 } else {
                     Text(value)

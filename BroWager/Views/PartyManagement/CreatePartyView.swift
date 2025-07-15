@@ -244,7 +244,7 @@ struct CreatePartyView: View {
                                 hostUserId = await fetchUserId(for: userEmail)
                             }
                             if let userId = hostUserId {
-                                if let partyId = await fetchPartyId(for: partyCode) {
+                                if let partyId = await fetchPartyId(for: partyCode), let game = selectedGame {
                                     let now = ISO8601DateFormatter().string(from: Date())
                                     let newMember = NewPartyMember(party_id: partyId, user_id: userId, joined_at: now, created_at: now)
                                     do {
@@ -255,9 +255,17 @@ struct CreatePartyView: View {
                                     } catch {
                                         print("Error adding host as party member: \(error)")
                                     }
+                                    // Navigate to GameEventView
+                                    navPath.append(BetFlowPath.gameEvent(
+                                        game: game,
+                                        partyId: partyId,
+                                        userId: userId,
+                                        betType: betType,
+                                        partyCode: partyCode,
+                                        userEmail: userEmail
+                                    ))
                                 }
                             }
-                            showBetsGeneratedConfirmation = true
                         } else {
                             errorMessage = result.error
                         }

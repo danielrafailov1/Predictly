@@ -309,12 +309,10 @@ struct CustomBetView: View {
     private func generateRandomName() {
         let adjectives = ["Epic", "Legendary", "Awesome", "Super", "Mega", "Ultra", "Pro", "Elite", "Prime", "Royal"]
         let nouns = ["Party", "Squad", "Team", "Crew", "Gang", "Club", "League", "Alliance", "Union", "Federation"]
-        
         let randomAdjective = adjectives.randomElement() ?? "Epic"
         let randomNoun = nouns.randomElement() ?? "Party"
         let randomNumber = Int.random(in: 1...999)
-        
-        partyName = "\(randomAdjective)\(randomNoun)\(randomNumber)"
+        partyName = "\(randomAdjective) \(randomNoun)\(randomNumber)"
     }
 }
 

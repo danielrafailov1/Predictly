@@ -116,9 +116,6 @@ struct PartyLobbyView: View {
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
-                            Text(formattedDate(from: game.date))
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
                         }
                         .padding(.horizontal, 24)
                         .padding(.vertical, 16)
@@ -194,7 +191,7 @@ struct PartyLobbyView: View {
                                 TextField("Enter bet amount", text: $betDetails.betAmount)
                                     .font(.system(size: 16))
                                     .foregroundColor(.white)
-                                    .keyboardType(.numberPad)
+                                    .keyboardType(.asciiCapable)
                                     .submitLabel(.done)
                                     .padding()
                                     .background(Color.white.opacity(0.1))
@@ -222,12 +219,13 @@ struct PartyLobbyView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white)
                             VStack(spacing: 16) {
-                                ForEach(BetType.allCases) { type in
+                                ForEach([BetType.predefined, .draftTeam, .randomPlayer, .statBased, .outcomeBased], id: \ .self) { type in
                                     PartyBetTypeCard(
                                         betType: type,
                                         isSelected: selectedBetType == type,
                                         showTutorial: { tutorialBetType = type },
-                                        select: { selectedBetType = type }
+                                        select: { selectedBetType = type },
+                                        showDescription: selectedBetType == type
                                     )
                                 }
                             }
@@ -276,11 +274,11 @@ struct PartyLobbyView: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 56)
-                                .background((!betDetails.partyName.isEmpty && !betDetails.betAmount.isEmpty) ? Color.green : Color.gray)
+                                .background((!betDetails.partyName.isEmpty && !betDetails.betAmount.isEmpty && Int(betDetails.betAmount) != nil) ? Color.green : Color.gray)
                                 .cornerRadius(16)
                                 .shadow(color: Color.green.opacity(0.3), radius: 8, x: 0, y: 4)
                         }
-                        .disabled(betDetails.partyName.isEmpty || betDetails.betAmount.isEmpty)
+                        .disabled(betDetails.partyName.isEmpty || betDetails.betAmount.isEmpty || Int(betDetails.betAmount) == nil)
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
                     }
@@ -299,7 +297,7 @@ struct PartyLobbyView: View {
             }
         }
         .sheet(item: $pendingPartySettings) { settings in
-            GameEventView(
+            GameEventHostView(
                 partySettings: (
                     name: settings.name,
                     privacy: settings.privacy,
@@ -355,7 +353,7 @@ struct PartyLobbyView: View {
         let nouns = ["Party", "Squad", "Team", "Crew", "Gang", "Club", "League", "Alliance", "Union", "Federation"]
         let randomAdjective = adjectives.randomElement() ?? "Epic"
         let randomNoun = nouns.randomElement() ?? "Party"
-        betDetails.partyName = "\(randomAdjective)\(randomNoun)"
+        betDetails.partyName = "\(randomAdjective) \(randomNoun)"
     }
 
     func formattedDate(from isoDate: String) -> String {
@@ -435,6 +433,7 @@ struct PartyBetTypeCard: View {
     var isSelected: Bool
     var showTutorial: () -> Void = {}
     var select: () -> Void = {}
+    var showDescription: Bool = false
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
             Image(systemName: betType.icon)
@@ -466,11 +465,13 @@ struct PartyBetTypeCard: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Text(betType.shortDescription)
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                if showDescription {
+                    Text(betType.shortDescription)
+                        .font(.system(size: 16))
+                        .foregroundColor(.white.opacity(0.8))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
             if isSelected {

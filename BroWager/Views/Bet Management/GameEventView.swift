@@ -50,13 +50,23 @@ struct GameEventView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         DraftTeamSelectionView(players: events, selectedPlayers: $selectedPlayers)
-                        Button("Submit Team") {
-                            Task { await saveDraftTeamBet() }
-                        }
-                        .disabled(selectedPlayers.count != 5)
-                        .padding()
                     }
                 }
+                Spacer()
+                Button(action: {
+                    Task { await saveDraftTeamBet() }
+                }) {
+                    Text("Submit Team")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(selectedPlayers.count == 5 ? Color.green : Color.gray)
+                        .cornerRadius(16)
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
+                }
+                .disabled(selectedPlayers.count != 5)
             } else {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -362,7 +372,12 @@ struct GameEventView: View {
     }
 
     private func saveDraftTeamBet() async {
-        guard let partyId = partyId, let userId = userId else { return }
+        print("[saveDraftTeamBet] Called")
+        print("[saveDraftTeamBet] partyId: \(String(describing: partyId)), userId: \(String(describing: userId)), selectedPlayers: \(selectedPlayers)")
+        guard let partyId = partyId, let userId = userId else {
+            print("[saveDraftTeamBet] Missing partyId or userId")
+            return
+        }
         struct DraftTeamPayload: Encodable {
             let party_id: Int64
             let user_id: String
@@ -370,14 +385,17 @@ struct GameEventView: View {
         }
         let payload = DraftTeamPayload(party_id: partyId, user_id: userId, draft_team: selectedPlayers)
         do {
+            print("[saveDraftTeamBet] Attempting upsert to User Bets with payload: \(payload)")
             _ = try await supabaseClient
                 .from("User Bets")
                 .upsert(payload, onConflict: "party_id,user_id")
                 .execute()
             await MainActor.run {
+                print("[saveDraftTeamBet] Success! Showing success alert.")
                 showSuccess = true
             }
         } catch {
+            print("[saveDraftTeamBet] Error: \(error)")
             await MainActor.run {
                 self.error = "Failed to save draft team: \(error.localizedDescription)"
             }
@@ -409,30 +427,32 @@ struct GameEventHostView: View {
     @Environment(\.supabaseClient) private var supabaseClient
     @Environment(\.dismiss) private var dismiss
     @State private var showRefreshLimitAlert = false
+    @State private var selectedPlayers: [String] = []
+    @State private var showSuccess = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Select 15/25 Bets")
+                Text(betType == .draftTeam ? "Draft Your Team" : "Select 15/25 Bets")
                     .font(.headline)
                     .foregroundColor(.white)
                 Spacer()
-                if fixedEvents == nil {
-                Button(action: {
-                    if refreshCount < maxRefreshes {
-                        refreshCount += 1
-                        Task { await generateBingoCardWithGemini(for: game) }
+                if fixedEvents == nil && betType != .draftTeam {
+                    Button(action: {
+                        if refreshCount < maxRefreshes {
+                            refreshCount += 1
+                            Task { await generateBingoCardWithGemini(for: game) }
                         } else {
                             showRefreshLimitAlert = true
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Refresh (") + Text("\(maxRefreshes - refreshCount)") + Text(")")
+                        }
                     }
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Refresh (") + Text("\(maxRefreshes - refreshCount)") + Text(")")
-                    }
-                }
-                .disabled(refreshCount >= maxRefreshes || isLoadingBingo)
-                .foregroundColor(refreshCount < maxRefreshes ? .blue : .gray)
+                    .disabled(refreshCount >= maxRefreshes || isLoadingBingo)
+                    .foregroundColor(refreshCount < maxRefreshes ? .blue : .gray)
                     .alert(isPresented: $showRefreshLimitAlert) {
                         Alert(
                             title: Text("Refresh Limit Reached"),
@@ -451,6 +471,27 @@ struct GameEventHostView: View {
                 Text("Error: \(error)")
                     .foregroundColor(.red)
                     .padding()
+            } else if betType == .draftTeam {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        DraftTeamSelectionView(players: bingoSquares, selectedPlayers: $selectedPlayers)
+                    }
+                }
+                Spacer()
+                Button(action: {
+                    Task { await saveDraftTeamBetHost() }
+                }) {
+                    Text("Submit Team")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(selectedPlayers.count == 5 ? Color.green : Color.gray)
+                        .cornerRadius(16)
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
+                }
+                .disabled(selectedPlayers.count != 5)
             } else {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -513,12 +554,18 @@ struct GameEventHostView: View {
             .ignoresSafeArea()
         )
         .onAppear {
+            print("[GameEventHostView] onAppear. partyId: \(partyId), userId: \(userId), betType: \(betType), partyCode: \(partyCode), userEmail: \(userEmail)")
             if let fixed = fixedEvents {
                 bingoSquares = fixed
                 isLoadingBingo = false
             } else {
-            Task { await generateBingoCardWithGemini(for: game) }
+                Task { await generateBingoCardWithGemini(for: game) }
             }
+        }
+        .alert("Success!", isPresented: $showSuccess) {
+            Button("OK") { dismiss() }
+        } message: {
+            Text("Your draft team has been submitted. Good luck!")
         }
     }
 
@@ -636,6 +683,33 @@ struct GameEventHostView: View {
         } catch {
             await MainActor.run {
                 self.error = "Failed to save your bets: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func saveDraftTeamBetHost() async {
+        print("[saveDraftTeamBetHost] Called")
+        print("[saveDraftTeamBetHost] partyId: \(partyId), userId: \(userId), selectedPlayers: \(selectedPlayers)")
+        struct DraftTeamPayload: Encodable {
+            let party_id: Int64
+            let user_id: String
+            let draft_team: [String]
+        }
+        let payload = DraftTeamPayload(party_id: partyId, user_id: userId, draft_team: selectedPlayers)
+        do {
+            print("[saveDraftTeamBetHost] Attempting upsert to User Bets with payload: \(payload)")
+            _ = try await supabaseClient
+                .from("User Bets")
+                .upsert(payload, onConflict: "party_id,user_id")
+                .execute()
+            await MainActor.run {
+                print("[saveDraftTeamBetHost] Success! Showing success alert.")
+                showSuccess = true
+            }
+        } catch {
+            print("[saveDraftTeamBetHost] Error: \(error)")
+            await MainActor.run {
+                self.error = "Failed to save draft team: \(error.localizedDescription)"
             }
         }
     }

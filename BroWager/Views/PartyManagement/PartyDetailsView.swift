@@ -184,15 +184,21 @@ struct PartyDetailsView: View {
             ProfileView(navPath: .constant(NavigationPath()), email: "")
         }
         .sheet(isPresented: $showGameEventSheet) {
-            if let partyId = partyId, let userId = currentUserId, !partyEvents.isEmpty {
-                GameEventView(
-                    partySettings: nil,
-                    onPartyCreated: nil,
-                    fixedEvents: partyEvents,
+            if let partyId = partyId, let userId = currentUserId, !partyEvents.isEmpty, let game = selectedGame {
+                GameEventHostView(
+                    navPath: .constant(NavigationPath()),
+                    game: game,
                     partyId: partyId,
                     userId: userId,
-                    previousBet: previousBet
+                    betType: .predefined,
+                    refreshCount: .constant(0),
+                    maxRefreshes: 0,
+                    partyCode: partyCode,
+                    userEmail: email,
+                    fixedEvents: partyEvents
                 )
+            } else {
+                Text("Missing data for GameEventHostView")
             }
         }
         .sheet(isPresented: $showPartyChat) {
