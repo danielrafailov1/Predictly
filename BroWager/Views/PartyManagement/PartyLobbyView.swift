@@ -297,7 +297,7 @@ struct PartyLobbyView: View {
             }
         }
         .sheet(item: $pendingPartySettings) { settings in
-            GameEventHostView(
+            GameEventView(
                 partySettings: (
                     name: settings.name,
                     privacy: settings.privacy,
@@ -311,9 +311,9 @@ struct PartyLobbyView: View {
                     pendingPartySettings = nil // Dismiss sheet after party creation
                 },
                 fixedEvents: nil,
-                partyId: nil,
+                partyId: -1,
                 userId: email,
-                previousBet: nil // No previous bet for party creation
+                previousBet: [] // No previous bet for party creation
             )
             .onAppear {
                 print("[PartyLobbyView] .sheet content evaluated. pendingPartySettings: \(String(describing: pendingPartySettings))")
