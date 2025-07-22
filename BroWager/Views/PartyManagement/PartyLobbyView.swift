@@ -26,7 +26,7 @@ struct PartyLobbyView: View {
 
     @Environment(\.supabaseClient) private var supabaseClient
     @EnvironmentObject var sessionManager: SessionManager
-    @State private var selectedBetType: BetType = .predefined
+    @State private var selectedBetType: BetType = .normal
     @State private var betDetails: BetDetails = BetDetails()
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -44,13 +44,6 @@ struct PartyLobbyView: View {
         var privacyOption: PrivacyOption = .open
         var maxMembers: Int = 6
         var betAmount: String = ""
-        // Modular bet details
-        var predefinedOption: String = ""
-        var draftTeam: [String] = []
-        var randomPlayer: String = ""
-        var stat: String = ""
-        var outcome: String = ""
-        var customOutcome: String = ""
         var deadline: Date = Date()
     }
 
@@ -219,7 +212,7 @@ struct PartyLobbyView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white)
                             VStack(spacing: 16) {
-                                ForEach([BetType.predefined, .draftTeam, .randomPlayer, .statBased, .outcomeBased], id: \ .self) { type in
+                                ForEach([BetType.normal, .timed, .contest], id: \ .self) { type in
                                     PartyBetTypeCard(
                                         betType: type,
                                         isSelected: selectedBetType == type,
@@ -235,24 +228,12 @@ struct PartyLobbyView: View {
                         // Dynamic Bet Type Form
                         Group {
                             switch selectedBetType {
-                            case .predefined:
-                                EmptyView() // No dropdown or extra UI for predefined
-                            case .draftTeam:
-                                DraftTeamBetForm(betDetails: $betDetails)
-                            case .randomPlayer:
-                                RandomPlayerBetForm(betDetails: $betDetails)
-                            case .statBased:
-                                StatBasedBetForm(betDetails: $betDetails)
-                            case .outcomeBased:
-                                OutcomeBasedBetForm(betDetails: $betDetails)
-                            case .custom:
-                                CustomBetForm(betDetails: $betDetails)
-                            case .politics:
-                                EmptyView() // Placeholder for future politics bet form
-                            case .food:
-                                EmptyView() // Placeholder for future food bet form
-                            case .lifeEvents:
-                                EmptyView() // Placeholder for future life events bet form
+                            case .normal:
+                                EmptyView()
+                            case .timed:
+                                TimedBetForm(betDetails: $betDetails)
+                            case .contest:
+                                ContestBetForm(betDetails: $betDetails)
                             }
                         }
                         .padding(.horizontal)
@@ -296,28 +277,8 @@ struct PartyLobbyView: View {
                 profileImage = await fetchProfileImage(for: email, supabaseClient: supabaseClient)
             }
         }
-        .sheet(item: $pendingPartySettings) { settings in
-            GameEventView(
-                partySettings: (
-                    name: settings.name,
-                    privacy: settings.privacy,
-                    maxMembers: settings.maxMembers,
-                    betQuantity: settings.betQuantity,
-                    betType: settings.betType,
-                    game: settings.game
-                ),
-                onPartyCreated: { partyCode in
-                    navPath.append(BetFlowPath.partyDetails(partyCode: partyCode, email: email))
-                    pendingPartySettings = nil // Dismiss sheet after party creation
-                },
-                fixedEvents: nil,
-                partyId: -1,
-                userId: email,
-                previousBet: [] // No previous bet for party creation
-            )
-            .onAppear {
-                print("[PartyLobbyView] .sheet content evaluated. pendingPartySettings: \(String(describing: pendingPartySettings))")
-            }
+        .sheet(item: $pendingPartySettings) { _ in
+            Text("Game event view is no longer available.")
         }
         .sheet(item: $tutorialBetType) { betType in
             VStack(spacing: 24) {
@@ -370,60 +331,17 @@ struct PartyLobbyView: View {
 
 // MARK: - Modular Bet Type Forms
 
-struct DraftTeamBetForm: View {
+struct TimedBetForm: View {
     @Binding var betDetails: PartyLobbyView.BetDetails
     var body: some View {
         EmptyView()
     }
 }
 
-struct RandomPlayerBetForm: View {
+struct ContestBetForm: View {
     @Binding var betDetails: PartyLobbyView.BetDetails
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Random player bet (future feature)")
-                .foregroundColor(.white.opacity(0.7))
-        }
-    }
-}
-
-struct StatBasedBetForm: View {
-    @Binding var betDetails: PartyLobbyView.BetDetails
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Stat-based bet (future feature)")
-                .foregroundColor(.white.opacity(0.7))
-        }
-    }
-}
-
-struct OutcomeBasedBetForm: View {
-    @Binding var betDetails: PartyLobbyView.BetDetails
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Outcome-based bet (future feature)")
-                .foregroundColor(.white.opacity(0.7))
-        }
-    }
-}
-
-struct CustomBetForm: View {
-    @Binding var betDetails: PartyLobbyView.BetDetails
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Describe your custom bet:")
-                .foregroundColor(.white)
-            TextField("Custom outcome", text: $betDetails.customOutcome)
-                .font(.system(size: 16))
-                .foregroundColor(.white)
-                .padding()
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-        }
+        EmptyView()
     }
 }
 
@@ -497,50 +415,23 @@ struct PartyBetTypeCard: View {
 extension BetType {
     var icon: String {
         switch self {
-        case .predefined: return "list.bullet.rectangle.portrait"
-        case .draftTeam: return "person.3.sequence.fill"
-        case .randomPlayer: return "person.crop.circle.badge.questionmark"
-        case .statBased: return "chart.bar.xaxis"
-        case .outcomeBased: return "flag.checkered"
-        case .custom: return "wand.and.stars"
-        case .politics: return "building.columns"
-        case .food: return "fork.knife"
-        case .lifeEvents: return "heart.text.square"
+        case .normal: return "list.bullet.rectangle.portrait"
+        case .timed: return "timer"
+        case .contest: return "trophy"
         }
     }
     var shortDescription: String {
         switch self {
-        case .predefined: return "Pick from a set of 25 possible game events. Everyone bets on the same events."
-        case .draftTeam: return "Draft 5 players you think will perform best. Compete for the top team!"
-        case .randomPlayer: return "A random player is chosen for each user. Bet on their performance."
-        case .statBased: return "Bet on specific stats (e.g., home runs, points, assists) for the game."
-        case .outcomeBased: return "Bet on the final outcome or winner of the game."
-        case .custom: return "Create your own unique bet type for your party."
-        case .politics: return "Bet on political events, elections, or debates."
-        case .food: return "Bet on food challenges, eating contests, or culinary outcomes."
-        case .lifeEvents: return "Bet on personal milestones, life events, or fun predictions."
+        case .normal: return "Standard bet."
+        case .timed: return "Timed bet."
+        case .contest: return "Contest bet."
         }
     }
     var detailedDescription: String {
         switch self {
-        case .predefined:
-            return "Predefined Bet lets you select 15 of 25 potential game events you think will happen. Everyone in the party chooses from the same 25 events. At the end of the game, whoever got the most right wins the entire pot."
-        case .draftTeam:
-            return "Draft Team Bet allows you to pick 5 players you think will perform the best in the game. Each party member drafts their own team. At the end, the team with the highest combined stats wins the pot."
-        case .randomPlayer:
-            return "Random Player Bet assigns each user a random player from the game. You bet on how well your assigned player will perform."
-        case .statBased:
-            return "Stat-Based Bet lets you bet on specific statistics, like home runs, points, or assists. You can customize which stats to bet on."
-        case .outcomeBased:
-            return "Outcome-Based Bet is a simple bet on the final outcome or winner of the game."
-        case .custom:
-            return "Custom Bet lets you create your own unique betting rules and events for your party."
-        case .politics:
-            return "Politics Bet lets you wager on the outcome of elections, debates, or political events. Examples: 'Who will win the next election?', 'Will a certain bill pass?'."
-        case .food:
-            return "Food Bet lets you wager on food challenges, eating contests, or culinary outcomes. Examples: 'Who can eat the most hot dogs?', 'Will someone try a new cuisine?'."
-        case .lifeEvents:
-            return "Life Events Bet lets you wager on personal milestones, events, or fun predictions about friends. Examples: 'Who will get a new job first?', 'Will someone move cities this year?'."
+        case .normal: return "A standard bet with no time constraints."
+        case .timed: return "A bet that must be completed within a certain time."
+        case .contest: return "A competitive bet with multiple participants."
         }
     }
 }

@@ -37,8 +37,6 @@ struct PartyDetailsView: View {
     @State private var partyEvents: [String] = []
     @State private var showPartyChat = false
     @State private var previousBet: [String]? = nil
-    @State private var draftTeamWinner: String? = nil
-    @State private var draftTeamWinningTeam: [String]? = nil
     @State private var showBetTypeTutorial = false
     @State private var betType: String = ""
     
@@ -148,14 +146,7 @@ struct PartyDetailsView: View {
             }
         }
         .navigationDestination(isPresented: $showGameEventView) {
-            if let game = selectedGame, let partyId = self.partyId, let userId = self.currentUserId, !partyBets.isEmpty {
-                GameEventHostView(navPath: .constant(NavigationPath()), game: game, partyId: partyId, userId: userId, betType: .predefined, refreshCount: .constant(0), maxRefreshes: 0, partyCode: partyCode, userEmail: email, fixedEvents: partyBets)
-                    .onAppear { print("PartyDetailsView: Navigating to GameEventHostView with game = \(game), partyId = \(partyId), userId = \(userId)") }
-            } else {
-                Text("Missing game, user, or events data.")
-                    .foregroundColor(.yellow)
-                    .onAppear { print("PartyDetailsView: Navigation destination missing required data") }
-            }
+            Text("Game event view is no longer available.")
         }
         .onAppear {
             print("PartyDetailsView: email = \(email)")
@@ -184,22 +175,7 @@ struct PartyDetailsView: View {
             ProfileView(navPath: .constant(NavigationPath()), email: "")
         }
         .sheet(isPresented: $showGameEventSheet) {
-            if let partyId = partyId, let userId = currentUserId, !partyEvents.isEmpty, let game = selectedGame {
-                GameEventHostView(
-                    navPath: .constant(NavigationPath()),
-                    game: game,
-                    partyId: partyId,
-                    userId: userId,
-                    betType: .predefined,
-                    refreshCount: .constant(0),
-                    maxRefreshes: 0,
-                    partyCode: partyCode,
-                    userEmail: email,
-                    fixedEvents: partyEvents
-                )
-            } else {
-                Text("Missing data for GameEventHostView")
-            }
+            Text("Game event view is no longer available.")
         }
         .sheet(isPresented: $showPartyChat) {
             if let partyId = partyId {
@@ -294,10 +270,9 @@ struct PartyDetailsView: View {
 
     private func betTypeDisplayName(_ type: String) -> String {
         switch type.lowercased() {
-        case "predefined": return "Predefined Bet"
-        case "draftteam": return "Draft Team Bet"
-        case "randomplayer": return "Random Player Bet"
-        case "custom": return "Custom Bet"
+        case "normal": return "Normal Bet"
+        case "timed": return "Timed Bet"
+        case "contest": return "Contest Bet"
         default: return type.capitalized
         }
     }
@@ -798,61 +773,6 @@ struct PartyDetailsView: View {
             }
         }
     }
-    
-    private func checkDraftTeamResults() async {
-        guard let partyId = partyId, let game = selectedGame else { return }
-        // 1. Fetch all user draft teams for this party
-        struct UserDraftTeam: Codable { let user_id: String; let draft_team: [String] }
-        let response = try? await supabaseClient
-            .from("User Bets")
-            .select("user_id, draft_team")
-            .eq("party_id", value: Int(partyId))
-            .execute()
-        let decoder = JSONDecoder()
-        let teams = (try? decoder.decode([UserDraftTeam].self, from: response?.data ?? Data())) ?? []
-        // 2. Build prompt for Gemini
-        let prompt = """
-        For the baseball game between \(game.home_team_name) and \(game.away_team_name) that occurred on \(game.date), analyze the following draft teams. For each team, sum up the total runs, hits, and RBIs for the 5 players. Return the user_id of the team with the highest total, and the list of their 5 players. Format: {\"winner_user_id\": \"...\", \"winning_team\": [ ... ]}
-        \nDraft teams:\n\(teams.map { "\($0.user_id): \($0.draft_team.joined(separator: ", "))" }.joined(separator: "\n"))
-        """
-        // 3. Call Gemini
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBPjz5MsImnnmKvyltj6X6h7E-JqVufe4E") else { return }
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": ["response_mime_type": "application/json"]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            struct GeminiDraftResult: Decodable {
-                let winner_user_id: String
-                let winning_team: [String]
-            }
-            let responseText = String(data: data, encoding: .utf8) ?? ""
-            let resultData = Data(responseText.utf8)
-            let result = try JSONDecoder().decode(GeminiDraftResult.self, from: resultData)
-            // 4. Map user_id to username
-            let usernamesResponse = try await supabaseClient
-                .from("Username")
-                .select("user_id, username")
-                .in("user_id", values: [result.winner_user_id])
-                .execute()
-            struct UsernameRow: Codable { let user_id: String; let username: String }
-            let usernames = try decoder.decode([UsernameRow].self, from: usernamesResponse.data)
-            let winnerName = usernames.first?.username ?? result.winner_user_id
-            await MainActor.run {
-                draftTeamWinner = winnerName
-                draftTeamWinningTeam = result.winning_team
-            }
-        } catch {
-            await MainActor.run {
-                errorMessage = "Failed to check draft team results: \(error.localizedDescription)"
-            }
-        }
-    }
 }
 
 #Preview {
@@ -873,18 +793,15 @@ struct BetTypeTutorialSheet: View {
                         .font(.title2).bold()
                         .padding(.bottom, 8)
                     Group {
-                        Text("• Predefined Bets:")
+                        Text("• Normal Bets:")
                             .font(.headline)
-                        Text("Choose from a list of preset bets for the game. These are quick, common bets like 'Who will win?' or 'Will there be a home run?'.")
-                        Text("• Draft Team:")
+                        Text("A standard bet with no time constraints.")
+                        Text("• Timed Bets:")
                             .font(.headline)
-                        Text("Each player drafts a team from the available players. Your team's performance determines your bet outcome.")
-                        Text("• Random Player:")
+                        Text("A bet that must be completed within a certain time.")
+                        Text("• Contest Bets:")
                             .font(.headline)
-                        Text("A player is randomly assigned to you. Your bet is based on that player's performance.")
-                        Text("• Custom Bet:")
-                            .font(.headline)
-                        Text("Create your own bet with custom conditions and outcomes. Great for creative or group-specific bets.")
+                        Text("A competitive bet with multiple participants.")
                     }
                     .padding(.bottom, 4)
                     Text("Ask your host if you're unsure which bet type to choose!")

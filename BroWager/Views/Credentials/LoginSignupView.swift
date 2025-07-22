@@ -472,8 +472,8 @@ struct LoginSignupView: View {
                     PartyLobbyView(navPath: $navPath, game: game, gameName: gameName, email: email)
                 case .createParty(let partyCode, let betType, let userEmail):
                     CreatePartyView(navPath: $navPath, partyCode: partyCode, betType: betType, userEmail: userEmail)
-                case .gameEvent(let game, let partyId, let userId, let betType, let partyCode, let userEmail):
-                    GameEventHostView(navPath: $navPath, game: game, partyId: partyId, userId: userId, betType: betType, refreshCount: .constant(0), maxRefreshes: 3, partyCode: partyCode, userEmail: userEmail, fixedEvents: nil)
+                case .gameEvent:
+                    Text("Game event view is no longer available.")
                 case .partyDetails(let partyCode, let email):
                     PartyDetailsView(partyCode: partyCode, email: email)
                 }
