@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -131,6 +131,10 @@
 		4BF3C89F2E0B43B800872BEC /* ProfileImageLoader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ProfileImageLoader.swift; sourceTree = "<group>"; };
 		4BFA57032DFCB36400D69E6C /* BroWagerApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BroWagerApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		843A115A2E30084C00EA08F0 /* Services */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Services; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		4BAB2E692DD66AE9004181C0 /* Frameworks */ = {
@@ -269,6 +273,7 @@
 		4B2D15C42DFCB8600068E5E4 /* BroWager */ = {
 			isa = PBXGroup;
 			children = (
+				843A115A2E30084C00EA08F0 /* Services */,
 				4BF3C88D2E088BAA00872BEC /* Info.plist */,
 				4B5D5CDD2E0C9DA7000B05AC /* BroWager.entitlements */,
 				4BFA57042DFCB36400D69E6C /* App */,
@@ -388,6 +393,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				843A115A2E30084C00EA08F0 /* Services */,
 			);
 			name = BroWager;
 			packageProductDependencies = (
@@ -676,6 +684,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BroWager/Preview Content\"";
+				DEVELOPMENT_TEAM = NUF3TATR3W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BroWager/Info.plist;
