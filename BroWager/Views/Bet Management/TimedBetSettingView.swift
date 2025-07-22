@@ -1,22 +1,21 @@
 import SwiftUI
 
-struct FoodBetView: View {
+struct TimedBetSettingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedBet: String? = nil
     @State private var customBet: String = ""
+    @State private var hours = 0
+    @State private var minutes = 0
+    @State private var seconds = 0
     let predefinedBets = [
         "Eat 12 doughnuts in one sitting",
         "Bite into an ice cream without making a face",
         "Try a food you've never had before",
         "Eat something spicy without drinking water for 5 minutes",
-        "Finish a giant burger in under 10 minutes",
-        "Eat a lemon slice without flinching",
-        "Try a new vegetable each day for a week",
-        "Compete in a hot dog eating contest"
     ]
     var onConfirm: ((String) -> Void)? = nil
     var body: some View {
-        NavigationView {
+        NavigationView() {
             VStack(spacing: 24) {
                 Text("Choose a Food Bet")
                     .font(.title2.bold())
@@ -55,6 +54,20 @@ struct FoodBetView: View {
                         .padding(.horizontal)
                     }
                 }
+                HStack() {
+                    TimerSetView(title: "hours",
+                                range: 0...23,
+                                 binding: $hours)
+                    TimerSetView(title: "min",
+                                range: 0...59,
+                                 binding: $minutes)
+                    TimerSetView(title: "sec",
+                                range: 0...59,
+                                 binding: $seconds)
+                        
+                        .padding(.all, 10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 Button(action: {
                     if let bet = selectedBet {
                         onConfirm?(bet)
@@ -84,6 +97,7 @@ struct FoodBetView: View {
                 )
                 .ignoresSafeArea()
             )
+            
         }
     }
-} 
+}
