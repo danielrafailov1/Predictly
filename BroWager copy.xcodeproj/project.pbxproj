@@ -134,6 +134,7 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		843A115A2E30084C00EA08F0 /* Services */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Services; sourceTree = "<group>"; };
+		845B0E8E2E306A2900462BF5 /* TimedBet */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TimedBet; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -250,6 +251,7 @@
 		4B2D159E2DFCB3CB0068E5E4 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				845B0E8E2E306A2900462BF5 /* TimedBet */,
 				4BF3C89B2E0A451A00872BEC /* Shared */,
 				4B2D158E2DFCB3CB0068E5E4 /* Bet Management */,
 				4B2D15922DFCB3CB0068E5E4 /* Credentials */,
@@ -396,6 +398,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				843A115A2E30084C00EA08F0 /* Services */,
+				845B0E8E2E306A2900462BF5 /* TimedBet */,
 			);
 			name = BroWager;
 			packageProductDependencies = (
