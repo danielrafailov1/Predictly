@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TimePickerView: View {
+struct TimerSetView: View {
     // This is used to tighten up the spacing between the Picker and its
     // respective label
     //
@@ -30,6 +30,9 @@ struct TimePickerView: View {
 
             Text(title)
                 .fontWeight(.bold)
+                .foregroundColor(.white)
         }
     }
 }
+
+

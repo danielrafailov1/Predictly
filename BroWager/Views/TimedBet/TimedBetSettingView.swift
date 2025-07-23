@@ -4,21 +4,22 @@ struct TimedBetSettingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedBet: String? = nil
     @State private var customBet: String = ""
+    @State private var hours = 0
+    @State private var minutes = 0
+    @State private var seconds = 0
     let predefinedBets = [
         "Eat 12 doughnuts in one sitting",
         "Bite into an ice cream without making a face",
         "Try a food you've never had before",
         "Eat something spicy without drinking water for 5 minutes",
-        "Finish a giant burger in under 10 minutes",
-        "Eat a lemon slice without flinching",
-        "Try a new vegetable each day for a week",
-        "Compete in a hot dog eating contest"
+        "Try a food you've never had before",
+        "Try a food you've never had before",
     ]
     var onConfirm: ((String) -> Void)? = nil
     var body: some View {
-        NavigationView {
+        NavigationView() {
             VStack(spacing: 24) {
-                Text("AI Suggestions")
+                Text("Choose a Food Bet")
                     .font(.title2.bold())
                     .foregroundColor(.white)
                     .padding(.top, 16)
@@ -55,6 +56,22 @@ struct TimedBetSettingView: View {
                         .padding(.horizontal)
                     }
                 }
+                HStack() {
+                    TimerSetView(title: "days",
+                                 range: 0...7,
+                                 binding: $seconds)
+                    TimerSetView(title: "hours",
+                                range: 0...23,
+                                 binding: $hours)
+                    TimerSetView(title: "min",
+                                range: 0...59,
+                                 binding: $minutes)
+                    TimerSetView(title: "sec",
+                                range: 0...59,
+                                 binding: $seconds)
+
+                    }
+                .frame(height: 100)
                 Button(action: {
                     if let bet = selectedBet {
                         onConfirm?(bet)
@@ -84,6 +101,13 @@ struct TimedBetSettingView: View {
                 )
                 .ignoresSafeArea()
             )
+            
         }
+    }
+}
+
+#Preview {
+    NavigationView {
+        TimedBetSettingView()
     }
 }
