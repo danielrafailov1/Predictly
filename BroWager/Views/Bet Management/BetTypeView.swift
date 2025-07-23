@@ -130,7 +130,7 @@ struct BetTypeView: View {
                 case .politics:
                     PoliticsBetView()
                 case .food:
-                    FoodBetView()
+                    TimedBetSettingView()
                 case .lifeEvents:
                     LifeEventsBetView()
                 case .custom:
