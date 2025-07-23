@@ -126,7 +126,7 @@ struct CreatePartyView: View {
                         HStack {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 20))
-                            Text(confirmedBets == nil ? (betType == .draftTeam ? "Draft Players" : "Generate Bets") : "Edit Bets")
+                            Text(confirmedBets == nil ? "Generate Bets" : "Edit Bets")
                                 .font(.system(size: 18, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -387,20 +387,8 @@ struct CreatePartyView: View {
     }
     
     private func generateBingoCardWithGemini(for game: BaseballGame) async -> [String] {
-        let isDraftTeam = betType == .draftTeam
-        print("[DEBUG] generateBingoCardWithGemini called. betType: \(betType.rawValue), isDraftTeam: \(isDraftTeam)")
-        let prompt: String
-        if isDraftTeam {
-            prompt = """
-            List all starting players for both the \(game.home_team_name) and \(game.away_team_name) in today's baseball game. Format: 'Player Name (Team)'. Return as a numbered list, no explanations, 18-22 players total.
-            """
-            print("[DEBUG] Using draft team prompt: \(prompt)")
-        } else {
-            prompt = """
-            Generate 25 fun and creative bet events for a baseball game between the \(game.home_team_name) and the \(game.away_team_name). Each should be a short, unique, and entertaining phrase describing a possible event or stat in the game. Return as a numbered list from 1 to 25, no explanations.
-            """
-            print("[DEBUG] Using normal bet prompt: \(prompt)")
-        }
+        // This function now just returns a generic prompt for all new bet types
+        let prompt = "Generate 25 fun and creative bet events for a game. Each should be a short, unique, and entertaining phrase describing a possible event or stat. Return as a numbered list from 1 to 25, no explanations."
         guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAunbuh_N_W_mkRpvKIosu-TDajJvJO8Q8") else {
             return []
         }
@@ -415,7 +403,6 @@ struct CreatePartyView: View {
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             if let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                print("[DEBUG] Gemini API response: \(responseJSON)")
                 if let candidates = responseJSON["candidates"] as? [[String: Any]],
                    let content = candidates.first?["content"] as? [String: Any],
                    let parts = content["parts"] as? [[String: Any]],
@@ -432,18 +419,7 @@ struct CreatePartyView: View {
         } catch {
             print("Gemini error: \(error)")
         }
-        print("[DEBUG] Final prompts: \(prompts)")
-        if isDraftTeam {
-            // Fallback: 20 generic player names
-            let fallbackPlayers = (1...20).map { "Player \($0) (Team)" }
-            if prompts.count < 18 {
-                prompts += fallbackPlayers.prefix(18 - prompts.count)
-            }
-            if prompts.count > 22 {
-                prompts = Array(prompts.prefix(22))
-            }
-        } else {
-            // Fallback/hardcoded
+        if prompts.count < 25 {
             let hardcoded = [
                 "Player hits a home run", "Game goes to extra innings", "Pitcher gets 10+ strikeouts",
                 "First batter gets hit by pitch", "Stolen base in the 1st inning", "Manager gets ejected",
@@ -453,14 +429,11 @@ struct CreatePartyView: View {
                 "Bases loaded walk", "Hit for the cycle", "No errors in the game", "First pitch is a strike",
                 "Leadoff double", "Game ends on a strikeout", "Home team wins by 1 run", "Rain delay"
             ]
-            if prompts.count < 25 {
-                prompts += hardcoded.prefix(25 - prompts.count)
-            }
-            if prompts.count > 25 {
-                prompts = Array(prompts.prefix(25))
-            }
+            prompts += hardcoded.prefix(25 - prompts.count)
         }
-        print("[DEBUG] Prompts after fallback: \(prompts)")
+        if prompts.count > 25 {
+            prompts = Array(prompts.prefix(25))
+        }
         return prompts
     }
 
@@ -497,6 +470,6 @@ struct CreatePartyView: View {
 }
 
 #Preview {
-    CreatePartyView(navPath: .constant(NavigationPath()), partyCode: String(UUID().uuidString.prefix(6)).uppercased(), betType: .predefined, userEmail: "example@example.com")
+    CreatePartyView(navPath: .constant(NavigationPath()), partyCode: String(UUID().uuidString.prefix(6)).uppercased(), betType: .normal, userEmail: "example@example.com")
         .environment(\.supabaseClient, .development)
 }

@@ -86,7 +86,7 @@ struct MyPartiesView: View {
                     .scaleEffect(1.5)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             )
-        } else if let error = errorMessage {
+        } else if let error = errorMessage, !filteredParties.isEmpty {
             AnyView(
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
@@ -106,7 +106,7 @@ struct MyPartiesView: View {
                     Image(systemName: "person.3.fill")
                         .font(.system(size: 48))
                         .foregroundColor(.white.opacity(0.5))
-                    Text("No \(partyFilter.rawValue.lowercased()) parties")
+                    Text("No parties available")
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
                     Text(partyFilter == .active ? "Create a new party to get started" : "")
