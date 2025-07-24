@@ -47,6 +47,10 @@
 		4B6AE10E2E05CF5500656DF3 /* InviteFriendsToPartyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE10D2E05CF5500656DF3 /* InviteFriendsToPartyView.swift */; };
 		4B6AE1102E05CF5C00656DF3 /* InviteOthersToPartyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE10F2E05CF5C00656DF3 /* InviteOthersToPartyView.swift */; };
 		4B6AE1122E05CF6200656DF3 /* PartyInvitesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */; };
+		4B786A1F2E3091A2004E5105 /* TimerSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A1E2E3091A2004E5105 /* TimerSetView.swift */; };
+		4B786A212E3091A7004E5105 /* TimedBetSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */; };
+		4B786A232E314C6D004E5105 /* ContestBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A222E314C20004E5105 /* ContestBetView.swift */; };
+		4B786A252E314C79004E5105 /* NormalBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A242E314C72004E5105 /* NormalBetView.swift */; };
 		4B7C5B842DFFB05400AE8600 /* BetTypeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7C5B832DFFB05400AE8600 /* BetTypeView.swift */; };
 		4B7C5B862DFFB50000AE8600 /* CustomBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */; };
 		4BDD17862E01F13F00CD117D /* SportSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD17852E01F13F00CD117D /* SportSelectionView.swift */; };
@@ -110,8 +114,13 @@
 		4B6AE10D2E05CF5500656DF3 /* InviteFriendsToPartyView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = InviteFriendsToPartyView.swift; sourceTree = "<group>"; };
 		4B6AE10F2E05CF5C00656DF3 /* InviteOthersToPartyView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = InviteOthersToPartyView.swift; sourceTree = "<group>"; };
 		4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartyInvitesView.swift; sourceTree = "<group>"; };
+		4B786A1E2E3091A2004E5105 /* TimerSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSetView.swift; sourceTree = "<group>"; };
+		4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedBetSettingView.swift; sourceTree = "<group>"; };
+		4B786A222E314C20004E5105 /* ContestBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContestBetView.swift; sourceTree = "<group>"; };
+		4B786A242E314C72004E5105 /* NormalBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NormalBetView.swift; sourceTree = "<group>"; };
 		4B7C5B832DFFB05400AE8600 /* BetTypeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BetTypeView.swift; sourceTree = "<group>"; };
 		4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CustomBetView.swift; sourceTree = "<group>"; };
+		4BA56FF92E32BB61009A210A /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		4BAB2E6C2DD66AE9004181C0 /* BroWager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BroWager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4BDD17852E01F13F00CD117D /* SportSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportSelectionView.swift; sourceTree = "<group>"; };
 		4BDD17892E01F37200CD117D /* MyPartiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyPartiesView.swift; sourceTree = "<group>"; };
@@ -131,8 +140,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		8461DD212E308B5D007F22AA /* Services */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Services; sourceTree = "<group>"; };
-		8461DD252E308B66007F22AA /* TimedBet */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TimedBet; sourceTree = "<group>"; };
+		843A115A2E30084C00EA08F0 /* Services */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Services; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -189,6 +197,8 @@
 		4B2D158E2DFCB3CB0068E5E4 /* Bet Management */ = {
 			isa = PBXGroup;
 			children = (
+				4B786A242E314C72004E5105 /* NormalBetView.swift */,
+				4B786A222E314C20004E5105 /* ContestBetView.swift */,
 				4B56EEFC2E1C99E20088E513 /* LifeEventsBetView.swift */,
 				4B56EEFA2E1C99D80088E513 /* PoliticsBetView.swift */,
 				4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */,
@@ -248,6 +258,7 @@
 		4B2D159E2DFCB3CB0068E5E4 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4B786A182E309176004E5105 /* TimedBet */,
 				4BF3C89B2E0A451A00872BEC /* Shared */,
 				4B2D158E2DFCB3CB0068E5E4 /* Bet Management */,
 				4B2D15922DFCB3CB0068E5E4 /* Credentials */,
@@ -271,8 +282,7 @@
 		4B2D15C42DFCB8600068E5E4 /* BroWager */ = {
 			isa = PBXGroup;
 			children = (
-				8461DD252E308B66007F22AA /* TimedBet */,
-				8461DD212E308B5D007F22AA /* Services */,
+				843A115A2E30084C00EA08F0 /* Services */,
 				4BF3C88D2E088BAA00872BEC /* Info.plist */,
 				4B5D5CDD2E0C9DA7000B05AC /* BroWager.entitlements */,
 				4BFA57042DFCB36400D69E6C /* App */,
@@ -295,9 +305,19 @@
 			path = "Environment Variables";
 			sourceTree = "<group>";
 		};
+		4B786A182E309176004E5105 /* TimedBet */ = {
+			isa = PBXGroup;
+			children = (
+				4B786A1E2E3091A2004E5105 /* TimerSetView.swift */,
+				4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */,
+			);
+			path = TimedBet;
+			sourceTree = "<group>";
+		};
 		4BAB2E632DD66AE9004181C0 = {
 			isa = PBXGroup;
 			children = (
+				4BA56FF92E32BB61009A210A /* .gitignore */,
 				4B2D15C42DFCB8600068E5E4 /* BroWager */,
 				4BAB2E6D2DD66AE9004181C0 /* Products */,
 				4BF3C87F2E07A9F700872BEC /* Frameworks */,
@@ -394,8 +414,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				8461DD212E308B5D007F22AA /* Services */,
-				8461DD252E308B66007F22AA /* TimedBet */,
+				843A115A2E30084C00EA08F0 /* Services */,
 			);
 			name = BroWager;
 			packageProductDependencies = (
@@ -474,10 +493,12 @@
 				4B2D15882DFCB3C60068E5E4 /* Instrument.swift in Sources */,
 				4B2D15BE2DFCB3CE0068E5E4 /* Soccer.swift in Sources */,
 				4B2D15AB2DFCB3CB0068E5E4 /* BasketballView.swift in Sources */,
+				4B786A212E3091A7004E5105 /* TimedBetSettingView.swift in Sources */,
 				4B2D15A82DFCB3CB0068E5E4 /* LeaderBoardView.swift in Sources */,
 				4B7C5B842DFFB05400AE8600 /* BetTypeView.swift in Sources */,
 				4B2D15B82DFCB3CE0068E5E4 /* Baseball.swift in Sources */,
 				4B2D15AA2DFCB3CB0068E5E4 /* BaseballView.swift in Sources */,
+				4B786A1F2E3091A2004E5105 /* TimerSetView.swift in Sources */,
 				4B2D15AC2DFCB3CB0068E5E4 /* FootballView.swift in Sources */,
 				4BF3C8922E08C73100872BEC /* LoggedInPath.swift in Sources */,
 				4B6AE1082E05BAF400656DF3 /* AddFriendView.swift in Sources */,
@@ -494,12 +515,14 @@
 				4B2D15A52DFCB3CB0068E5E4 /* ProfileView.swift in Sources */,
 				4B5D5CE82E0CD767000B05AC /* RootView.swift in Sources */,
 				4B6AE10E2E05CF5500656DF3 /* InviteFriendsToPartyView.swift in Sources */,
+				4B786A232E314C6D004E5105 /* ContestBetView.swift in Sources */,
 				4BF3C8982E0A2BEA00872BEC /* BetFlowPath.swift in Sources */,
 				4B2D157C2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift in Sources */,
 				4BDD17902E01F53F00CD117D /* GameEventView.swift in Sources */,
 				4B2D15AE2DFCB3CB0068E5E4 /* SoccerView.swift in Sources */,
 				4BFA57052DFCB36400D69E6C /* BroWagerApp.swift in Sources */,
 				4BF3C8962E08C95C00872BEC /* BetTypePath.swift in Sources */,
+				4B786A252E314C79004E5105 /* NormalBetView.swift in Sources */,
 				4BDD178C2E01F3F400CD117D /* LoginSignupView.swift in Sources */,
 				4B2D15AD2DFCB3CB0068E5E4 /* HockeyView.swift in Sources */,
 				4BF3C8942E08C8D400872BEC /* Sport.swift in Sources */,

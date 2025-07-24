@@ -477,5 +477,26 @@ public class AIServices {
 
         return try JSONDecoder().decode([String].self, from: jsonData)
     }
+    
+    /// Generate suggestions for bets
+    @available(iOS 15.0, *)
+    public func generateBetSuggestions(prompt: String) async throws -> [String] {
+     
+        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 200)
+
+        // Extract JSON array from response string
+        guard let start = responseText.firstIndex(of: "["),
+              let end = responseText.lastIndex(of: "]") else {
+            throw AIServiceError.decodingError
+        }
+
+        let jsonString = String(responseText[start...end])
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AIServiceError.decodingError
+        }
+        try print(JSONDecoder().decode([String].self, from: jsonData))
+
+        return try JSONDecoder().decode([String].self, from: jsonData)
+    }
 }
 
