@@ -46,3 +46,5 @@ core_simulator_device.log
 
 # Firebase
 GoogleService-Info.plist
+
+Info.plist
