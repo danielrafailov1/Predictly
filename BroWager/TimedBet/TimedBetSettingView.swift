@@ -7,71 +7,73 @@ struct TimedBetSettingView: View {
     @State private var hours = 0
     @State private var minutes = 0
     @State private var seconds = 0
-    let predefinedBets = [
-        "Eat 12 doughnuts in one sitting",
-        "Bite into an ice cream without making a face",
-        "Try a food you've never had before",
-        "Eat something spicy without drinking water for 5 minutes",
-        "Try a food you've never had before",
-        "Try a food you've never had before",
-    ]
+    @State private var days = 0
+    @State private var predefinedBets: [String] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+    
     var onConfirm: ((String) -> Void)? = nil
+
     var body: some View {
-        NavigationView() {
+        NavigationView {
             VStack(spacing: 24) {
-                Text("Choose a Food Bet")
+                Text("Choose a Timed Bet")
                     .font(.title2.bold())
                     .foregroundColor(.white)
                     .padding(.top, 16)
-                ScrollView {
-                    VStack(spacing: 16) {
-                        ForEach(predefinedBets, id: \.self) { bet in
-                            Button(action: { selectedBet = bet }) {
-                                HStack {
-                                    Text(bet)
-                                        .foregroundColor(.white)
-                                        .padding(.vertical, 10)
-                                    Spacer()
-                                    if selectedBet == bet {
-                                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                
+                if isLoading {
+                    ProgressView("Loading suggestions...")
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else if let errorMessage = errorMessage {
+                    Text("Error: \(errorMessage)")
+                        .foregroundColor(.red)
+                        .padding()
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ForEach(predefinedBets, id: \.self) { bet in
+                                Button(action: { selectedBet = bet }) {
+                                    HStack {
+                                        Text(bet)
+                                            .foregroundColor(.white)
+                                            .padding(.vertical, 10)
+                                        Spacer()
+                                        if selectedBet == bet {
+                                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                    .background(RoundedRectangle(cornerRadius: 12)
+                                        .fill(selectedBet == bet ? Color.blue.opacity(0.18) : Color.white.opacity(0.07)))
+                                }
+                            }
+                            Divider().background(Color.white.opacity(0.2))
+                            HStack {
+                                TextField("Add your own food bet...", text: $customBet)
+                                    .textFieldStyle(.roundedBorder)
+                                    .padding(.vertical, 8)
+                                Button("Add") {
+                                    if !customBet.trimmingCharacters(in: .whitespaces).isEmpty {
+                                        selectedBet = customBet
+                                        customBet = ""
                                     }
                                 }
-                                .padding(.horizontal)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(selectedBet == bet ? Color.blue.opacity(0.18) : Color.white.opacity(0.07)))
+                                .disabled(customBet.trimmingCharacters(in: .whitespaces).isEmpty)
                             }
+                            .padding(.horizontal)
                         }
-                        Divider().background(Color.white.opacity(0.2))
-                        HStack {
-                            TextField("Add your own food bet...", text: $customBet)
-                                .textFieldStyle(.roundedBorder)
-                                .padding(.vertical, 8)
-                            Button("Add") {
-                                if !customBet.trimmingCharacters(in: .whitespaces).isEmpty {
-                                    selectedBet = customBet
-                                    customBet = ""
-                                }
-                            }
-                            .disabled(customBet.trimmingCharacters(in: .whitespaces).isEmpty)
-                        }
-                        .padding(.horizontal)
                     }
                 }
-                HStack() {
-                    TimerSetView(title: "days",
-                                 range: 0...7,
-                                 binding: $seconds)
-                    TimerSetView(title: "hours",
-                                range: 0...23,
-                                 binding: $hours)
-                    TimerSetView(title: "min",
-                                range: 0...59,
-                                 binding: $minutes)
-                    TimerSetView(title: "sec",
-                                range: 0...59,
-                                 binding: $seconds)
 
-                    }
+                HStack {
+                    TimerSetView(title: "days", range: 0...7, binding: $days)
+                    TimerSetView(title: "hours", range: 0...23, binding: $hours)
+                    TimerSetView(title: "min", range: 0...59, binding: $minutes)
+                    TimerSetView(title: "sec", range: 0...59, binding: $seconds)
+                }
                 .frame(height: 100)
+                
                 Button(action: {
                     if let bet = selectedBet {
                         onConfirm?(bet)
@@ -88,6 +90,7 @@ struct TimedBetSettingView: View {
                 }
                 .disabled(selectedBet == nil)
                 .padding(.horizontal)
+                
                 Spacer()
             }
             .background(
@@ -101,13 +104,16 @@ struct TimedBetSettingView: View {
                 )
                 .ignoresSafeArea()
             )
-            
+            .task {
+                do {
+                    isLoading = true
+                    errorMessage = nil
+                    predefinedBets = try await AIServices.shared.generateBetSuggestions(betType: "that requires a timer count down", count: 5)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                isLoading = false
+            }
         }
-    }
-}
-
-#Preview {
-    NavigationView {
-        TimedBetSettingView()
     }
 }

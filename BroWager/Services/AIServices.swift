@@ -1,112 +1,3 @@
-//
-//  AIServices.swift
-//  BroWager
-//
-//  Created by Nachuan Wang on 2025-07-21.
-//
-//
-//private func checkBetResults() async {
-//    guard let userId = currentUserId, let partyId = partyId, let game = selectedGame else { return }
-//    
-//    struct UserBetEvents: Codable {
-//        let bet_events: [String]
-//    }
-//    do {
-//        // 1. Fetch the user's bets
-//        let betResponse: [UserBetEvents] = try await supabaseClient
-//            .from("User Bets")
-//            .select("bet_events")
-//            .eq("user_id", value: userId)
-//            .eq("party_id", value: Int(partyId))
-//            .limit(1)
-//            .execute()
-//            .value
-//        
-//        print("DEBUG: betResponse = \(betResponse)")
-//        
-//        guard let userBet = betResponse.first else {
-//            await MainActor.run {
-//                self.errorMessage = "No bet found for this party. Please make a bet first."
-//            }
-//            print("DEBUG: No bet found for userId=\(userId), partyId=\(partyId)")
-//            return
-//        }
-//        print("DEBUG: userBet.bet_events = \(userBet.bet_events)")
-//        // 2. Create the prompt for Gemini
-//        let prompt = """
-//        You are a sports game fact-checker. For the baseball game between \(game.home_team_name) and \(game.away_team_name) that occurred on \(game.date), please analyze the following list of predicted events. Return a JSON object with a single key \"correct_bets\" which holds an array of strings. This array should contain ONLY the predicted events from the list that actually happened.
-//
-//        List of predicted events:
-//        \(userBet.bet_events.joined(separator: "\n"))
-//        """
-//
-//        // 3. Call Gemini API
-//        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBPjz5MsImnnmKvyltj6X6h7E-JqVufe4E") else {
-//            // Replace YOUR_GEMINI_API_KEY with your actual key
-//            self.errorMessage = "Invalid Gemini API URL"
-//            return
-//        }
-//        
-//        let requestBody: [String: Any] = [
-//            "contents": [["parts": [["text": prompt]]]],
-//            "generationConfig": ["response_mime_type": "application/json"]
-//        ]
-//        
-//        var request = URLRequest(url: url)
-//        request.httpMethod = "POST"
-//        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-//        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
-//        
-//        let (data, _) = try await URLSession.shared.data(for: request)
-//        print("DEBUG: Gemini raw response = \(String(data: data, encoding: .utf8) ?? "nil")")
-//        // 4. Parse response and update score
-//        struct GeminiResponse: Decodable {
-//            struct Candidate: Decodable {
-//                struct Content: Decodable {
-//                    struct Part: Decodable {
-//                        let text: String
-//                    }
-//                    let parts: [Part]
-//                }
-//                let content: Content
-//            }
-//            let candidates: [Candidate]
-//        }
-//
-//        let responseText = try JSONDecoder().decode(GeminiResponse.self, from: data).candidates.first?.content.parts.first?.text ?? ""
-//        print("DEBUG: Gemini responseText = \(responseText)")
-//        struct ResultPayload: Decodable {
-//            let correct_bets: [String]
-//        }
-//        
-//        let resultData = Data(responseText.utf8)
-//        let finalResult = try JSONDecoder().decode(ResultPayload.self, from: resultData)
-//        
-//        let correctBetsArray = finalResult.correct_bets
-//        let score = correctBetsArray.count
-//        
-//        // 5. Update the UserBets table
-//        try await supabaseClient
-//            .from("User Bets")
-//            .update(["score": score])
-//            .eq("user_id", value: userId)
-//            .eq("party_id", value: Int(partyId))
-//            .execute()
-//            
-//        // 6. Update the UI
-//        await MainActor.run {
-//            self.score = score
-//            self.correctBets = correctBetsArray
-//        }
-//        
-//    } catch {
-//        await MainActor.run {
-//            self.errorMessage = "Failed to check results: \(error.localizedDescription)"
-//        }
-//        print("DEBUG: Error in checkBetResults: \(error)")
-//    }
-//}
-
 import Foundation
 
 struct GeminiRequest: Codable {
@@ -439,6 +330,8 @@ public class AIServices {
         do {
             let geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
             
+            print(geminiResponse)
+            
             // Check if content was blocked
             if let promptFeedback = geminiResponse.promptFeedback,
                promptFeedback.blockReason != nil {
@@ -458,18 +351,19 @@ public class AIServices {
     @available(iOS 15.0, *)
     public func generateBetSuggestions(betType: String, count: Int) async throws -> [String] {
         let prompt = """
-        You are a bet suggestion generator. A group of friends are hanging out and they want to make a bet. Generate \(count) bets of type \(betType) in JSON format. For each bet, only generate a string of the bet content. 
+        You are a bet suggestion generator. A group of friends are hanging out and they want to make a bet. Generate \(count) bets \(betType) in JSON format. For each bet, only generate a string of the bet content. 
         """
 
-        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 200)
+        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
 
         // Extract JSON array from response string
+
         guard let start = responseText.firstIndex(of: "["),
               let end = responseText.lastIndex(of: "]") else {
             throw AIServiceError.decodingError
         }
-
         let jsonString = String(responseText[start...end])
+        print(jsonString)
         guard let jsonData = jsonString.data(using: .utf8) else {
             throw AIServiceError.decodingError
         }
