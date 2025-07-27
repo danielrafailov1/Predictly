@@ -74,24 +74,14 @@ struct TimedBetSettingView: View {
                 }
                 .frame(height: 100)
                 
-                Button(action: {
-                    if let bet = selectedBet {
-                        onConfirm?(bet)
-                        dismiss()
-                    }
-                }) {
-                    Text("Confirm")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(selectedBet != nil ? Color.green : Color.gray)
-                        .cornerRadius(14)
-                }
-                .disabled(selectedBet == nil)
-                .padding(.horizontal)
-                
+                confirmButton()
+
                 Spacer()
+                
+                NavigationLink(destination: TimedBetView()) {
+                    Text("Skip")
+                        .foregroundColor(.white)
+                }
             }
             .background(
                 LinearGradient(
@@ -116,4 +106,33 @@ struct TimedBetSettingView: View {
             }
         }
     }
+    private func confirmButton() -> some View {
+        NavigationLink(
+            destination: {
+                if let bet = selectedBet {
+                    TimedBetView(
+                        betDescription: bet,
+                        initialDays: days,
+                        initialHours: hours,
+                        initialMinutes: minutes,
+                        initialSeconds: seconds
+                    )
+                }
+            },
+            label: {
+                Text("Confirm")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(selectedBet != nil ? Color.green : Color.gray)
+                    .cornerRadius(14)
+            }
+        )
+        .disabled(selectedBet == nil)
+        .padding(.horizontal)
+    }
 }
+
+
+
