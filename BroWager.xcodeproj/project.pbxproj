@@ -60,6 +60,7 @@
 		4BDD17922E01F65400CD117D /* PartyDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD17912E01F65300CD117D /* PartyDetailsView.swift */; };
 		4BDD17972E01FB6B00CD117D /* PartyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD17962E01FB6B00CD117D /* PartyModels.swift */; };
 		4BDD17992E01FB7400CD117D /* UserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD17982E01FB7400CD117D /* UserModels.swift */; };
+		4BE606BE2E36CC18009E0EBC /* PlaceBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE606BD2E36CC14009E0EBC /* PlaceBetView.swift */; };
 		4BF3C8822E07AC2D00872BEC /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 4BF3C8812E07AC2D00872BEC /* Auth */; };
 		4BF3C8842E07AC2D00872BEC /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 4BF3C8832E07AC2D00872BEC /* PostgREST */; };
 		4BF3C8862E07AC2D00872BEC /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 4BF3C8852E07AC2D00872BEC /* Storage */; };
@@ -129,6 +130,7 @@
 		4BDD17912E01F65300CD117D /* PartyDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartyDetailsView.swift; sourceTree = "<group>"; };
 		4BDD17962E01FB6B00CD117D /* PartyModels.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartyModels.swift; sourceTree = "<group>"; };
 		4BDD17982E01FB7400CD117D /* UserModels.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UserModels.swift; sourceTree = "<group>"; };
+		4BE606BD2E36CC14009E0EBC /* PlaceBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceBetView.swift; sourceTree = "<group>"; };
 		4BF3C88D2E088BAA00872BEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4BF3C8902E08C73100872BEC /* LoggedInPath.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LoggedInPath.swift; sourceTree = "<group>"; };
 		4BF3C8932E08C8D400872BEC /* Sport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Sport.swift; sourceTree = "<group>"; };
@@ -197,6 +199,7 @@
 		4B2D158E2DFCB3CB0068E5E4 /* Bet Management */ = {
 			isa = PBXGroup;
 			children = (
+				4BE606BD2E36CC14009E0EBC /* PlaceBetView.swift */,
 				4B786A242E314C72004E5105 /* NormalBetView.swift */,
 				4B786A222E314C20004E5105 /* ContestBetView.swift */,
 				4B56EEFC2E1C99E20088E513 /* LifeEventsBetView.swift */,
@@ -486,6 +489,7 @@
 				4B2D15B92DFCB3CE0068E5E4 /* Basketball.swift in Sources */,
 				4BF3C8A02E0B43B800872BEC /* ProfileImageLoader.swift in Sources */,
 				4B56EEF52E1B50DB0088E513 /* DirectMessageView.swift in Sources */,
+				4BE606BE2E36CC18009E0EBC /* PlaceBetView.swift in Sources */,
 				4B6AE1122E05CF6200656DF3 /* PartyInvitesView.swift in Sources */,
 				4BDD17992E01FB7400CD117D /* UserModels.swift in Sources */,
 				4B2D15A92DFCB3CB0068E5E4 /* PartyLobbyView.swift in Sources */,

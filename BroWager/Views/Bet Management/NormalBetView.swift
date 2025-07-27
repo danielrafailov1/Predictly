@@ -1,576 +1,504 @@
+// Updated Bet Creation Flow (NormalBetView, BetOptionsView, FinalizeBetView)
+
 import SwiftUI
 
 struct NormalBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
-    @State private var aiBets: [String] = []
-    @State private var customBet: String = ""
-    @State private var isLoading: Bool = false
-    @State private var errorMessage: ErrorMessage?
-    @State private var longPressedBet: Bet? = nil
+    let userId: UUID?
 
-    // Error message struct to conform to Identifiable
-    struct ErrorMessage: Identifiable {
-        var id = UUID() // UUID to make it identifiable
-        var message: String
-    }
-
-    // Identifiable Bet struct
-    struct Bet: Identifiable {
-        var id = UUID()  // Unique ID to make it identifiable
-        var text: String
-    }
-
-    // Call to fetch AI-generated bets
-    private func generateBets() async {
-        isLoading = true
-        errorMessage = nil
-
-        let prompt = """
-        Generate 5 fun bet ideas. For example: Will it rain tomorrow?, Who will be the next president?, Who will win the next basketball game? etc. Separate each suggestion with a comma and make each suggestion between 5 and 7 words long
-        """
-
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAunbuh_N_W_mkRpvKIosu-TDajJvJO8Q8") else {
-            print("[NormalBetView] Invalid Gemini API URL.")
-            errorMessage = ErrorMessage(message: "Invalid URL")
-            isLoading = false
-            return
-        }
-
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
-
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            if let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let candidates = responseJSON["candidates"] as? [[String: Any]],
-                   let content = candidates.first?["content"] as? [String: Any],
-                   let parts = content["parts"] as? [[String: Any]],
-                   let text = parts.first?["text"] as? String {
-                    // Split by commas and trim whitespace
-                    aiBets = text.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-                } else {
-                    errorMessage = ErrorMessage(message: "AI response missing expected structure. Using fallback.")
-                    aiBets = fallbackBets()
-                }
-            } else {
-                errorMessage = ErrorMessage(message: "Failed to parse AI response. Using fallback.")
-                aiBets = fallbackBets()
-            }
-        } catch {
-            errorMessage = ErrorMessage(message: "Error fetching AI bets: \(error). Using fallback.")
-            aiBets = fallbackBets()
-        }
-
-        isLoading = false
-    }
-
-    // Fallback bets if AI fails
-    private func fallbackBets() -> [String] {
-        return [
-            "Who will score the first goal?",
-            "Which team will have the most penalties?",
-            "How many goals will be scored in total?",
-            "Will there be a penalty shootout?",
-            "Will there be a red card in the match?"
-        ]
-    }
+    @State private var aiSuggestions: [String] = []
+    @State private var betPrompt: String = ""
+    @State private var isNextActive = false
 
     var body: some View {
         ZStack {
-            // Background Gradient
             LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
-                    Color(red: 0.15, green: 0.15, blue: 0.25)
-                ]),
+                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                // Suggestions Header with Refresh Button
+            VStack(spacing: 20) {
+
+                // AI Suggestions Header + Refresh Button (fixed position)
                 HStack {
-                    Text("Suggestions")
-                        .font(.system(size: 18, weight: .regular, design: .rounded))
+                    Text("AI Suggestions: Click to fill")
                         .foregroundColor(.white)
+                        .font(.title2)
+
                     Spacer()
+
                     Button(action: {
                         Task {
-                            await generateBets() // Refresh the AI suggestions
+                            await refreshAISuggestions()
                         }
                     }) {
-                        Image(systemName: "arrow.clockwise.circle.fill")
+                        Image(systemName: "arrow.clockwise")
                             .foregroundColor(.white)
-                            .font(.system(size: 24))
+                            .font(.title2)
+                            .padding(8)
+                            .background(Color.blue.opacity(0.7))
+                            .clipShape(Circle())
                     }
                 }
-                .padding(.top, 16) // Reduced padding to move content up
-                .padding(.horizontal, 24)
+                .padding(.horizontal)
+                .padding(.top)
 
-                // AI Bets List (non-scrolling)
-                if isLoading {
-                    ProgressView("Loading AI Bets...")
-                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                        .padding(.top, 16)
-                } else {
-                    VStack(spacing: 12) {
-                        ForEach(aiBets, id: \.self) { bet in
-                            let betObject = Bet(text: bet)  // Create Bet object for each bet
-
+                // Scrollable Suggestion Buttons (dynamic content in fixed height)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(aiSuggestions, id: \.self) { suggestion in
                             Button(action: {
-                                customBet = bet // Autofill the bet when clicked
+                                betPrompt = suggestion
                             }) {
-                                Text(bet)
-                                    .font(.system(size: 16))
+                                Text(suggestion)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.15))
                                     .foregroundColor(.white)
-                                    .padding(14)
-                                    .frame(maxWidth: .infinity) // Ensure uniform width
-                                    .background(Color.gray.opacity(0.4))
                                     .cornerRadius(12)
-                                    .padding(.horizontal, 24)
-                            }
-                            .gesture(
-                                LongPressGesture(minimumDuration: 1.0)  // 1 second for long press
-                                    .onEnded { _ in
-                                        longPressedBet = betObject  // Set the long-pressed bet object
-                                    }
-                            )
-                            .popover(item: $longPressedBet) { bet in  // Now using the Identifiable Bet object
-                                VStack {
-                                    Text(bet.text)  // Display the full bet text
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.black)
-                                        .padding()
-                                        .frame(width: 250)  // Adjust width of the popover
-                                }
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .shadow(radius: 5)
+                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                             }
                         }
                     }
-                    .padding(.top, 16)
+                    .padding(.horizontal)
                 }
+                .frame(height: 150) // Fixed height container
 
-                // Create Your Own Bet Text
-                Text("Create your own bet")
-                    .font(.system(size: 18, weight: .regular, design: .rounded))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-
-                TextField("Enter your custom bet", text: $customBet)
-                    .font(.system(size: 16))
-                    .foregroundColor(.white)
-                    .padding(14)
-                    .background(Color.gray.opacity(0.2))  // Gray background
-                    .cornerRadius(8)
-                    .frame(height: 100)  // Ensuring at least 3 lines of space
-                    .lineLimit(nil)  // Allow multiline input by expanding if needed
-                    .padding(.horizontal, 24)
-
-                // Next Button
-                NavigationLink(destination: BetOptionsView(navPath: $navPath, betPrompt: customBet)) {
-                    Text("Next")
-                        .font(.system(size: 20, weight: .semibold))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Write your Bet")
                         .foregroundColor(.white)
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue)
-                        .cornerRadius(14)
-                        .padding(.top, 16)
-                        .padding(.horizontal, 24)
+                        .font(.title2)
+                        .padding(.vertical)
+                    
+                    TextEditor(text: $betPrompt)
+                        .scrollContentBackground(.hidden)
+                        .frame(height: 130)
+                        .background(Color.gray.opacity(0.2))
+                        .cornerRadius(10)
+                        .foregroundColor(.white)
+                        .font(.system(size: 18))
+                }
+                .padding(.horizontal)
+
+                NavigationLink(
+                    destination: BetOptionsView(navPath: $navPath, betPrompt: betPrompt, email: email, userId: userId),
+                    isActive: $isNextActive
+                ) {
+                    EmptyView()
                 }
 
-                Spacer() // Add Spacer to push content upwards
+                Button("Next") {
+                    isNextActive = true
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.green)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .padding(.horizontal)
+
+                Spacer()
             }
-            .padding(.top, 16) // Reduce overall padding to move everything up
-        }
-        .onAppear {
-            Task {
-                await generateBets() // Fetch initial AI suggestions
-            }
-        }
-        .alert(item: $errorMessage) { error in
-            Alert(title: Text("Error"), message: Text(error.message), dismissButton: .default(Text("OK")))
+            .onAppear(perform: loadAISuggestions)
         }
     }
+
+    @MainActor
+    func loadAISuggestions() {
+        Task {
+            await refreshAISuggestions()
+        }
+    }
+
+    @MainActor
+    func refreshAISuggestions() async {
+        do {
+            print("Attempting to fetch AI suggestions...")
+            let result = try await AIServices.shared.generateBetSuggestions(betType: "sports", count: 5)
+            print("Raw AI Response: \(result)")
+            aiSuggestions = result
+        } catch {
+            print("AI decoding error: \(error.localizedDescription)")
+            
+            // Fallback suggestion that matches hardcoded options and terms
+            aiSuggestions = [
+                "Which of these game outcomes will happen: Team A wins by more than 10 points, Team B scores first, game goes into overtime, total points over 45.5, or a player scores 2+ touchdowns?"
+            ]
+        }
+    }
+
+}
+
+
+
+
+#Preview {
+    NormalBetView(
+        navPath: .constant(NavigationPath()),
+        email: "preview@example.com",
+        userId: UUID()
+    )
 }
 
 struct BetOptionsView: View {
     @Binding var navPath: NavigationPath
     let betPrompt: String
-    
+    let email: String
+    let userId: UUID?
+
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
+    @State private var isNextActive = false
 
-    @State private var isGeneratingOptions = false
-    @State private var isGeneratingTerms = false
-    @State private var errorMessage: ErrorMessage?
-
-    struct ErrorMessage: Identifiable {
-        var id = UUID()
-        var message: String
-    }
-
-    // MARK: - Replace with your secure stored key / injection
-    private let geminiAPIKey = "AIzaSyAunbuh_N_W_mkRpvKIosu-TDajJvJO8Q8"
-
-    // MARK: - Body
     var body: some View {
         ZStack {
-            // Background Gradient to match previous view
             LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
-                    Color(red: 0.15, green: 0.15, blue: 0.25)
-                ]),
+                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
                 startPoint: .top,
                 endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            ).ignoresSafeArea()
 
-            VStack {
-                ScrollView {
-                    VStack(spacing: 24) {
-
-                        // Header + Add Option + AI Generate Options
-                        HStack(spacing: 16) {
-                            Text("Set Bet Options")
-                                .font(.system(size: 18, weight: .regular, design: .rounded))
-                                .foregroundColor(.white)
-                            Spacer()
-
-                            // AI generate options button
-                            if isGeneratingOptions {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            } else {
-                                Button {
-                                    Task { await generateAIBetOptions() }
-                                } label: {
-                                    Image(systemName: "sparkles") // star-ish icon
-                                        .font(.system(size: 22))
-                                        .foregroundColor(.yellow)
-                                        .accessibilityLabel("AI fill bet options")
-                                }
-                            }
-
-                            // Manually add blank option
-                            Button(action: { betOptions.append("") }) {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 24))
-                                    .accessibilityLabel("Add bet option")
-                            }
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Options")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        Task {
+                            await generateOptions(betPrompt: betPrompt)
                         }
-                        .padding(.top, 16)
-                        .padding(.horizontal, 24)
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 20))
+                    }
 
-                        // Bet Options List
+                    Button { betOptions.append("") } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 22))
+                    }
+                }
+                .padding(.horizontal)
+
+                ScrollView {
+                    VStack(spacing: 10) {
                         ForEach(betOptions.indices, id: \.self) { index in
                             HStack {
-                                TextField("Enter a bet option", text: $betOptions[index])
-                                    .padding(14)
+                                TextField("Option", text: $betOptions[index])
+                                    .padding()
                                     .background(Color.gray.opacity(0.2))
                                     .cornerRadius(8)
                                     .foregroundColor(.white)
-                                    .frame(height: 50)
-                                    .padding(.horizontal, 24)
-
-                                Button(action: {
+                                Button {
                                     betOptions.remove(at: index)
-                                }) {
+                                } label: {
                                     Image(systemName: "x.circle.fill")
                                         .foregroundColor(.red)
-                                        .font(.system(size: 24))
-                                        .accessibilityLabel("Remove bet option")
-                                }
-                                .padding(.trailing, 24)
-                            }
-                        }
-
-                        // Terms of the Bet + AI Fill
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 16) {
-                                Text("Terms of the bet (Prize, Penalty, etc)")
-                                    .font(.system(size: 18, weight: .regular, design: .rounded))
-                                    .foregroundColor(.white)
-                                Spacer()
-
-                                if isGeneratingTerms {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                } else {
-                                    Button {
-                                        Task { await generateAITerms() }
-                                    } label: {
-                                        Image(systemName: "sparkles")
-                                            .font(.system(size: 22))
-                                            .foregroundColor(.yellow)
-                                            .accessibilityLabel("AI fill terms of the bet")
-                                    }
+                                        .font(.system(size: 22))
                                 }
                             }
-                            .padding(.horizontal, 24)
-
-                            TextField("Enter the bet terms", text: $betTerms, axis: .vertical)
-                                .padding(14)
-                                .background(Color.gray.opacity(0.2))
-                                .cornerRadius(8)
-                                .frame(minHeight: 120, alignment: .topLeading)
-                                .foregroundColor(.white)
-                                .font(.system(size: 16))
-                                .multilineTextAlignment(.leading)
-                                .padding(.horizontal, 24)
+                            .padding(.horizontal)
                         }
-
-                        Spacer(minLength: 80) // Room for bottom button
                     }
                 }
+                .frame(maxHeight: 200) // limit height for scrolling
+
+                HStack {
+                    Text("Terms (Penalties, Prizes, Rules)")
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button { generateTerms() } label: {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 20))
+                    }
+                }
+                .padding(.horizontal)
+
+                TextEditor(text: $betTerms)
+                    .frame(minHeight: 100)
+                    .padding(8)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+                    .padding(.horizontal)
+                    .scrollContentBackground(.hidden)
+
+                Spacer()
 
                 NavigationLink(
                     destination: FinalizeBetView(
                         navPath: $navPath,
+                        email: email,
                         betPrompt: betPrompt,
                         betOptions: betOptions,
-                        betTerms: betTerms
-                    )
+                        betTerms: betTerms,
+                        betType: "normal",
+                        userId: userId
+                    ),
+                    isActive: $isNextActive
                 ) {
-                    Text("Next")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue)
-                        .cornerRadius(14)
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 16)
+                    EmptyView()
+                }
+                
+                Button("Next") {
+                    isNextActive = true
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.green)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .padding(.horizontal)
+                .padding(.bottom)
+            }
+            .padding(.top)
+        }
+    }
+
+    func generateOptions(betPrompt: String) {
+        Task {
+            do {
+                let prompt = """
+                Based on the following bet prompt: "\(betPrompt)", generate exactly 5 short and specific bet options. \
+                Each option should be one sentence, measurable, and phrased like a realistic sports prop bet. \
+                Do not include any introductory text. Only return the 5 options, one per line.
+                """
+
+                let responseText = try await AIServices.shared.sendPrompt(
+                    prompt,
+                    model: "gemini-2.5-flash-lite",
+                    temperature: 0.7,
+                    maxTokens: 300
+                )
+
+                // Split and clean the response
+                let cleanedLines = responseText
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter {
+                        !$0.isEmpty &&
+                        !$0.lowercased().contains("option") &&
+                        !$0.lowercased().contains("here") &&
+                        !$0.lowercased().contains("bet prompt") &&
+                        !$0.lowercased().contains("generate")
+                    }
+                    .map {
+                        // Remove leading "1.", "-", etc.
+                        $0.replacingOccurrences(of: #"^\s*[\d\-\•]+\s*"#, with: "", options: .regularExpression)
+                    }
+                    .filter { $0.count > 8 }  // reasonable length
+
+                betOptions = Array(cleanedLines.prefix(5))
+
+                if betOptions.isEmpty {
+                    throw NSError(domain: "AIResponseParsing", code: 1, userInfo: [NSLocalizedDescriptionKey: "No valid options found"])
                 }
 
+            } catch {
+                print("Failed to generate bet options: \(error)")
+                betOptions = [
+                    "Team A wins by more than 10 points",
+                    "Team B scores first",
+                    "Game goes into overtime",
+                    "Total points over 45.5",
+                    "A player scores 2 or more touchdowns"
+                ]
             }
         }
-        .alert(item: $errorMessage) { err in
-            Alert(title: Text("Error"), message: Text(err.message), dismissButton: .default(Text("OK")))
-        }
     }
 
-    // MARK: - AI Calls
-
-    private func generateAIBetOptions() async {
-        guard !isGeneratingOptions else { return }
-        isGeneratingOptions = true
-        defer { isGeneratingOptions = false }
-
-        let prompt = """
-        Generate 4-6 short, mutually exclusive bet outcome options appropriate for a casual friendly wager. 
-        This is the main bet: "\(betPrompt)"
-        Examples: Team A Wins, Team B Wins, Total Score Over 200, Total Score Under 200.
-        Each option should be under 7 words. Return as a comma-separated list.
-        """
-
-        do {
-            let text = try await callGemini(with: prompt)
-            // Parse comma-separated; strip empties
-            let parts = text
-                .split(separator: ",")
-                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if parts.isEmpty {
-                throw NSError(domain: "AIBetOptionsEmpty", code: 0)
+    func generateTerms() {
+        Task {
+            do {
+                let betDescription = betOptions.joined(separator: ", ")
+                print("Generate concise, user-friendly terms and conditions for a bet involving: \(betDescription). Use simple language, no placeholders, and keep it under 300 words.")
+                
+                let prompt = """
+                Generate concise, user-friendly terms and conditions for a sports bet involving these options: \(betDescription). \
+                Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], \
+                and keep the response under 300 words.
+                """
+                
+                let responseText = try await AIServices.shared.sendPrompt(
+                    prompt,
+                    model: "gemini-2.5-flash-lite",
+                    temperature: 0.7,
+                    maxTokens: 600
+                )
+                
+                betTerms = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+            } catch {
+                print("Failed to generate bet terms: \(error)")
+                betTerms = """
+                If Team A wins by more than 10 points, the bettor wins. \
+                If Team B scores first but loses, the bet is void. \
+                Overtime bets only apply if the game officially enters overtime. \
+                'Total points over 45.5' is based on final score. \
+                A player scoring 2+ touchdowns must be on the starting roster.
+                """
             }
-            betOptions = parts
-        } catch {
-            errorMessage = ErrorMessage(message: "Could not generate bet options. Using placeholders.")
-            betOptions = [
-                "Player 1 wins",
-                "Player 2 wins",
-                "Tie / Push",
-                "Total points over 50",
-                "Total points under 50"
-            ]
         }
     }
 
-    private func generateAITerms() async {
-        guard !isGeneratingTerms else { return }
-        isGeneratingTerms = true
-        defer { isGeneratingTerms = false }
-
-        // Provide context: include current bet options so model can tailor stakes
-        let contextList = betOptions.isEmpty ? "No options currently set." :
-            betOptions.enumerated().map { "\($0 + 1). \($1)" }.joined(separator: "\n")
-
-        let prompt = """
-        Write short, clear terms for a friendly bet with the topic:
-
-        \(betPrompt)
-
-        Options:
-        \(contextList)
-
-        Include: what counts as a valid result, how winner is determined, tie/push rules, fun low-stakes prize or penalty, and when results are finalized.
-        Keep under 80 words. Return plain text only.
-        """
-
-
-        do {
-            let text = try await callGemini(with: prompt)
-            // Trim + collapse extra whitespace
-            betTerms = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            errorMessage = ErrorMessage(message: "Could not generate bet terms. Please edit manually.")
-        }
-    }
-
-    // MARK: - Generic Gemini Call
-    private func callGemini(with prompt: String) async throws -> String {
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=\(geminiAPIKey)") else {
-            throw URLError(.badURL)
-        }
-
-        let body: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]]
-        ]
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        let (data, _) = try await URLSession.shared.data(for: req)
-        guard
-            let resp = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let candidates = resp["candidates"] as? [[String: Any]],
-            let content = candidates.first?["content"] as? [String: Any],
-            let parts = content["parts"] as? [[String: Any]],
-            let text = parts.first?["text"] as? String
-        else {
-            throw NSError(domain: "GeminiParsing", code: 0)
-        }
-        return text
-    }
 }
 
 struct FinalizeBetView: View {
     @Binding var navPath: NavigationPath
+    let email: String
     let betPrompt: String
     let betOptions: [String]
     let betTerms: String
+    let betType: String
+    let userId: UUID?
 
     @State private var partyName: String = ""
-    @State private var privacyOption: String = "Open"
+    @State private var privacy: String = "Public"
     @State private var maxMembers: Int = 10
-
-    private let privacyOptions = ["Open", "Friends Only", "Invite Only"]
+    @State private var terms: String = ""
+    @State private var isSubmitting = false
+    @State private var showPartyDetails = false
+    @State private var createdPartyCode: String = ""
+    
+    @Environment(\.supabaseClient) private var supabaseClient
 
     var body: some View {
         ZStack {
             LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.05, green: 0.05, blue: 0.15),
-                    Color(red: 0.1, green: 0.1, blue: 0.2)
-                ]),
+                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
                 startPoint: .top,
                 endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            ).ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Text("Finalize Your Bet")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Prompt")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.7))
-                        Text(betPrompt)
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading) {
+                        Text("Enter party name")
                             .foregroundColor(.white)
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Options")
                             .font(.headline)
-                            .foregroundColor(.white.opacity(0.7))
-                        ForEach(betOptions, id: \ .self) { option in
-                            Text(option)
+                            .padding(.horizontal)
+                        HStack {
+                            TextField("Party Name", text: $partyName)
+                                .padding()
+                                .background(Color.gray.opacity(0.2))
+                                .cornerRadius(10)
                                 .foregroundColor(.white)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 12)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Terms")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.7))
-                        Text(betTerms)
-                            .foregroundColor(.white)
-                    }
-
-                    Divider()
-                        .background(Color.white.opacity(0.3))
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Party Settings")
-                            .font(.title2)
-                            .bold()
-                            .foregroundColor(.white)
-
-                        TextField("Party Name", text: $partyName)
-                            .padding(12)
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
-                            .foregroundColor(.white)
-
-                        Picker("Privacy", selection: $privacyOption) {
-                            ForEach(privacyOptions, id: \.self) { option in
-                                Text(option)
+                            Button(action: randomizePartyName) {
+                                Image(systemName: "die.face.5.fill")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 24))
                             }
+                        }.padding(.horizontal)
+                    }
+
+                    VStack(alignment: .leading) {
+                        Text("Choose privacy option")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        Picker("Privacy", selection: $privacy) {
+                            Text("Public").tag("Public")
+                            Text("Private").tag("Private")
                         }
                         .pickerStyle(SegmentedPickerStyle())
+                        .padding(.horizontal)
+                    }
 
-                        Stepper(value: $maxMembers, in: 2...50) {
-                            Text("Max Members: \(maxMembers)")
-                                .foregroundColor(.white)
+                    Stepper(value: $maxMembers, in: 2...50) {
+                        Text("Max Members: \(maxMembers)").foregroundColor(.white)
+                    }.padding(.horizontal)
+
+                    Button(action: submitBet) {
+                        if isSubmitting {
+                            ProgressView().frame(maxWidth: .infinity)
+                        } else {
+                            Text("Create Bet")
+                                .frame(maxWidth: .infinity)
                         }
                     }
-
-                    Spacer()
-
-                    Button(action: {
-                        navPath.removeLast(navPath.count)
-                    }) {
-                        Text("Create Party")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.vertical, 14)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.blue)
-                            .cornerRadius(14)
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 16)
-                    }
+                    .padding()
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    .disabled(isSubmitting)
                 }
-                .padding(24)
+                .padding(.top)
             }
         }
-        .navigationTitle("Finalize")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showPartyDetails) {
+            PartyDetailsView(partyCode: createdPartyCode, email: email)
+        }
     }
-}
 
-#Preview {
-    NavigationView {
-        NormalBetView(navPath: .constant(NavigationPath()), email: "test@example.com")
+    func randomizePartyName() {
+        let suggestions = ["Bet Bros", "Wager Warriors", "Odds Squad", "Risky Business", "The Punters"]
+        partyName = suggestions.randomElement() ?? "My Party"
+    }
+
+    func submitBet() {
+        guard let userId = userId else {
+            print("Error: userId is nil")
+            return
+        }
+        
+        guard !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("Error: Party name cannot be empty")
+            return
+        }
+        
+        isSubmitting = true
+
+        let partyCode = UUID().uuidString.prefix(6).uppercased()
+
+        let payload = PartyInsertPayload(
+            created_by: userId.uuidString,
+            party_name: partyName,
+            privacy_option: privacy,
+            max_members: maxMembers,
+            bet: betPrompt,
+            bet_type: betType,
+            options: betOptions,
+            terms: betTerms,
+            status: "open",
+            party_code: String(partyCode)
+        )
+
+        Task {
+            do {
+                let response = try await supabaseClient
+                    .from("Parties")
+                    .insert(payload)
+                    .select()
+                    .single()
+                    .execute()
+
+                print("Raw insert response: \(response)")
+
+                // Decode the response to verify creation
+                let decodedParty = try JSONDecoder().decode(Party.self, from: response.data)
+                print("Successfully created party: \(decodedParty)")
+                
+                // Navigate to PartyDetailsView
+                await MainActor.run {
+                    self.createdPartyCode = String(partyCode)
+                    self.showPartyDetails = true
+                    self.isSubmitting = false
+                }
+
+            } catch {
+                print("Error submitting bet: \(error)")
+                await MainActor.run {
+                    self.isSubmitting = false
+                }
+            }
+        }
     }
 }

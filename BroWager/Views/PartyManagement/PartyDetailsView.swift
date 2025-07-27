@@ -6,14 +6,15 @@ struct PartyDetailsView: View {
     let email: String
     @Environment(\.supabaseClient) private var supabaseClient
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var sessionManager: SessionManager
+    
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var partyName: String = ""
     @State private var hostUserId: String = ""
-    @State private var gameId: String = ""
     @State private var partyId: Int64?
-    @State private var betQuantity: Int?
-    @State private var potBalance: Int?
+    @State private var maxMembers: Int64 = 10
+    @State private var status: String = ""
     @State private var memberUserIds: [String] = []
     @State private var showCopied = false
     @State private var showGameEventView = false
@@ -31,7 +32,6 @@ struct PartyDetailsView: View {
     @State private var correctBets: [String]? = nil
     @State private var showProfile = false
     @State private var profileImage: Image? = nil
-    @EnvironmentObject var sessionManager: SessionManager
     @State private var partyBets: [String] = []
     @State private var showGameEventSheet = false
     @State private var partyEvents: [String] = []
@@ -41,6 +41,9 @@ struct PartyDetailsView: View {
     @State private var draftTeamWinningTeam: [String]? = nil
     @State private var showBetTypeTutorial = false
     @State private var betType: String = ""
+    @State private var showPlaceBetView = false
+    @State private var betPrompt: String = ""
+    @State private var betTerms: String = ""
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -70,6 +73,16 @@ struct PartyDetailsView: View {
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+                    
+                    Button("Retry") {
+                        Task {
+                            await fetchPartyDetails()
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
                 }
                 .onAppear { print("PartyDetailsView: errorMessage = \(error)") }
             } else {
@@ -79,11 +92,9 @@ struct PartyDetailsView: View {
                         VStack(spacing: 32) {
                             hostCard
                             partyCodeCard
-                            gameCard
                             betTypeCard
                             buyInAndPotCard
                             membersCard
-                            // ...other cards...
                             VStack(spacing: 16) {
                                 VStack(spacing: 18) {
                                     Button(action: { showInviteFriends = true }) {
@@ -128,7 +139,7 @@ struct PartyDetailsView: View {
                             }
                             // Add Make a Bet button at the bottom
                             Button(action: {
-                                Task { await fetchPartyEventsAndShowBet() }
+                                showPlaceBetView = true
                             }) {
                                 HStack {
                                     Image(systemName: "plus.circle.fill")
@@ -159,6 +170,7 @@ struct PartyDetailsView: View {
         }
         .onAppear {
             print("PartyDetailsView: email = \(email)")
+            print("PartyDetailsView: sessionManager.userEmail = \(sessionManager.userEmail ?? "nil")")
             print("PartyDetailsView: onAppear called")
             Task {
                 await fetchPartyDetails()
@@ -180,27 +192,6 @@ struct PartyDetailsView: View {
                     .environment(\.supabaseClient, supabaseClient)
             }
         }
-        .sheet(isPresented: $showProfile) {
-            ProfileView(navPath: .constant(NavigationPath()), email: "")
-        }
-        .sheet(isPresented: $showGameEventSheet) {
-            if let partyId = partyId, let userId = currentUserId, !partyEvents.isEmpty, let game = selectedGame {
-                GameEventHostView(
-                    navPath: .constant(NavigationPath()),
-                    game: game,
-                    partyId: partyId,
-                    userId: userId,
-                    betType: .predefined,
-                    refreshCount: .constant(0),
-                    maxRefreshes: 0,
-                    partyCode: partyCode,
-                    userEmail: email,
-                    fixedEvents: partyEvents
-                )
-            } else {
-                Text("Missing data for GameEventHostView")
-            }
-        }
         .sheet(isPresented: $showPartyChat) {
             if let partyId = partyId {
                 PartyChatView(partyId: partyId, partyName: partyName)
@@ -208,6 +199,24 @@ struct PartyDetailsView: View {
         }
         .sheet(isPresented: $showBetTypeTutorial) {
             BetTypeTutorialSheet()
+        }
+        .navigationDestination(isPresented: $showPlaceBetView) {
+            if let partyId = partyId, let userId = currentUserId, !partyBets.isEmpty {
+                PlaceBetView(
+                    partyId: partyId,
+                    userId: userId,
+                    partyName: partyName,
+                    betPrompt: betPrompt,
+                    betOptions: partyBets,
+                    betTerms: betTerms
+                )
+            } else {
+                Text("Unable to load bet information")
+                    .foregroundColor(.red)
+                    .onAppear {
+                        print("Missing data - partyId: \(String(describing: partyId)), userId: \(String(describing: currentUserId)), partyBets: \(partyBets)")
+                    }
+            }
         }
     }
     
@@ -276,14 +285,6 @@ struct PartyDetailsView: View {
         .padding(.horizontal, 24)
     }
 
-    private var gameCard: some View {
-        partyInfoCard(
-            icon: "gamecontroller.fill",
-            title: "Game",
-            value: homeTeam.isEmpty && awayTeam.isEmpty ? "Game not found" : "\(homeTeam) vs \(awayTeam)"
-        )
-    }
-
     private var betTypeCard: some View {
         partyInfoCard(
             icon: "questionmark.circle.fill",
@@ -298,27 +299,51 @@ struct PartyDetailsView: View {
         case "draftteam": return "Draft Team Bet"
         case "randomplayer": return "Random Player Bet"
         case "custom": return "Custom Bet"
+        case "normal": return "Normal Bet"
         default: return type.capitalized
         }
     }
 
     private var buyInAndPotCard: some View {
-        Group {
-            if let betQuantity = betQuantity, let potBalance = potBalance {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "info.circle")
+                    .foregroundColor(.white.opacity(0.7))
+                    .frame(width: 24)
+                Text("Party Info")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    partyInfoCard(
-                        icon: "dollarsign.circle",
-                        title: "Buy-In",
-                        value: "\(betQuantity) Tokens"
-                    )
-                    partyInfoCard(
-                        icon: "trophy.fill",
-                        title: "Prize Pot",
-                        value: "\(potBalance) Tokens"
-                    )
+                    Text("Max Members:")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    Text("\(memberUserIds.count)/\(maxMembers)")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                HStack {
+                    Text("Status:")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    Text(status.capitalized)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(status.lowercased() == "open" ? .green : .orange)
                 }
             }
         }
+        .padding(16)
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
     }
 
     private var membersCard: some View {
@@ -389,59 +414,75 @@ struct PartyDetailsView: View {
     }
     
     private func fetchPartyDetails() async {
-        isLoading = true
-        errorMessage = nil
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
         do {
-            // Fetch user_id for the current user
-            let userResponse = try await supabaseClient
-                .from("Login Information")
-                .select("user_id")
-                .eq("email", value: email)
-                .limit(1)
-                .execute()
-            let decoder = JSONDecoder()
-            struct UserIdResult: Codable { let user_id: String }
-            let userIdResults = try decoder.decode([UserIdResult].self, from: userResponse.data)
-            guard let userIdResult = userIdResults.first else {
+            // Use the email parameter or fall back to sessionManager
+            let userEmail = !email.isEmpty ? email : (sessionManager.userEmail ?? "")
+            
+            guard !userEmail.isEmpty else {
                 await MainActor.run {
-                    self.errorMessage = "User not found"
+                    self.errorMessage = "No user email available"
                     self.isLoading = false
                 }
                 return
             }
+            
+            print("DEBUG: Using email for lookup: \(userEmail)")
+            
+            // Fetch user_id for the current user
+            let userResponse = try await supabaseClient
+                .from("Login Information")
+                .select("user_id")
+                .eq("email", value: userEmail)
+                .limit(1)
+                .execute()
+            
+            let decoder = JSONDecoder()
+            struct UserIdResult: Codable { let user_id: String }
+            let userIdResults = try decoder.decode([UserIdResult].self, from: userResponse.data)
+            
+            guard let userIdResult = userIdResults.first else {
+                print("DEBUG: No user found for email: \(userEmail)")
+                await MainActor.run {
+                    self.errorMessage = "User not found for email: \(userEmail)"
+                    self.isLoading = false
+                }
+                return
+            }
+            
             let userId = userIdResult.user_id
+            print("DEBUG: Found userId: \(userId) for email: \(userEmail)")
             await MainActor.run { self.currentUserId = userId }
             
             print("DEBUG: Fetching party details for code: \(partyCode)")
             let partyResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, game_id, created_by, party_name, bet_quantity, pot_balance, bet_type")
+                .select("id, created_by, party_name, bet_type, max_members, status, bet, terms")
                 .eq("party_code", value: partyCode)
                 .execute()
+            
             print("DEBUG: Party fetch succeeded")
             let rawPartyData = String(data: partyResponse.data, encoding: .utf8) ?? "No data"
             print("DEBUG: Raw party response data: \(rawPartyData)")
-            if let json = try? JSONSerialization.jsonObject(with: partyResponse.data, options: []),
-               let array = json as? [[String: Any]] {
-                print("DEBUG: Full rows returned for party_code \(partyCode):")
-                for (idx, row) in array.enumerated() {
-                    print("  Row \(idx + 1):", row)
-                }
-            } else {
-                print("DEBUG: Could not parse rows as array of dictionaries.")
-            }
+            
             struct PartyResult: Codable {
                 let id: Int64?
-                let game_id: Int64?
                 let created_by: String?
                 let party_name: String?
-                let bet_quantity: Int?
-                let pot_balance: Int?
-                let bet_type: String? // Optional for future-proofing
-                // Add more optional fields here as needed
+                let bet_type: String?
+                let max_members: Int64?
+                let status: String?
+                let bet: String?
+                let terms: String?
             }
+            
             let partyArray = try decoder.decode([PartyResult].self, from: partyResponse.data)
             print("DEBUG: Number of parties returned for code \(partyCode): \(partyArray.count)")
+            
             if partyArray.count > 1 {
                 print("❌ Duplicate party_code detected in DB! Code:", partyCode)
                 await MainActor.run {
@@ -450,6 +491,7 @@ struct PartyDetailsView: View {
                 }
                 return
             }
+            
             if partyArray.isEmpty {
                 print("❌ No party found for code:", partyCode)
                 await MainActor.run {
@@ -458,82 +500,44 @@ struct PartyDetailsView: View {
                 }
                 return
             }
+            
             let partyResult = partyArray[0]
             await MainActor.run {
                 self.partyId = partyResult.id
                 self.partyName = partyResult.party_name ?? ""
                 self.hostUserId = partyResult.created_by ?? ""
-                self.gameId = String(partyResult.game_id ?? 0)
-                self.betQuantity = partyResult.bet_quantity
-                self.potBalance = partyResult.pot_balance
                 self.betType = partyResult.bet_type ?? ""
+                self.maxMembers = partyResult.max_members ?? 10
+                self.status = partyResult.status ?? "open"
+                self.betPrompt = partyResult.bet ?? ""
+                self.betTerms = partyResult.terms ?? ""
             }
             
-            // 3. Get party members from Party Members table
+            // Get party members from Party Members table
             let membersResponse = try await supabaseClient
                 .from("Party Members")
                 .select("user_id")
                 .eq("party_id", value: Int(partyResult.id ?? 0))
                 .execute()
+            
             print("DEBUG: Raw members response data: \(String(data: membersResponse.data, encoding: .utf8) ?? "No data")")
             struct MemberResult: Codable { let user_id: String }
             let members = try decoder.decode([MemberResult].self, from: membersResponse.data)
             var memberIds = members.map { $0.user_id }
+            
             // Ensure host is included as a member
             if let hostId = partyResult.created_by, !memberIds.contains(hostId) {
                 memberIds.append(hostId)
             }
+            
             print("DEBUG: Member user_ids for party_id \(partyResult.id ?? 0): \(memberIds)")
             await MainActor.run {
                 self.memberUserIds = memberIds
                 self.isLoading = false
             }
             
-            // Fetch game info for display
-            do {
-                let gameIdInt = Int(partyResult.game_id ?? 0)
-                let gameResponse = try await supabaseClient
-                    .from("Game")
-                    .select("home_team, away_team")
-                    .eq("id", value: gameIdInt)
-                    .limit(1)
-                    .execute()
-                struct GameTeams: Codable {
-                    let home_team: String
-                    let away_team: String
-                }
-                let gameTeamsArray = try decoder.decode([GameTeams].self, from: gameResponse.data)
-                if let gameTeams = gameTeamsArray.first {
-                    await MainActor.run {
-                        self.homeTeam = gameTeams.home_team
-                        self.awayTeam = gameTeams.away_team
-                    }
-                }
-            } catch {
-                print("❌ Error fetching teams for game: \(error)")
-            }
-            
             // Fetch usernames for host and members
-            do {
-                var userIds = memberUserIds
-                userIds.append(hostUserId)
-                let response = try await supabaseClient
-                    .from("Username")
-                    .select("user_id, username")
-                    .in("user_id", values: userIds)
-                    .execute()
-                struct UsernameRow: Codable { let user_id: String; let username: String }
-                let usernames = try decoder.decode([UsernameRow].self, from: response.data)
-                let userIdToUsername = Dictionary(uniqueKeysWithValues: usernames.map { ($0.user_id, $0.username) })
-                print("DEBUG: Usernames fetched for memberUserIds: \(self.memberUserIds)")
-                print("DEBUG: userIdToUsername map: \(userIdToUsername)")
-                await MainActor.run {
-                    self.hostUsername = userIdToUsername[self.hostUserId] ?? self.hostUserId
-                    self.memberUsernames = self.memberUserIds.compactMap { userIdToUsername[$0] }
-                }
-            } catch {
-                print("❌ Error fetching usernames: \(error)")
-            }
+            await fetchUsernames()
             
             // Fetch the party bets after fetching party details
             if let partyId = self.partyId {
@@ -541,6 +545,7 @@ struct PartyDetailsView: View {
                     await MainActor.run { self.partyBets = bets }
                 }
             }
+            
         } catch {
             print("❌ Error fetching party details: \(error)")
             await MainActor.run {
@@ -550,28 +555,39 @@ struct PartyDetailsView: View {
         }
     }
     
-    private func fetchGameAndNavigate() async {
-        // If we don't have game details, fetch them first.
-        if selectedGame == nil {
-            await fetchGameForStatusCheck()
-        }
-        // Now that we're sure we have the game, fetch the bets and navigate.
-        if let partyId = self.partyId {
-            if let bets = await fetchPartyBets(partyId: partyId) {
-                await MainActor.run {
-                    self.partyBets = bets
-                    self.showGameEventView = true
-                }
-            } else {
-                await MainActor.run {
-                    self.errorMessage = "No bets found for this party."
-                }
+    private func fetchUsernames() async {
+        do {
+            var userIds = memberUserIds
+            if !hostUserId.isEmpty {
+                userIds.append(hostUserId)
             }
+            
+            guard !userIds.isEmpty else { return }
+            
+            let response = try await supabaseClient
+                .from("Username")
+                .select("user_id, username")
+                .in("user_id", values: userIds)
+                .execute()
+            
+            struct UsernameRow: Codable { let user_id: String; let username: String }
+            let usernames = try JSONDecoder().decode([UsernameRow].self, from: response.data)
+            let userIdToUsername = Dictionary(uniqueKeysWithValues: usernames.map { ($0.user_id, $0.username) })
+            
+            print("DEBUG: Usernames fetched for memberUserIds: \(self.memberUserIds)")
+            print("DEBUG: userIdToUsername map: \(userIdToUsername)")
+            
+            await MainActor.run {
+                self.hostUsername = userIdToUsername[self.hostUserId] ?? self.hostUserId
+                self.memberUsernames = self.memberUserIds.compactMap { userIdToUsername[$0] }
+            }
+        } catch {
+            print("❌ Error fetching usernames: \(error)")
         }
     }
     
     private func checkUserBetStatus() async {
-        guard let userId = currentUserId, let partyId = partyId, !gameId.isEmpty else { return }
+        guard let userId = currentUserId, let partyId = partyId else { return }
         
         do {
             // Check if a bet exists
@@ -587,174 +603,26 @@ struct PartyDetailsView: View {
             await MainActor.run {
                 self.hasPlacedBet = !betResponse.isEmpty
             }
-
-            // Ensure we have game details to check the date
-            if selectedGame == nil {
-                await fetchGameForStatusCheck()
-            }
-
-            if let game = selectedGame {
-                let formatter = ISO8601DateFormatter()
-                if let gameDate = formatter.date(from: game.date) {
-                    await MainActor.run {
-                        self.isGameFinished = gameDate < Date()
-                    }
-                }
-            }
             
         } catch {
             print("Error checking user bet status: \(error)")
         }
     }
     
-    private func fetchGameForStatusCheck() async {
-        guard selectedGame == nil, let gameIdInt = Int(gameId) else { return }
-        do {
-            let response = try await supabaseClient
-                .from("Game")
-                .select("id, home_team, away_team, date")
-                .eq("id", value: gameIdInt)
-                .limit(1)
-                .execute()
-            
-            struct GameRow: Codable {
-                let id: Int
-                let home_team: String
-                let away_team: String
-                let date: String
-            }
-            let gameRow = try JSONDecoder().decode(GameRow.self, from: response.data)
-
-            let baseballGame = BaseballGame(
-                id: gameRow.id,
-                home_team_name: gameRow.home_team,
-                away_team_name: gameRow.away_team,
-                date: gameRow.date
-            )
-            await MainActor.run {
-                self.selectedGame = baseballGame
-            }
-        } catch {
-            print("❌ Error fetching game for status check: \(error)")
-        }
-    }
-    
-    private func checkBetResults() async {
-        guard let userId = currentUserId, let partyId = partyId, let game = selectedGame else { return }
-        
-        struct UserBetEvents: Codable {
-            let bet_events: [String]
-        }
-        do {
-            // 1. Fetch the user's bets
-            let betResponse: [UserBetEvents] = try await supabaseClient
-                .from("User Bets")
-                .select("bet_events")
-                .eq("user_id", value: userId)
-                .eq("party_id", value: Int(partyId))
-                .limit(1)
-                .execute()
-                .value
-            
-            print("DEBUG: betResponse = \(betResponse)")
-            
-            guard let userBet = betResponse.first else {
-                await MainActor.run {
-                    self.errorMessage = "No bet found for this party. Please make a bet first."
-                }
-                print("DEBUG: No bet found for userId=\(userId), partyId=\(partyId)")
-                return
-            }
-            print("DEBUG: userBet.bet_events = \(userBet.bet_events)")
-            // 2. Create the prompt for Gemini
-            let prompt = """
-            You are a sports game fact-checker. For the baseball game between \(game.home_team_name) and \(game.away_team_name) that occurred on \(game.date), please analyze the following list of predicted events. Return a JSON object with a single key \"correct_bets\" which holds an array of strings. This array should contain ONLY the predicted events from the list that actually happened.
-
-            List of predicted events:
-            \(userBet.bet_events.joined(separator: "\n"))
-            """
-
-            // 3. Call Gemini API
-            guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBPjz5MsImnnmKvyltj6X6h7E-JqVufe4E") else {
-                // Replace YOUR_GEMINI_API_KEY with your actual key
-                self.errorMessage = "Invalid Gemini API URL"
-                return
-            }
-            
-            let requestBody: [String: Any] = [
-                "contents": [["parts": [["text": prompt]]]],
-                "generationConfig": ["response_mime_type": "application/json"]
-            ]
-            
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
-            
-            let (data, _) = try await URLSession.shared.data(for: request)
-            print("DEBUG: Gemini raw response = \(String(data: data, encoding: .utf8) ?? "nil")")
-            // 4. Parse response and update score
-            struct GeminiResponse: Decodable {
-                struct Candidate: Decodable {
-                    struct Content: Decodable {
-                        struct Part: Decodable {
-                            let text: String
-                        }
-                        let parts: [Part]
-                    }
-                    let content: Content
-                }
-                let candidates: [Candidate]
-            }
-
-            let responseText = try JSONDecoder().decode(GeminiResponse.self, from: data).candidates.first?.content.parts.first?.text ?? ""
-            print("DEBUG: Gemini responseText = \(responseText)")
-            struct ResultPayload: Decodable {
-                let correct_bets: [String]
-            }
-            
-            let resultData = Data(responseText.utf8)
-            let finalResult = try JSONDecoder().decode(ResultPayload.self, from: resultData)
-            
-            let correctBetsArray = finalResult.correct_bets
-            let score = correctBetsArray.count
-            
-            // 5. Update the UserBets table
-            try await supabaseClient
-                .from("User Bets")
-                .update(["score": score])
-                .eq("user_id", value: userId)
-                .eq("party_id", value: Int(partyId))
-                .execute()
-                
-            // 6. Update the UI
-            await MainActor.run {
-                self.score = score
-                self.correctBets = correctBetsArray
-            }
-            
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "Failed to check results: \(error.localizedDescription)"
-            }
-            print("DEBUG: Error in checkBetResults: \(error)")
-        }
-    }
-    
-    // Fetch bets for this party from the Parties table (events column)
+    // Fetch bets for this party from the Parties table (options column)
     private func fetchPartyBets(partyId: Int64) async -> [String]? {
         do {
             let response = try await supabaseClient
                 .from("Parties")
-                .select("events")
+                .select("options")
                 .eq("id", value: Int(partyId))
                 .limit(1)
                 .execute()
-            struct EventsRow: Decodable { let events: [String]? }
-            let row = try JSONDecoder().decode([EventsRow].self, from: response.data)
-            return row.first?.events
+            struct OptionsRow: Decodable { let options: [String]? }
+            let row = try JSONDecoder().decode([OptionsRow].self, from: response.data)
+            return row.first?.options
         } catch {
-            print("Error fetching events from Parties table: \(error)")
+            print("Error fetching options from Parties table: \(error)")
             return nil
         }
     }
@@ -764,13 +632,13 @@ struct PartyDetailsView: View {
         do {
             let response = try await supabaseClient
                 .from("Parties")
-                .select("events")
+                .select("options")
                 .eq("id", value: Int(partyId))
                 .single()
                 .execute()
-            struct EventsRow: Decodable { let events: [String] }
+            struct OptionsRow: Decodable { let options: [String] }
             let decoder = JSONDecoder()
-            let row = try decoder.decode(EventsRow.self, from: response.data)
+            let row = try decoder.decode(OptionsRow.self, from: response.data)
             var prevBet: [String]? = nil
             if editing {
                 let betResponse = try await supabaseClient
@@ -785,7 +653,7 @@ struct PartyDetailsView: View {
                 prevBet = bets.first?.bet_events
             }
             await MainActor.run {
-                partyEvents = row.events
+                partyEvents = row.options
                 previousBet = prevBet
                 showGameEventSheet = false // reset
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -795,61 +663,6 @@ struct PartyDetailsView: View {
         } catch {
             await MainActor.run {
                 errorMessage = "Failed to fetch party events: \(error.localizedDescription)"
-            }
-        }
-    }
-    
-    private func checkDraftTeamResults() async {
-        guard let partyId = partyId, let game = selectedGame else { return }
-        // 1. Fetch all user draft teams for this party
-        struct UserDraftTeam: Codable { let user_id: String; let draft_team: [String] }
-        let response = try? await supabaseClient
-            .from("User Bets")
-            .select("user_id, draft_team")
-            .eq("party_id", value: Int(partyId))
-            .execute()
-        let decoder = JSONDecoder()
-        let teams = (try? decoder.decode([UserDraftTeam].self, from: response?.data ?? Data())) ?? []
-        // 2. Build prompt for Gemini
-        let prompt = """
-        For the baseball game between \(game.home_team_name) and \(game.away_team_name) that occurred on \(game.date), analyze the following draft teams. For each team, sum up the total runs, hits, and RBIs for the 5 players. Return the user_id of the team with the highest total, and the list of their 5 players. Format: {\"winner_user_id\": \"...\", \"winning_team\": [ ... ]}
-        \nDraft teams:\n\(teams.map { "\($0.user_id): \($0.draft_team.joined(separator: ", "))" }.joined(separator: "\n"))
-        """
-        // 3. Call Gemini
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBPjz5MsImnnmKvyltj6X6h7E-JqVufe4E") else { return }
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": ["response_mime_type": "application/json"]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: requestBody)
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            struct GeminiDraftResult: Decodable {
-                let winner_user_id: String
-                let winning_team: [String]
-            }
-            let responseText = String(data: data, encoding: .utf8) ?? ""
-            let resultData = Data(responseText.utf8)
-            let result = try JSONDecoder().decode(GeminiDraftResult.self, from: resultData)
-            // 4. Map user_id to username
-            let usernamesResponse = try await supabaseClient
-                .from("Username")
-                .select("user_id, username")
-                .in("user_id", values: [result.winner_user_id])
-                .execute()
-            struct UsernameRow: Codable { let user_id: String; let username: String }
-            let usernames = try decoder.decode([UsernameRow].self, from: usernamesResponse.data)
-            let winnerName = usernames.first?.username ?? result.winner_user_id
-            await MainActor.run {
-                draftTeamWinner = winnerName
-                draftTeamWinningTeam = result.winning_team
-            }
-        } catch {
-            await MainActor.run {
-                errorMessage = "Failed to check draft team results: \(error.localizedDescription)"
             }
         }
     }
@@ -885,6 +698,9 @@ struct BetTypeTutorialSheet: View {
                         Text("• Custom Bet:")
                             .font(.headline)
                         Text("Create your own bet with custom conditions and outcomes. Great for creative or group-specific bets.")
+                        Text("• Normal Bet:")
+                            .font(.headline)
+                        Text("Create a custom bet with multiple options that players can choose from.")
                     }
                     .padding(.bottom, 4)
                     Text("Ask your host if you're unsure which bet type to choose!")
