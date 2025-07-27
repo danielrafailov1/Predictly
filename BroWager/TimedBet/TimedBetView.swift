@@ -193,7 +193,7 @@ struct TimedBetView: View {
     
     // MARK: - Computed Properties
     private var totalTimeInSeconds: Int {
-        return days * hours * 3600 + minutes * 60 + seconds
+        return days * 86400 + hours * 3600 + minutes * 60 + seconds
     }
     
     private var stateDescription: String {
@@ -253,10 +253,18 @@ struct TimedBetView: View {
     private func resetTimer() {
         timer?.invalidate()
         timer = nil
-        counter = 0
-        totalDuration = 0
         timerState = .idle
+
+        // Reset time to the initial values
+        days = initialDays
+        hours = initialHours
+        minutes = initialMinutes
+        seconds = initialSeconds
+
+        counter = initialDays * 86400 + initialHours * 3600 + initialMinutes * 60 + initialSeconds
+        totalDuration = counter
     }
+
 }
 
 // MARK: - Time Picker Component
