@@ -235,9 +235,17 @@ struct FriendsView: View {
     }
     
     private func inviteFriendToParty(friend: FriendUser, party: Party) async {
+        guard let partyId = party.id else {
+            print("[FriendsView] Error: party.id is nil")
+            await MainActor.run {
+                inviteStatus = "Failed to send invite: invalid party ID."
+            }
+            return
+        }
+        
         do {
             let invite = PartyInvite(
-                party_id: party.id,
+                party_id: partyId,
                 inviter_user_id: userId,
                 invitee_user_id: friend.user_id,
                 status: "pending"
@@ -256,6 +264,7 @@ struct FriendsView: View {
             }
         }
     }
+
 }
 
 struct FriendUser: Decodable, Identifiable {

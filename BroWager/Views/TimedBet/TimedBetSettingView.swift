@@ -105,9 +105,3 @@ struct TimedBetSettingView: View {
         }
     }
 }
-
-#Preview {
-    NavigationView {
-        TimedBetSettingView()
-    }
-}

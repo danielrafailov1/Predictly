@@ -185,6 +185,7 @@ enum AIServiceError: Error, LocalizedError {
     case rateLimited
     case contentBlocked
     case noAPIKey
+    case missingResponse
     
     var errorDescription: String? {
         switch self {
@@ -206,6 +207,8 @@ enum AIServiceError: Error, LocalizedError {
             return "Content was blocked by safety filters"
         case .noAPIKey:
             return "No API key provided"
+        case .missingResponse:
+                return "Missing response from Gemini API"
         }
     }
 }
@@ -326,16 +329,56 @@ public class AIServices {
     // MARK: - Async/Await Methods (iOS 15+)
     
     @available(iOS 15.0, *)
-    func sendPrompt(_ prompt: String,
-                   model: String? = nil,
-                   temperature: Double? = nil,
-                   maxTokens: Int? = nil) async throws -> String {
-        return try await withCheckedThrowingContinuation { continuation in
-            sendPrompt(prompt, model: model, temperature: temperature, maxTokens: maxTokens) { result in
-                continuation.resume(with: result)
+    public func sendPrompt(
+        _ prompt: String,
+        model: String,
+        temperature: Double,
+        maxTokens: Int
+    ) async throws -> String {
+        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+        guard let url = URL(string: endpoint) else {
+            throw AIServiceError.invalidURL
+        }
+
+        let payload = [
+            "contents": [
+                ["parts": [["text": prompt]]]
+            ],
+            "generationConfig": [
+                "temperature": temperature,
+                "maxOutputTokens": maxTokens
+            ]
+        ] as [String: Any]
+
+        let jsonData = try JSONSerialization.data(withJSONObject: payload)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = jsonData
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        // 🔥 Debug: Print the raw response from Gemini
+        if let raw = String(data: data, encoding: .utf8) {
+            print("🔥 Raw Gemini Response:\n\(raw)")
+        }
+
+        let decoder = JSONDecoder()
+        do {
+            let geminiResponse = try decoder.decode(GeminiResponse.self, from: data)
+            if let candidates = geminiResponse.candidates,
+               let text = candidates.first?.content.parts.first?.text {
+
+                return text
+            } else {
+                throw AIServiceError.missingResponse
             }
+        } catch {
+            print("❌ Decoding error: \(error)")
+            throw AIServiceError.decodingError
         }
     }
+
     
     @available(iOS 15.0, *)
     func sendContents(_ contents: [GeminiContent],
@@ -461,7 +504,35 @@ public class AIServices {
         You are a bet suggestion generator. A group of friends are hanging out and they want to make a bet. Generate \(count) bets of type \(betType) in JSON format. For each bet, only generate a string of the bet content. 
         """
 
-        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 200)
+        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
+
+        print("📦 Full responseText:\n\(responseText)\n")
+
+        // Extract JSON array from response string
+        guard let start = responseText.firstIndex(of: "["),
+              let end = responseText.lastIndex(of: "]") else {
+            print("⚠️ Failed to find valid JSON array in response.")
+            throw AIServiceError.decodingError
+        }
+
+        let jsonString = String(responseText[start...end])
+        print("🔍 Extracted jsonString:\n\(jsonString)\n")
+
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            print("⚠️ Failed to convert jsonString to Data.")
+            throw AIServiceError.decodingError
+        }
+
+        // Decode and return
+        return try JSONDecoder().decode([String].self, from: jsonData)
+    }
+
+    
+    /// Generate suggestions for bets
+    @available(iOS 15.0, *)
+    public func generateBetSuggestions(prompt: String) async throws -> [String] {
+     
+        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
 
         // Extract JSON array from response string
         guard let start = responseText.firstIndex(of: "["),
@@ -473,8 +544,11 @@ public class AIServices {
         guard let jsonData = jsonString.data(using: .utf8) else {
             throw AIServiceError.decodingError
         }
+        
+        print(jsonData)
+        
         try print(JSONDecoder().decode([String].self, from: jsonData))
-
+        
         return try JSONDecoder().decode([String].self, from: jsonData)
     }
 }

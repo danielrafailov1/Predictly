@@ -9,7 +9,6 @@ import Foundation
 import SwiftUI
 import Supabase
 
-// Move these to PartyModels.swift
 struct PartyResponse: Codable {
     let id: Int
 }
