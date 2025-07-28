@@ -91,6 +91,16 @@ struct MyPartiesView: View {
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
+                    
+                    Button("Retry") {
+                        Task {
+                            await loadParties()
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             )
@@ -120,6 +130,9 @@ struct MyPartiesView: View {
                                 betType: row.betType
                             )
                         }
+                        .listRowBackground(Color.clear) // Make list row background transparent
+                        .listRowSeparator(.hidden) // Hide default separators
+                        .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 8, trailing: 24)) // Add proper spacing
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if partyFilter == .active {
                                 Button(role: .destructive) {
@@ -146,6 +159,7 @@ struct MyPartiesView: View {
                     }
                 }
                 .listStyle(PlainListStyle())
+                .scrollContentBackground(.hidden) // Hide default list background
                 .padding(.horizontal, 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             )
@@ -153,65 +167,67 @@ struct MyPartiesView: View {
     }
     
     var body: some View {
-        ZStack {
-            // Background gradient
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
-                    Color(red: 0.15, green: 0.15, blue: 0.25)
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Fixed Header
-                VStack(spacing: 8) {
-                    Text("My Parties")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+        NavigationStack { // Make sure you're using NavigationStack
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color(red: 0.15, green: 0.15, blue: 0.25)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Fixed Header
+                    VStack(spacing: 8) {
+                        Text("My Parties")
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("View and manage your active parties")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .padding(.top, 16)
+                    
+                    Spacer().frame(height: 18)
+                    
+                    // Filter control
+                    Picker("Party Filter", selection: $partyFilter) {
+                        ForEach(PartyFilter.allCases) { filter in
+                            Text(filter.rawValue).tag(filter)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal, 24)
+                    
+                    Spacer().frame(height: 14)
+                    
+                    // Party Invites Button
+                    Button(action: { showPartyInvites = true }) {
+                        HStack {
+                            Image(systemName: "envelope.open.fill")
+                            Text("Party Invites")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
                         .foregroundColor(.white)
-                    Text("View and manage your active parties")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .padding(.top, 16)
-                
-                Spacer().frame(height: 18)
-                
-                // Filter control
-                Picker("Party Filter", selection: $partyFilter) {
-                    ForEach(PartyFilter.allCases) { filter in
-                        Text(filter.rawValue).tag(filter)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.purple)
+                        .cornerRadius(12)
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+                    
+                    // Scrollable party list area
+                    partyListSection
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding(.horizontal, 24)
-                
-                Spacer().frame(height: 14)
-                
-                // Party Invites Button
-                Button(action: { showPartyInvites = true }) {
-                    HStack {
-                        Image(systemName: "envelope.open.fill")
-                        Text("Party Invites")
-                            .font(.system(size: 18, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.purple)
-                    .cornerRadius(12)
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 8)
-                
-                // Scrollable party list area
-                partyListSection
             }
-        }
-        .navigationDestination(for: PartyNavigation.self) { details in
-            PartyDetailsView(partyCode: details.partyCode, email: details.email)
+            .navigationDestination(for: PartyNavigation.self) { details in
+                PartyDetailsView(partyCode: details.partyCode, email: details.email)
+            }
         }
         .sheet(isPresented: $showJoinParty, onDismiss: {
             Task { await loadParties() }
@@ -276,6 +292,12 @@ struct MyPartiesView: View {
             }
             
             let decoder = JSONDecoder()
+            
+            // Debug: Print raw response
+            if let rawString = String(data: userResponse.data, encoding: .utf8) {
+                print("🔍 Raw user response: \(rawString)")
+            }
+            
             let userData = try decoder.decode([UserIDResponse].self, from: userResponse.data)
             
             guard let userId = userData.first?.user_id else {
@@ -285,14 +307,22 @@ struct MyPartiesView: View {
             }
             
             self.userId = userId
+            print("🔍 Found userId: \(userId)")
             
-            // Get parties where user is the creator
+            // Get parties where user is the creator - select specific fields
             let createdPartiesResponse = try await supabaseClient
                 .from("Parties")
-                .select()
+                .select("id, party_name, party_code, created_by, bet_type, max_members, status, created_at, bet, terms, options, game_status")
                 .eq("created_by", value: userId)
                 .execute()
+            
+            // Debug: Print raw response
+            if let rawString = String(data: createdPartiesResponse.data, encoding: .utf8) {
+                print("🔍 Raw created parties response: \(rawString)")
+            }
+            
             let createdParties = try decoder.decode([Party].self, from: createdPartiesResponse.data)
+            print("🔍 Created parties count: \(createdParties.count)")
             
             // Get party IDs where user is a member
             let memberPartiesResponse = try await supabaseClient
@@ -305,17 +335,30 @@ struct MyPartiesView: View {
                 let party_id: Int
             }
             
+            // Debug: Print raw response
+            if let rawString = String(data: memberPartiesResponse.data, encoding: .utf8) {
+                print("🔍 Raw member parties response: \(rawString)")
+            }
+            
             let memberPartyData = try decoder.decode([MemberPartyResponse].self, from: memberPartiesResponse.data)
             let memberPartyIds = memberPartyData.map { $0.party_id }
+            print("🔍 Member party IDs: \(memberPartyIds)")
             
             var memberParties: [Party] = []
             if !memberPartyIds.isEmpty {
                 let memberPartiesResponse = try await supabaseClient
                     .from("Parties")
-                    .select()
+                    .select("id, party_name, party_code, created_by, bet_type, max_members, status, created_at, bet, terms, options, game_status")
                     .in("id", values: memberPartyIds)
                     .execute()
+                
+                // Debug: Print raw response
+                if let rawString = String(data: memberPartiesResponse.data, encoding: .utf8) {
+                    print("🔍 Raw member parties details response: \(rawString)")
+                }
+                
                 memberParties = try decoder.decode([Party].self, from: memberPartiesResponse.data)
+                print("🔍 Member parties count: \(memberParties.count)")
             }
             
             // Combine created and member parties, removing duplicates
@@ -325,6 +368,8 @@ struct MyPartiesView: View {
                     allParties.append(memberParty)
                 }
             }
+            
+            print("🔍 Total parties count: \(allParties.count)")
             
             // Fetch member counts for all parties
             let partyIds = allParties.compactMap { party -> Int? in
@@ -348,10 +393,15 @@ struct MyPartiesView: View {
                 self.parties = allParties
                 self.isLoading = false
                 self.memberCounts = memberCounts
+                print("🔍 Successfully loaded \(allParties.count) parties")
             }
             
         } catch {
             print("❌ Error loading parties:", error)
+            print("❌ Error details: \(error.localizedDescription)")
+            if let decodingError = error as? DecodingError {
+                print("❌ Decoding error: \(decodingError)")
+            }
             await MainActor.run {
                 self.errorMessage = "Error loading parties: \(error.localizedDescription)"
                 self.isLoading = false
@@ -404,6 +454,11 @@ struct PartyCard: View {
         .background(Color.white.opacity(0.08))
         .cornerRadius(14)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        // Add a subtle overlay to indicate it's tappable
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 }
 

@@ -5,120 +5,147 @@ struct PartyInvitesView: View {
     let userId: String
     @Environment(\.supabaseClient) private var supabaseClient
     @Environment(\.dismiss) private var dismiss
-    @State private var invites: [PartyInviteRow] = []
+    @State private var invites: [PartyInviteBasic] = []
+    @State private var partyNames: [Int64: String] = [:]
+    @State private var inviterUsernames: [String: String] = [:]
     @State private var isLoading = true
-    @State private var errorMessage: String? = nil
-    @State private var successMessage: String? = nil
+    @State private var errorMessage: String?
     
     var body: some View {
-        ZStack {
-            // Gradient layer - this will be the true background
-            LinearGradient(
-                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                startPoint: .top, endPoint: .bottom
-            ).ignoresSafeArea()
-
-            // Navigation layer on top of the gradient
-            NavigationView {
-                VStack(spacing: 16) {
-                    Text("Party Invites")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+        NavigationView {
+            VStack {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                } else if let error = errorMessage {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 40))
+                            .foregroundColor(.red)
+                        Text(error)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") {
+                            Task { await loadInvites() }
+                        }
+                        .padding()
+                        .background(Color.blue)
                         .foregroundColor(.white)
-                        .padding(.top, 16)
-                    if isLoading {
-                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    } else if let error = errorMessage {
-                        Text(error).foregroundColor(.red)
-                    } else if invites.isEmpty {
-                        Text("No pending invites.").foregroundColor(.white.opacity(0.7))
-                    } else {
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                ForEach(invites) { invite in
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(invite.partyName ?? "Invite to a Party")
-                                                .font(.headline)
-                                                .foregroundColor(.white)
-                                            Text("From: \(invite.inviterUsername ?? "a friend")")
-                                                .font(.subheadline)
-                                                .foregroundColor(.white.opacity(0.7))
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        Button("Decline") { Task { await decline(invite) } }
-                                            .buttonStyle(.bordered)
-                                            .tint(.red)
-                                        
-                                        Button("Accept") { Task { await accept(invite) } }
-                                            .buttonStyle(.borderedProminent)
-                                            .tint(.green)
-                                    }
-                                    .padding()
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(12)
+                        .cornerRadius(10)
+                    }
+                } else if invites.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "envelope")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white.opacity(0.5))
+                        Text("No party invites")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                } else {
+                    List {
+                        ForEach(invites) { invite in
+                            PartyInviteRow(
+                                invite: invite,
+                                partyName: partyNames[invite.partyId] ?? "Unknown Party",
+                                inviterUsername: inviterUsernames[invite.inviterUserId] ?? "Unknown User",
+                                onInviteProcessed: {
+                                    Task { await loadInvites() }
                                 }
-                            }
-                            .padding(.horizontal)
+                            )
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
-                    if let success = successMessage {
-                        Text(success).foregroundColor(.green)
-                    }
-                    Spacer()
+                    .listStyle(PlainListStyle())
+                    .scrollContentBackground(.hidden)
                 }
-                .padding()
-                .background(Color.clear) // Make the VStack background clear
-                .navigationTitle("Party Invites")
-                .navigationBarTitleDisplayMode(.inline) // Optional: for a cleaner look
-                .toolbar { 
-                    ToolbarItem(placement: .navigationBarLeading) { 
-                        Button("Close") { dismiss() }
-                            .foregroundColor(.white)
-                    }
+            }
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color(red: 0.15, green: 0.15, blue: 0.25)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                ).ignoresSafeArea()
+            )
+            .navigationTitle("Party Invites")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { dismiss() }
                 }
             }
         }
-        .task { await loadInvites() }
+        .task {
+            await loadInvites()
+        }
     }
     
     private func loadInvites() async {
         isLoading = true
         errorMessage = nil
+        
         do {
-            let resp = try await supabaseClient
+            // Get party invites for this user
+            let invitesResponse = try await supabaseClient
                 .from("Party Invites")
-                .select("id, party_id, inviter_user_id, status")
+                .select("id, party_id, inviter_user_id, invitee_user_id, status, created_at")
                 .eq("invitee_user_id", value: userId)
-                .eq("status", value: "pending")
+                .order("created_at", ascending: false)
                 .execute()
             
-            let initialInvites = try JSONDecoder().decode([PartyInviteRow].self, from: resp.data)
-
-            // Use a TaskGroup to fetch details concurrently and safely
-            let invitesWithDetails = await withTaskGroup(of: PartyInviteRow.self, returning: [PartyInviteRow].self) { group in
-                var results: [PartyInviteRow] = []
-
-                for invite in initialInvites {
-                    group.addTask {
-                        var detailedInvite = invite
-                        detailedInvite.inviterUsername = await fetchUsername(for: invite.inviter_user_id)
-                        detailedInvite.partyName = await fetchPartyName(for: invite.party_id)
-                        return detailedInvite
-                    }
+            let fetchedInvites = try JSONDecoder().decode([PartyInviteBasic].self, from: invitesResponse.data)
+            
+            // Get party names
+            let partyIds = Array(Set(fetchedInvites.map { Int($0.partyId) }))
+            var partyNames: [Int64: String] = [:]
+            
+            if !partyIds.isEmpty {
+                let partiesResponse = try await supabaseClient
+                    .from("Parties")
+                    .select("id, party_name")
+                    .in("id", values: partyIds)
+                    .execute()
+                
+                struct PartyNameRow: Codable {
+                    let id: Int64
+                    let party_name: String
                 }
-
-                for await result in group {
-                    results.append(result)
-                }
-                return results
+                
+                let partyNameRows = try JSONDecoder().decode([PartyNameRow].self, from: partiesResponse.data)
+                partyNames = Dictionary(uniqueKeysWithValues: partyNameRows.map { ($0.id, $0.party_name) })
             }
-
+            
+            // Get inviter usernames
+            let inviterIds = Array(Set(fetchedInvites.map { $0.inviterUserId }))
+            var inviterUsernames: [String: String] = [:]
+            
+            if !inviterIds.isEmpty {
+                let usernamesResponse = try await supabaseClient
+                    .from("Username")
+                    .select("user_id, username")
+                    .in("user_id", values: inviterIds)
+                    .execute()
+                
+                struct UsernameRow: Codable {
+                    let user_id: String
+                    let username: String
+                }
+                
+                let usernameRows = try JSONDecoder().decode([UsernameRow].self, from: usernamesResponse.data)
+                inviterUsernames = Dictionary(uniqueKeysWithValues: usernameRows.map { ($0.user_id, $0.username) })
+            }
+            
             await MainActor.run {
-                self.invites = invitesWithDetails
+                self.invites = fetchedInvites
+                self.partyNames = partyNames
+                self.inviterUsernames = inviterUsernames
                 self.isLoading = false
             }
+            
         } catch {
             await MainActor.run {
                 self.errorMessage = "Failed to load invites: \(error.localizedDescription)"
@@ -126,115 +153,130 @@ struct PartyInvitesView: View {
             }
         }
     }
+}
 
-    private func fetchUsername(for userId: String) async -> String? {
-        do {
-            let userResp = try await supabaseClient
-                .from("Username")
-                .select("username")
-                .eq("user_id", value: userId)
-                .limit(1)
-                .execute()
-            struct UsernameRow: Decodable { let username: String }
-            let usernameRow = try JSONDecoder().decode(UsernameRow.self, from: userResp.data)
-            return usernameRow.username
-        } catch {
-            print("[PartyInvitesView] Failed to fetch username for inviter \(userId): \(error)")
-            return nil
+struct PartyInviteRow: View {
+    let invite: PartyInviteBasic
+    let partyName: String
+    let inviterUsername: String
+    let onInviteProcessed: () -> Void
+    
+    @Environment(\.supabaseClient) private var supabaseClient
+    @State private var isProcessing = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(partyName)
+                .font(.headline)
+                .foregroundColor(.white)
+            
+            Text("Invited by: \(inviterUsername)")
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.7))
+            
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+            
+            if let success = successMessage {
+                Text(success)
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
+            
+            if invite.status == "pending" {
+                HStack(spacing: 12) {
+                    Button("Accept") {
+                        Task { await acceptInvite() }
+                    }
+                    .disabled(isProcessing)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    
+                    Button("Decline") {
+                        Task { await declineInvite() }
+                    }
+                    .disabled(isProcessing)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    
+                    if isProcessing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                }
+            } else {
+                Text("Status: \(invite.status.capitalized)")
+                    .font(.caption)
+                    .foregroundColor(invite.status == "accepted" ? .green : .red)
+            }
         }
-    }
-
-    private func fetchPartyName(for partyId: Int64) async -> String? {
-        do {
-            let partyResp = try await supabaseClient
-                .from("Parties")
-                .select("party_name")
-                .eq("id", value: Int(partyId)) // Cast Int64 to Int to fix PostgrestFilterValue error
-                .limit(1)
-                .execute()
-            struct PartyNameRow: Decodable { let party_name: String }
-            let partyNameRow = try JSONDecoder().decode(PartyNameRow.self, from: partyResp.data)
-            return partyNameRow.party_name
-        } catch {
-            print("[PartyInvitesView] Failed to fetch party name for party \(partyId): \(error)")
-            return nil
-        }
+        .padding()
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(12)
     }
     
-    private func accept(_ invite: PartyInviteRow) async {
-        isLoading = true
+    private func acceptInvite() async {
+        isProcessing = true
         errorMessage = nil
         successMessage = nil
+        
         do {
-            // Update invite status
-            _ = try await supabaseClient
-                .from("Party Invites")
-                .update(["status": "accepted"])
-                .eq("id", value: Int(invite.id))
-                .execute()
-            // Add to Party Members
-            let now = ISO8601DateFormatter().string(from: Date())
-            let newMember = NewPartyMember(
-                party_id: invite.party_id,
-                user_id: userId,
-                joined_at: now,
-                created_at: now
+            let handler = PartyInviteHandler(supabaseClient: supabaseClient)
+            try await handler.acceptPartyInvite(
+                inviteId: invite.id,
+                partyId: invite.partyId,
+                userId: invite.inviteeUserId
             )
-            _ = try await supabaseClient
-                .from("Party Members")
-                .insert(newMember)
-                .execute()
+            
             await MainActor.run {
-                self.successMessage = "Joined party!"
-                self.isLoading = false
+                self.successMessage = "Joined party successfully!"
+                self.isProcessing = false
             }
-            await loadInvites()
+            
+            // Refresh the parent view
+            onInviteProcessed()
+            
         } catch {
             await MainActor.run {
-                self.errorMessage = "Failed to accept invite: \(error.localizedDescription)"
-                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+                self.isProcessing = false
             }
         }
     }
-    private func decline(_ invite: PartyInviteRow) async {
-        isLoading = true
+    
+    private func declineInvite() async {
+        isProcessing = true
         errorMessage = nil
         successMessage = nil
+        
         do {
-            _ = try await supabaseClient
-                .from("Party Invites")
-                .update(["status": "declined"])
-                .eq("id", value: Int(invite.id))
-                .execute()
+            let handler = PartyInviteHandler(supabaseClient: supabaseClient)
+            try await handler.declinePartyInvite(inviteId: invite.id)
+            
             await MainActor.run {
-                self.successMessage = "Invite declined."
-                self.isLoading = false
+                self.successMessage = "Invite declined"
+                self.isProcessing = false
             }
-            await loadInvites()
+            
+            // Refresh the parent view
+            onInviteProcessed()
+            
         } catch {
             await MainActor.run {
-                self.errorMessage = "Failed to decline invite: \(error.localizedDescription)"
-                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+                self.isProcessing = false
             }
         }
     }
 }
-
-struct PartyInviteRow: Decodable, Identifiable {
-    let id: Int64
-    let party_id: Int64
-    let inviter_user_id: String
-    let status: String
-    
-    // New fields for display
-    var inviterUsername: String?
-    var partyName: String?
-}
-
-#Preview {
-    PartyInvitesView(userId: "test-user-id")
-        .environment(\.supabaseClient, .development)
-} 
-
-
- 
