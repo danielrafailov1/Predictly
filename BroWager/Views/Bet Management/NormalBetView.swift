@@ -365,6 +365,7 @@ struct FinalizeBetView: View {
     @State private var isSubmitting = false
     @State private var showPartyDetails = false
     @State private var createdPartyCode: String = ""
+    @State private var errorMessage: String = ""
     
     @Environment(\.supabaseClient) private var supabaseClient
 
@@ -415,6 +416,13 @@ struct FinalizeBetView: View {
                         Text("Max Members: \(maxMembers)").foregroundColor(.white)
                     }.padding(.horizontal)
 
+                    // Show error message if any
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
+                    }
+
                     Button(action: submitBet) {
                         if isSubmitting {
                             ProgressView().frame(maxWidth: .infinity)
@@ -446,15 +454,18 @@ struct FinalizeBetView: View {
     func submitBet() {
         guard let userId = userId else {
             print("Error: userId is nil")
+            errorMessage = "User ID is missing"
             return
         }
         
         guard !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             print("Error: Party name cannot be empty")
+            errorMessage = "Party name cannot be empty"
             return
         }
         
         isSubmitting = true
+        errorMessage = ""
 
         let partyCode = UUID().uuidString.prefix(6).uppercased()
 
@@ -473,6 +484,9 @@ struct FinalizeBetView: View {
 
         Task {
             do {
+                print("🔄 Creating party with code: \(partyCode)")
+                
+                // First, insert the party
                 let response = try await supabaseClient
                     .from("Parties")
                     .insert(payload)
@@ -480,23 +494,46 @@ struct FinalizeBetView: View {
                     .single()
                     .execute()
 
-                print("Raw insert response: \(response)")
+                print("✅ Raw insert response: \(String(data: response.data, encoding: .utf8) ?? "No data")")
 
-                // Decode the response to verify creation
+                // Decode the response to get the party ID
                 let decodedParty = try JSONDecoder().decode(Party.self, from: response.data)
-                print("Successfully created party: \(decodedParty)")
+                print("✅ Successfully created party: \(decodedParty)")
+                
+                // Now add the creator as a member to the Party Members table
+                if let partyId = decodedParty.id {
+                    print("🔄 Adding creator as member to party ID: \(partyId)")
+                    
+                    let memberPayload = PartyMemberInsert(
+                        party_id: Int(partyId),
+                        user_id: userId.uuidString
+                    )
+                    
+                    let memberResponse = try await supabaseClient
+                        .from("Party Members")
+                        .insert(memberPayload)
+                        .execute()
+                    
+                    print("✅ Successfully added creator as member")
+                    print("✅ Member response: \(String(data: memberResponse.data, encoding: .utf8) ?? "No data")")
+                } else {
+                    print("⚠️ Warning: Could not get party ID from response")
+                }
                 
                 // Navigate to PartyDetailsView
                 await MainActor.run {
                     self.createdPartyCode = String(partyCode)
                     self.showPartyDetails = true
                     self.isSubmitting = false
+                    print("✅ Navigation set up for party code: \(self.createdPartyCode)")
                 }
 
             } catch {
-                print("Error submitting bet: \(error)")
+                print("❌ Error submitting bet: \(error)")
+                print("❌ Error details: \(error.localizedDescription)")
                 await MainActor.run {
                     self.isSubmitting = false
+                    self.errorMessage = "Failed to create party: \(error.localizedDescription)"
                 }
             }
         }
