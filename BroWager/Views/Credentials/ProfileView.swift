@@ -15,7 +15,6 @@ struct ProfileView: View {
     @State private var isUploading = false
     @State private var uploadError: String? = nil
     @State private var userId: String? = nil
-    @State private var tokenBalance: Int? = nil
     @State private var username: String = ""
     @State private var identifier: String = ""
 
@@ -31,6 +30,9 @@ struct ProfileView: View {
     // New states for inline password editing
     @State private var isEditingPassword = false
     @State private var newPassword = ""
+    
+    // Authentication provider state
+    @State private var authProvider: String? = nil
 
     @State private var friends: [String] = []
 
@@ -58,9 +60,7 @@ struct ProfileView: View {
                 VStack(spacing: 32) {
                     profileHeader
                     
-                    if tokenBalance != nil {
-                        tokenBalanceView
-                    }
+                  
                     
                     // Account Info Section
                     accountInfoSection
@@ -221,22 +221,6 @@ struct ProfileView: View {
         .padding(.top, 32)
     }
     
-    private var tokenBalanceView: some View {
-        HStack {
-            Image(systemName: "dollarsign.circle.fill")
-                .font(.system(size: 24))
-                .foregroundColor(.yellow)
-            Text("Token Balance: \(tokenBalance ?? 0)")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-            Spacer()
-        }
-        .padding()
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(12)
-        .padding(.horizontal, 24)
-    }
-    
     private var accountInfoSection: some View {
         VStack(spacing: 24) {
             // Section Header
@@ -269,15 +253,23 @@ struct ProfileView: View {
                 }
             )
             
-            // New Editable Password Row
-            EditablePasswordRow(
-                isEditing: $isEditingPassword,
-                password: $newPassword,
-                onSave: { updatedPassword in
-                    Task { await updatePassword(newPassword: updatedPassword) }
-                }
-            )
+            // Conditionally show Password Field (only for email/password auth)
+            if shouldShowPasswordField {
+                EditablePasswordRow(
+                    isEditing: $isEditingPassword,
+                    password: $newPassword,
+                    onSave: { updatedPassword in
+                        Task { await updatePassword(newPassword: updatedPassword) }
+                    }
+                )
+            }
         }
+    }
+    
+    // Computed property to determine if password field should be shown
+    private var shouldShowPasswordField: Bool {
+        guard let provider = authProvider else { return true } // Show by default if unknown
+        return provider == "email" // Only show for email/password authentication
     }
     
     private var logoutButton: some View {
@@ -341,6 +333,9 @@ struct ProfileView: View {
             guard let userId = fetchedUserId else { throw URLError(.userAuthenticationRequired) }
             await MainActor.run { self.userId = userId }
 
+            // Fetch authentication provider
+            await fetchAuthProvider()
+
             // Fetch email from Login Information
             let emailResponse = try await supabaseClient
                 .from("Login Information")
@@ -353,23 +348,18 @@ struct ProfileView: View {
             let fetchedEmail = emailRows.first?.email ?? ""
             await MainActor.run { self.currentEmail = fetchedEmail }
 
-            // Fetch username, token balance, profile image, and friends in parallel
+            // Fetch username, profile image, and friends in parallel
             async let usernameTask = fetchUsernameAndIdentifier(for: userId)
-            async let tokenBalanceTask = fetchTokenBalance(for: userId)
             async let profileImageTask = fetchAndLoadProfileImage(for: userId)
             async let friendsTask = fetchFriends(for: userId)
 
             let (fetchedUsername, fetchedIdentifier) = await (try? usernameTask) ?? ("", "")
-            let fetchedTokenBalance = await (try? tokenBalanceTask) ?? 0
             let loadedImage = await (try? profileImageTask)
             let fetchedFriends = await (try? friendsTask) ?? []
-
-            print("[ProfileView] Username: \(fetchedUsername), TokenBalance: \(fetchedTokenBalance)")
 
             await MainActor.run {
                 self.username = fetchedUsername
                 self.identifier = fetchedIdentifier
-                self.tokenBalance = fetchedTokenBalance
                 if let (uiImage, image) = loadedImage {
                     self.profileUIImage = uiImage
                     self.profileImage = image
@@ -383,6 +373,60 @@ struct ProfileView: View {
             await MainActor.run {
                 self.isErrorUpdate = true
                 self.updateMessage = "Error loading profile. Please try again."
+            }
+        }
+    }
+    
+    // New function to fetch the authentication provider
+    private func fetchAuthProvider() async {
+        do {
+            // Get the current user from Supabase Auth
+            let user = try await supabaseClient.auth.user()
+            
+            // Debug: Print all available metadata
+            print("🔍 Debug - appMetadata: \(user.appMetadata)")
+            print("🔍 Debug - userMetadata: \(user.userMetadata)")
+            print("🔍 Debug - identities: \(user.identities)")
+            
+            // Try different ways to get the provider
+            var provider: String = "email" // default
+            
+            // Method 1: Check app_metadata.provider
+            if let appProvider = user.appMetadata["provider"] as? String {
+                provider = appProvider
+                print("📱 Found provider in appMetadata: \(appProvider)")
+            }
+            // Method 2: Check app_metadata.providers (some setups use array)
+            else if let providers = user.appMetadata["providers"] as? [String], let firstProvider = providers.first {
+                provider = firstProvider
+                print("📱 Found provider in appMetadata.providers: \(firstProvider)")
+            }
+            // Method 3: Check identities for OAuth providers
+            else if let identities = user.identities, !identities.isEmpty {
+                for identity in identities {
+                    provider = identity.provider
+                    print("📱 Found provider in identities: \(identity.provider)")
+                    break
+                }
+            }
+            // Method 4: Check if email contains OAuth indicators
+            else if user.email?.contains("@") == true {
+                // This is a fallback - you might need to store provider info differently
+                // For now, we'll assume email auth if we can't find OAuth indicators
+                provider = "email"
+                print("📧 Defaulting to email provider")
+            }
+            
+            await MainActor.run {
+                self.authProvider = provider
+                print("🔐 Final Auth provider: \(provider)")
+            }
+            
+        } catch {
+            print("❌ Error fetching auth provider: \(error.localizedDescription)")
+            // Default to email if we can't determine the provider
+            await MainActor.run {
+                self.authProvider = "email"
             }
         }
     }
@@ -470,27 +514,6 @@ struct ProfileView: View {
             .execute()
             .value
         return response.user_id
-    }
-    
-    func fetchTokenBalance(for userId: String) async throws -> Int? {
-        do {
-            print("[fetchTokenBalance] Fetching for userId: \(userId)")
-            struct UserTokenBalance: Codable { let balance: Double }
-            let response: [UserTokenBalance] = try await supabaseClient
-                .from("User Tokens")
-                .select("balance")
-                .eq("user_id", value: userId)
-                .limit(1)
-                .execute()
-                .value
-            print("[fetchTokenBalance] Raw response: \(response)")
-            let balance = response.first.map { Int($0.balance) } ?? 0
-            print("[fetchTokenBalance] Decoded balance: \(balance)")
-            return balance
-        } catch {
-            print("[fetchTokenBalance] Error: \(error)")
-            return 0
-        }
     }
 
     func fetchUsernameAndIdentifier(for userId: String) async throws -> (String, String) {
