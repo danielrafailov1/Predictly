@@ -16,39 +16,46 @@ struct InviteFriendsToPartyView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                Text("Invite Friends to Party")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.top, 16)
+            VStack(spacing: 12) {
                 if isLoading {
-                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 } else if let error = errorMessage {
                     Text(error).foregroundColor(.red)
                 } else {
-                    List(friends, id: \.user_id) { friend in
-                        HStack {
-                            Text(friend.username).foregroundColor(.white)
-                            Spacer()
-                            if selectedFriendIds.contains(friend.user_id) {
-                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(friends, id: \.user_id) { friend in
+                                HStack {
+                                    Text(friend.username)
+                                        .foregroundColor(.gray.opacity(0.9))
+                                        .fontWeight(.medium)
+                                    Spacer()
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    selectedFriendIds.contains(friend.user_id)
+                                    ? Color.blue.opacity(0.3)
+                                    : Color.gray.opacity(0.15)
+                                )
+                                .cornerRadius(10)
+                                .onTapGesture {
+                                    if selectedFriendIds.contains(friend.user_id) {
+                                        selectedFriendIds.remove(friend.user_id)
+                                    } else {
+                                        selectedFriendIds.insert(friend.user_id)
+                                    }
+                                }
                             }
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if selectedFriendIds.contains(friend.user_id) {
-                                selectedFriendIds.remove(friend.user_id)
-                            } else {
-                                selectedFriendIds.insert(friend.user_id)
-                            }
-                        }
-                        .listRowBackground(Color.clear)
                     }
-                    .background(Color.clear)
                 }
+
                 if let success = successMessage {
                     Text(success).foregroundColor(.green)
                 }
+
                 Button("Send Invites") {
                     Task { await sendInvites() }
                 }
@@ -57,20 +64,30 @@ struct InviteFriendsToPartyView: View {
                 .padding()
                 .background(selectedFriendIds.isEmpty ? Color.gray : Color.blue)
                 .cornerRadius(12)
+
                 Spacer()
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.top)
             .background(
                 LinearGradient(
-                    gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                    startPoint: .top, endPoint: .bottom
+                    gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2),
+                                                Color(red: 0.15, green: 0.15, blue: 0.25)]),
+                    startPoint: .top,
+                    endPoint: .bottom
                 ).ignoresSafeArea()
             )
-            .navigationTitle("Invite Friends")
-            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Close") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { dismiss() }
+                }
+            }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
         .task { await loadFriends() }
     }
+
+
     
     private func loadFriends() async {
         isLoading = true
