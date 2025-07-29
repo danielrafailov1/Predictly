@@ -447,7 +447,59 @@ struct FinalizeBetView: View {
     }
 
     func randomizePartyName() {
-        let suggestions = ["Bet Bros", "Wager Warriors", "Odds Squad", "Risky Business", "The Punters"]
+        let suggestions = [
+            "Bet Bros",
+            "Wager Warriors",
+            "Odds Squad",
+            "Risky Business",
+            "The Punters",
+            "Bet Brigade",
+            "High Stakes Hustlers",
+            "The Sure Things",
+            "Bankroll Bandits",
+            "The Spread Heads",
+            "Line Chasers",
+            "Over/Underlords",
+            "The Parlay Posse",
+            "Chalk Talkers",
+            "The Longshots",
+            "BetMates",
+            "Lock It In",
+            "Stake Syndicate",
+            "The Action Club",
+            "Prop Kings",
+            "Moneyline Mafia",
+            "Sharp Side",
+            "Field Goal Frenzy",
+            "Pick Six Crew",
+            "Wager Warlords",
+            "Gamblers Anonymous (Not Really)",
+            "Sunday Sweat",
+            "Cover Kings",
+            "Bad Beats Club",
+            "Bookie Busters",
+            "All-In Alliance",
+            "The Underdogs",
+            "Bet & Breakfast",
+            "Smart Money Mob",
+            "Cash It Crew",
+            "Lay the Points",
+            "Hedge Fund",
+            "Futures Fiends",
+            "The Juice Boys",
+            "Late Night Locks",
+            "The Bet Set",
+            "Spread Eagles",
+            "Next Play Paydays",
+            "Betflix & Chill",
+            "The Bet Cave",
+            "Degens United",
+            "Any Given Wager",
+            "Fantasy to Reality",
+            "Win or Wine",
+            "Stats Don't Lie"
+        ]
+
         partyName = suggestions.randomElement() ?? "My Party"
     }
 
