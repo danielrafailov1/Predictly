@@ -23,7 +23,7 @@ struct PartyDetailsView: View {
     @State private var awayTeam: String = ""
     @State private var hostUsername: String = ""
     @State private var memberUsernames: [String] = []
-    @State private var memberBetStatus: [String: Bool] = [:] // NEW: Track bet status for each member
+    @State private var memberBetStatus: [String: Bool] = [:] // Track bet status for each member
     @State private var showInviteFriends = false
     @State private var showInviteOthers = false
     @State private var currentUserId: String? = nil
@@ -53,6 +53,10 @@ struct PartyDetailsView: View {
     
     // NEW: Timer for auto-updating
     @State private var updateTimer: Timer?
+    
+    // NEW: States for bet warning
+    @State private var showBetWarning = false
+    @State private var playersWithoutBets: [String] = []
     
     // Computed property to check if current user is host
     private var isHost: Bool {
@@ -205,11 +209,11 @@ struct PartyDetailsView: View {
                     profileImage = await fetchProfileImage(for: userEmail, supabaseClient: supabaseClient)
                 }
             }
-            // NEW: Start auto-update timer
+            // Start auto-update timer
             startAutoUpdate()
         }
         .onDisappear {
-            // NEW: Stop auto-update timer when view disappears
+            // Stop auto-update timer when view disappears
             stopAutoUpdate()
         }
         .sheet(isPresented: $showInviteFriends) {
@@ -287,9 +291,20 @@ struct PartyDetailsView: View {
         } message: {
             Text("Ready to end the game and confirm the bet outcome?")
         }
+        // NEW: Bet warning alert
+        .alert("Players Haven't Bet Yet", isPresented: $showBetWarning) {
+            Button("Cancel", role: .cancel) { }
+            Button("Start Anyway") {
+                Task {
+                    await startGame()
+                }
+            }
+        } message: {
+            Text("The following players haven't placed their bets yet:\n\n\(playersWithoutBets.joined(separator: ", "))\n\nAre you sure you want to start the game?")
+        }
     }
     
-    // NEW: Auto-update functions
+    // Auto-update functions
     private func startAutoUpdate() {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             Task {
@@ -304,7 +319,7 @@ struct PartyDetailsView: View {
         updateTimer = nil
     }
     
-    // NEW: Update only party members (lighter than full fetch)
+    // Update only party members (lighter than full fetch)
     private func updatePartyMembers() async {
         guard let partyId = partyId else { return }
         
@@ -340,7 +355,7 @@ struct PartyDetailsView: View {
         }
     }
     
-    // NEW: Update member bet status
+    // Update member bet status
     private func updateMemberBetStatus() async {
         guard let partyId = partyId, !memberUserIds.isEmpty else { return }
         
@@ -368,6 +383,28 @@ struct PartyDetailsView: View {
         } catch {
             print("Error updating member bet status: \(error)")
         }
+    }
+    
+    // NEW: Check if all players have placed bets
+    private func checkAllPlayersBet() async -> Bool {
+        guard let partyId = partyId, !memberUserIds.isEmpty else { return true }
+        
+        // Get usernames of players who haven't bet
+        var playersWithoutBetsTemp: [String] = []
+        
+        for (index, userId) in memberUserIds.enumerated() {
+            let hasBet = memberBetStatus[userId] ?? false
+            if !hasBet {
+                let username = index < memberUsernames.count ? memberUsernames[index] : userId
+                playersWithoutBetsTemp.append(username)
+            }
+        }
+        
+        await MainActor.run {
+            self.playersWithoutBets = playersWithoutBetsTemp
+        }
+        
+        return playersWithoutBetsTemp.isEmpty
     }
     
     // MARK: - Computed Properties for Buttons
@@ -406,7 +443,19 @@ struct PartyDetailsView: View {
     
     private var startGameButton: some View {
         Button(action: {
-            showStartGameConfirmation = true
+            // NEW: Check if all players have bet before showing confirmation
+            Task {
+                let allPlayersBet = await checkAllPlayersBet()
+                if allPlayersBet {
+                    await MainActor.run {
+                        showStartGameConfirmation = true
+                    }
+                } else {
+                    await MainActor.run {
+                        showBetWarning = true
+                    }
+                }
+            }
         }) {
             HStack {
                 Image(systemName: "play.circle.fill")
@@ -603,7 +652,7 @@ struct PartyDetailsView: View {
         }
     }
 
-    // UPDATED: Members card with bet status
+    // Members card with bet status
     private var membersCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
