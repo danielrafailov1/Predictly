@@ -23,6 +23,7 @@ struct PartyDetailsView: View {
     @State private var awayTeam: String = ""
     @State private var hostUsername: String = ""
     @State private var memberUsernames: [String] = []
+    @State private var memberBetStatus: [String: Bool] = [:] // NEW: Track bet status for each member
     @State private var showInviteFriends = false
     @State private var showInviteOthers = false
     @State private var currentUserId: String? = nil
@@ -49,6 +50,9 @@ struct PartyDetailsView: View {
     @State private var showGameResultsView = false
     @State private var showStartGameConfirmation = false
     @State private var showEndGameConfirmation = false
+    
+    // NEW: Timer for auto-updating
+    @State private var updateTimer: Timer?
     
     // Computed property to check if current user is host
     private var isHost: Bool {
@@ -104,7 +108,7 @@ struct PartyDetailsView: View {
                             partyCodeCard
                             betTypeCard
                             buyInAndPotCard
-                            membersCard
+                            membersCard // Updated with bet status
                             VStack(spacing: 16) {
                                 VStack(spacing: 18) {
                                     Button(action: { showInviteFriends = true }) {
@@ -201,6 +205,12 @@ struct PartyDetailsView: View {
                     profileImage = await fetchProfileImage(for: userEmail, supabaseClient: supabaseClient)
                 }
             }
+            // NEW: Start auto-update timer
+            startAutoUpdate()
+        }
+        .onDisappear {
+            // NEW: Stop auto-update timer when view disappears
+            stopAutoUpdate()
         }
         .sheet(isPresented: $showInviteFriends) {
             if let partyId = partyId, let userId = currentUserId {
@@ -276,6 +286,87 @@ struct PartyDetailsView: View {
             }
         } message: {
             Text("Ready to end the game and confirm the bet outcome?")
+        }
+    }
+    
+    // NEW: Auto-update functions
+    private func startAutoUpdate() {
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+            Task {
+                await updatePartyMembers()
+                await updateMemberBetStatus()
+            }
+        }
+    }
+    
+    private func stopAutoUpdate() {
+        updateTimer?.invalidate()
+        updateTimer = nil
+    }
+    
+    // NEW: Update only party members (lighter than full fetch)
+    private func updatePartyMembers() async {
+        guard let partyId = partyId else { return }
+        
+        do {
+            // Get party members from Party Members table
+            let membersResponse = try await supabaseClient
+                .from("Party Members")
+                .select("user_id")
+                .eq("party_id", value: Int(partyId))
+                .execute()
+            
+            struct MemberResult: Codable { let user_id: String }
+            let members = try JSONDecoder().decode([MemberResult].self, from: membersResponse.data)
+            var memberIds = members.map { $0.user_id }
+            
+            // Ensure host is included as a member
+            if !hostUserId.isEmpty && !memberIds.contains(hostUserId) {
+                memberIds.append(hostUserId)
+            }
+            
+            // Only update if the member list has changed
+            if memberIds != memberUserIds {
+                await MainActor.run {
+                    self.memberUserIds = memberIds
+                }
+                
+                // Fetch usernames for new members
+                await fetchUsernames()
+            }
+            
+        } catch {
+            print("Error updating party members: \(error)")
+        }
+    }
+    
+    // NEW: Update member bet status
+    private func updateMemberBetStatus() async {
+        guard let partyId = partyId, !memberUserIds.isEmpty else { return }
+        
+        do {
+            let betResponse = try await supabaseClient
+                .from("User Bets")
+                .select("user_id")
+                .eq("party_id", value: Int(partyId))
+                .in("user_id", values: memberUserIds)
+                .execute()
+            
+            struct BetResult: Codable { let user_id: String }
+            let bets = try JSONDecoder().decode([BetResult].self, from: betResponse.data)
+            let usersWithBets = Set(bets.map { $0.user_id })
+            
+            var newBetStatus: [String: Bool] = [:]
+            for userId in memberUserIds {
+                newBetStatus[userId] = usersWithBets.contains(userId)
+            }
+            
+            await MainActor.run {
+                self.memberBetStatus = newBetStatus
+            }
+            
+        } catch {
+            print("Error updating member bet status: \(error)")
         }
     }
     
@@ -512,6 +603,7 @@ struct PartyDetailsView: View {
         }
     }
 
+    // UPDATED: Members card with bet status
     private var membersCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -530,13 +622,29 @@ struct PartyDetailsView: View {
                     .padding(.top, 8)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(memberUsernames, id: \.self) { username in
+                    ForEach(Array(zip(memberUsernames.indices, memberUsernames)), id: \.0) { index, username in
+                        let userId = index < memberUserIds.count ? memberUserIds[index] : ""
+                        let hasBet = memberBetStatus[userId] ?? false
+                        
                         HStack(spacing: 8) {
                             Image(systemName: "person.fill")
                                 .foregroundColor(.white.opacity(0.7))
                             Text(username)
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
+                            Spacer()
+                            
+                            // Bet status indicator
+                            if betType.lowercased() == "normal" && gameStatus != "ended" {
+                                HStack(spacing: 4) {
+                                    Image(systemName: hasBet ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(hasBet ? .green : .orange)
+                                        .font(.system(size: 14))
+                                    Text(hasBet ? "Bet Placed" : "No Bet")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(hasBet ? .green : .orange)
+                                }
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -851,6 +959,9 @@ struct PartyDetailsView: View {
             
             // Fetch usernames for host and members
             await fetchUsernames()
+            
+            // Fetch initial member bet status
+            await updateMemberBetStatus()
             
             // Fetch the party bets after fetching party details
             if let partyId = self.partyId {
