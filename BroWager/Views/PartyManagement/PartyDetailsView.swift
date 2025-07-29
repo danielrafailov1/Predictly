@@ -23,6 +23,7 @@ struct PartyDetailsView: View {
     @State private var awayTeam: String = ""
     @State private var hostUsername: String = ""
     @State private var memberUsernames: [String] = []
+    @State private var memberBetStatus: [String: Bool] = [:] // Track bet status for each member
     @State private var showInviteFriends = false
     @State private var showInviteOthers = false
     @State private var currentUserId: String? = nil
@@ -49,6 +50,13 @@ struct PartyDetailsView: View {
     @State private var showGameResultsView = false
     @State private var showStartGameConfirmation = false
     @State private var showEndGameConfirmation = false
+    
+    // NEW: Timer for auto-updating
+    @State private var updateTimer: Timer?
+    
+    // NEW: States for bet warning
+    @State private var showBetWarning = false
+    @State private var playersWithoutBets: [String] = []
     
     // Computed property to check if current user is host
     private var isHost: Bool {
@@ -104,7 +112,7 @@ struct PartyDetailsView: View {
                             partyCodeCard
                             betTypeCard
                             buyInAndPotCard
-                            membersCard
+                            membersCard // Updated with bet status
                             VStack(spacing: 16) {
                                 VStack(spacing: 18) {
                                     Button(action: { showInviteFriends = true }) {
@@ -201,6 +209,12 @@ struct PartyDetailsView: View {
                     profileImage = await fetchProfileImage(for: userEmail, supabaseClient: supabaseClient)
                 }
             }
+            // Start auto-update timer
+            startAutoUpdate()
+        }
+        .onDisappear {
+            // Stop auto-update timer when view disappears
+            stopAutoUpdate()
         }
         .sheet(isPresented: $showInviteFriends) {
             if let partyId = partyId, let userId = currentUserId {
@@ -277,6 +291,120 @@ struct PartyDetailsView: View {
         } message: {
             Text("Ready to end the game and confirm the bet outcome?")
         }
+        // NEW: Bet warning alert
+        .alert("Players Haven't Bet Yet", isPresented: $showBetWarning) {
+            Button("Cancel", role: .cancel) { }
+            Button("Start Anyway") {
+                Task {
+                    await startGame()
+                }
+            }
+        } message: {
+            Text("The following players haven't placed their bets yet:\n\n\(playersWithoutBets.joined(separator: ", "))\n\nAre you sure you want to start the game?")
+        }
+    }
+    
+    // Auto-update functions
+    private func startAutoUpdate() {
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+            Task {
+                await updatePartyMembers()
+                await updateMemberBetStatus()
+            }
+        }
+    }
+    
+    private func stopAutoUpdate() {
+        updateTimer?.invalidate()
+        updateTimer = nil
+    }
+    
+    // Update only party members (lighter than full fetch)
+    private func updatePartyMembers() async {
+        guard let partyId = partyId else { return }
+        
+        do {
+            // Get party members from Party Members table
+            let membersResponse = try await supabaseClient
+                .from("Party Members")
+                .select("user_id")
+                .eq("party_id", value: Int(partyId))
+                .execute()
+            
+            struct MemberResult: Codable { let user_id: String }
+            let members = try JSONDecoder().decode([MemberResult].self, from: membersResponse.data)
+            var memberIds = members.map { $0.user_id }
+            
+            // Ensure host is included as a member
+            if !hostUserId.isEmpty && !memberIds.contains(hostUserId) {
+                memberIds.append(hostUserId)
+            }
+            
+            // Only update if the member list has changed
+            if memberIds != memberUserIds {
+                await MainActor.run {
+                    self.memberUserIds = memberIds
+                }
+                
+                // Fetch usernames for new members
+                await fetchUsernames()
+            }
+            
+        } catch {
+            print("Error updating party members: \(error)")
+        }
+    }
+    
+    // Update member bet status
+    private func updateMemberBetStatus() async {
+        guard let partyId = partyId, !memberUserIds.isEmpty else { return }
+        
+        do {
+            let betResponse = try await supabaseClient
+                .from("User Bets")
+                .select("user_id")
+                .eq("party_id", value: Int(partyId))
+                .in("user_id", values: memberUserIds)
+                .execute()
+            
+            struct BetResult: Codable { let user_id: String }
+            let bets = try JSONDecoder().decode([BetResult].self, from: betResponse.data)
+            let usersWithBets = Set(bets.map { $0.user_id })
+            
+            var newBetStatus: [String: Bool] = [:]
+            for userId in memberUserIds {
+                newBetStatus[userId] = usersWithBets.contains(userId)
+            }
+            
+            await MainActor.run {
+                self.memberBetStatus = newBetStatus
+            }
+            
+        } catch {
+            print("Error updating member bet status: \(error)")
+        }
+    }
+    
+    // NEW: Check if all players have placed bets
+    private func checkAllPlayersBet() async -> Bool {
+        guard let partyId = partyId, !memberUserIds.isEmpty else { return true }
+        
+        // Get usernames of players who haven't bet
+        var playersWithoutBetsTemp: [String] = []
+        
+        for (index, userId) in memberUserIds.enumerated() {
+            let hasBet = memberBetStatus[userId] ?? false
+            if !hasBet {
+                let username = index < memberUsernames.count ? memberUsernames[index] : userId
+                playersWithoutBetsTemp.append(username)
+            }
+        }
+        
+        await MainActor.run {
+            self.playersWithoutBets = playersWithoutBetsTemp
+        }
+        
+        return playersWithoutBetsTemp.isEmpty
     }
     
     // MARK: - Computed Properties for Buttons
@@ -315,7 +443,19 @@ struct PartyDetailsView: View {
     
     private var startGameButton: some View {
         Button(action: {
-            showStartGameConfirmation = true
+            // NEW: Check if all players have bet before showing confirmation
+            Task {
+                let allPlayersBet = await checkAllPlayersBet()
+                if allPlayersBet {
+                    await MainActor.run {
+                        showStartGameConfirmation = true
+                    }
+                } else {
+                    await MainActor.run {
+                        showBetWarning = true
+                    }
+                }
+            }
         }) {
             HStack {
                 Image(systemName: "play.circle.fill")
@@ -441,11 +581,9 @@ struct PartyDetailsView: View {
 
     private func betTypeDisplayName(_ type: String) -> String {
         switch type.lowercased() {
-        case "predefined": return "Predefined Bet"
-        case "draftteam": return "Draft Team Bet"
-        case "randomplayer": return "Random Player Bet"
-        case "custom": return "Custom Bet"
         case "normal": return "Normal Bet"
+        case "timed": return "Timed Bet"
+        case "contest": return "Contest Bet"
         default: return type.capitalized
         }
     }
@@ -512,6 +650,7 @@ struct PartyDetailsView: View {
         }
     }
 
+    // Members card with bet status
     private var membersCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -530,13 +669,29 @@ struct PartyDetailsView: View {
                     .padding(.top, 8)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(memberUsernames, id: \.self) { username in
+                    ForEach(Array(zip(memberUsernames.indices, memberUsernames)), id: \.0) { index, username in
+                        let userId = index < memberUserIds.count ? memberUserIds[index] : ""
+                        let hasBet = memberBetStatus[userId] ?? false
+                        
                         HStack(spacing: 8) {
                             Image(systemName: "person.fill")
                                 .foregroundColor(.white.opacity(0.7))
                             Text(username)
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
+                            Spacer()
+                            
+                            // Bet status indicator
+                            if betType.lowercased() == "normal" && gameStatus != "ended" {
+                                HStack(spacing: 4) {
+                                    Image(systemName: hasBet ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(hasBet ? .green : .orange)
+                                        .font(.system(size: 14))
+                                    Text(hasBet ? "Bet Placed" : "No Bet")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(hasBet ? .green : .orange)
+                                }
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -852,6 +1007,9 @@ struct PartyDetailsView: View {
             // Fetch usernames for host and members
             await fetchUsernames()
             
+            // Fetch initial member bet status
+            await updateMemberBetStatus()
+            
             // Fetch the party bets after fetching party details
             if let partyId = self.partyId {
                 if let bets = await fetchPartyBets(partyId: partyId) {
@@ -928,7 +1086,7 @@ struct PartyDetailsView: View {
 }
 
 #Preview {
-    PartyDetailsView(partyCode: "ABC123", email: "test@example.com")
+    PartyDetailsView(partyCode: "6FA0B4", email: "danielrafailov7@gmail.com")
         .environmentObject(SessionManager(supabaseClient: SupabaseClient(
             supabaseURL: URL(string: "https://example.supabase.co")!,
             supabaseKey: "public-anon-key"
@@ -937,6 +1095,7 @@ struct PartyDetailsView: View {
 
 struct BetTypeTutorialSheet: View {
     @Environment(\.dismiss) private var dismiss
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -944,25 +1103,65 @@ struct BetTypeTutorialSheet: View {
                     Text("Bet Type System Tutorial")
                         .font(.title2).bold()
                         .padding(.bottom, 8)
+                    
                     Group {
-                        Text("• Predefined Bets:")
+                        Text("Normal Bet:")
                             .font(.headline)
-                        Text("Choose from a list of preset bets for the game. These are quick, common bets like 'Who will win?' or 'Will there be a home run?'.")
-                        Text("• Draft Team:")
+                        Text("Bet on anything you can imagine! Choose from a list of AI-generated bets, options, and terms, or make your own. ")
+                        
+                        Text("Timed Bet:")
                             .font(.headline)
-                        Text("Each player drafts a team from the available players. Your team's performance determines your bet outcome.")
-                        Text("• Random Player:")
+                        Text("Bet on a task or event that must be completed within a set amount of time to win. Examples include but are not limited to: ")
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("1. **Complete the Obstacle Course** – Can you finish the course within 10 minutes?")
+                            Text("2. **Complete a Puzzle** – How fast can you finish a 100-piece jigsaw puzzle?")
+                            Text("3. **Beat the Timer** – Complete a challenge in under 5 minutes to win!")
+                            Text("4. **Cooking Challenge** – Can you cook a specific meal within 20 minutes?")
+                            Text("5. **Finish a Workout** – Can you finish 50 push-ups in less than 2 minutes?")
+                            Text("6. **Reading Challenge** – Read 5 pages of a book in under 5 minutes!")
+                            Text("7. **Trivia Challenge** – Answer 10 questions in under 2 minutes!")
+                            Text("8. **Solve a Riddle** – Can you solve the riddle in less than 30 seconds?")
+                            Text("9. **Time to Complete a Game Level** – Finish a video game level in under 3 minutes.")
+                            Text("10. **Complete a Task** – Can you write 100 words in 1 minute?")
+                            Text("11. **Fitness Challenge** – Run 1 mile in less than 8 minutes.")
+                            Text("12. **Time to Cook a Dish** – Make the best omelette in under 10 minutes.")
+                            Text("13. **Art Challenge** – Draw a picture in 10 minutes and submit for review.")
+                            Text("14. **Video Editing Challenge** – Edit a short video within 15 minutes.")
+                            Text("15. **Trivia Speed Test** – Can you get 5 trivia questions correct in under 1 minute?")
+                            Text("16. **Clean Your Room** – Can you clean your room within 20 minutes?")
+                            Text("17. **Writing Challenge** – Write a 200-word essay in under 10 minutes.")
+                            Text("18. **Memory Challenge** – Memorize a 10-item list in under 1 minute.")
+                            Text("19. **Crafting Challenge** – Create a paper airplane in under 2 minutes and see how far it flies.")
+                        }
+                        
+                        Text("Contest Bet:")
                             .font(.headline)
-                        Text("A player is randomly assigned to you. Your bet is based on that player's performance.")
-                        Text("• Custom Bet:")
-                            .font(.headline)
-                        Text("Create your own bet with custom conditions and outcomes. Great for creative or group-specific bets.")
-                        Text("• Normal Bet:")
-                            .font(.headline)
-                        Text("Create a custom bet with multiple options that players can choose from. The host controls when betting closes and determines the winning outcome.")
+                        Text("A contest where participants race against each other to see who can complete a task the fastest. Examples include but are not limited to: ")
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("1. **Race to Finish the Puzzle** – Who can finish a 100-piece puzzle the fastest?")
+                            Text("2. **Who Can Cook the Fastest** – Who can cook the best dish in under 30 minutes?")
+                            Text("3. **Head-to-Head Workout Challenge** – Who can do 50 push-ups faster?")
+                            Text("4. **Speed Reading** – Who can read and comprehend more pages in 5 minutes?")
+                            Text("5. **Race to Finish the Game** – Who can beat the first level of a game faster?")
+                            Text("6. **Speed Trivia** – Who can answer 10 questions the fastest?")
+                            Text("7. **Fastest Drawing Challenge** – Who can draw a recognizable picture the fastest?")
+                            Text("8. **Cooking Contest** – Who can make the tastiest dish in the shortest amount of time?")
+                            Text("9. **Speed Problem Solving** – Who can solve a series of math problems faster?")
+                            Text("10. **Fitness Race** – Who can run a mile faster?")
+                            Text("11. **Fastest Scavenger Hunt** – Who can find and bring back 5 items the fastest?")
+                            Text("12. **Memory Challenge** – Who can memorize a list of 10 items the fastest?")
+                            Text("13. **Speed Word Game** – Who can come up with the most words in 2 minutes?")
+                            Text("14. **Fastest to Clean** – Who can clean a room the fastest?")
+                            Text("15. **Art Race** – Who can draw the best picture in 5 minutes?")
+                            Text("16. **Speed to Write** – Who can write a 100-word essay the fastest?")
+                            Text("17. **Fitness Challenge Race** – Who can do 100 push-ups the fastest?")
+                            Text("18. **Dance Battle** – Who can do the best dance move in 1 minute?")
+                            Text("19. **Creative Speed Challenge** – Who can come up with the most creative idea in 10 minutes?")
+                        }
                     }
                     .padding(.bottom, 4)
-                    Text("Ask your host if you're unsure which bet type to choose!")
+                    
+                    Text("Ask your friends if you're unsure which bet type to choose!")
                         .italic()
                         .foregroundColor(.secondary)
                         .padding(.top, 12)
@@ -978,3 +1177,4 @@ struct BetTypeTutorialSheet: View {
         }
     }
 }
+

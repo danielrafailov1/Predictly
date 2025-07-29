@@ -20,7 +20,7 @@ struct ConfirmBetOutcomeView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background
+                // Background - extend to cover entire screen including safe areas
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(red: 0.1, green: 0.1, blue: 0.2),
@@ -29,7 +29,7 @@ struct ConfirmBetOutcomeView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(.all) // This ensures the gradient covers everything
                 
                 if isLoading {
                     ProgressView()
@@ -190,14 +190,15 @@ struct ConfirmBetOutcomeView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
-            }
+            .toolbarBackground(.hidden, for: .navigationBar) // Hide the navigation bar background
+        }
+        .onAppear {
+            // Set navigation bar appearance
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithTransparentBackground()
+            appearance.backgroundColor = .clear
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
         }
         .alert("Confirm Outcome", isPresented: $showConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -502,7 +503,7 @@ struct ConfirmBetOutcomeView: View {
     }
     
     private func generateMockAIResponse() -> String {
-        // This is a mock response - replace with actual AI integration
+       
         let responses = [
             "Based on game data analysis, the selected options appear to be correct.",
             "I recommend reviewing the final game statistics to confirm the outcome.",

@@ -21,7 +21,7 @@ struct PlaceBetView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background
+                // Background - extend to cover entire screen including safe areas
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(red: 0.1, green: 0.1, blue: 0.2),
@@ -30,7 +30,7 @@ struct PlaceBetView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(.all) // This ensures the gradient covers everything
                 
                 if isLoading {
                     ProgressView()
@@ -173,6 +173,7 @@ struct PlaceBetView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar) // Hide the navigation bar background
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -183,6 +184,13 @@ struct PlaceBetView: View {
             }
         }
         .onAppear {
+            // Set navigation bar appearance
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithTransparentBackground()
+            appearance.backgroundColor = .clear
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            
             if isEditing {
                 Task {
                     await loadExistingBet()
