@@ -20,6 +20,7 @@ struct GameResultsView: View {
     @State private var winners: [UserResult] = []
     @State private var losers: [UserResult] = []
     @State private var betPrompt: String = ""
+    @State private var hasUpdatedWins = false // Track if wins have been updated
     
     struct UserResult: Codable, Identifiable {
         let id = UUID()
@@ -426,6 +427,14 @@ struct GameResultsView: View {
             
             print("✅ Final results: \(winnersArray.count) winners, \(losersArray.count) losers")
             
+            // Update wins count for winners if not already done
+            if !winnersArray.isEmpty && !hasUpdatedWins {
+                await updateWinsForWinners(winnersArray)
+                await MainActor.run {
+                    self.hasUpdatedWins = true
+                }
+            }
+            
             await MainActor.run {
                 self.winners = winnersArray
                 self.losers = losersArray
@@ -437,6 +446,24 @@ struct GameResultsView: View {
             await MainActor.run {
                 self.errorMessage = "Error loading results: \(error.localizedDescription)"
                 self.isLoading = false
+            }
+        }
+    }
+    
+    private func updateWinsForWinners(_ winners: [UserResult]) async {
+        print("🏆 Updating wins count for \(winners.count) winners")
+        
+        for winner in winners {
+            do {
+                // Use PostgreSQL function to increment wins atomically
+                let _ = try await supabaseClient
+                    .rpc("increment_user_wins", params: ["user_id_param": winner.user_id])
+                    .execute()
+                
+                print("✅ Successfully incremented wins for user: \(winner.username)")
+            } catch {
+                print("❌ Failed to increment wins for user \(winner.username): \(error)")
+                // Continue with other users even if one fails
             }
         }
     }
