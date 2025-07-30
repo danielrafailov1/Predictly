@@ -1,10 +1,3 @@
-//
-//  MyPartiesView.swift
-//  BroWager
-//
-//  Created by Daniel Rafailov on 2025-05-16.
-//
-
 import Foundation
 import SwiftUI
 import Supabase
@@ -28,42 +21,37 @@ struct MyPartiesView: View {
     @State private var memberCounts: [Int64: Int] = [:]
     @State private var profileImage: Image? = nil
     @EnvironmentObject var sessionManager: SessionManager
-    
-    let email: String  // Add this to receive the email
-    
-    // Local archive/delete state
+
+    let email: String
+
     @State private var archivedParties: [Party] = []
     @State private var deletedParties: [Party] = []
-    
-    // Filter options: just active, archived, deleted (removed expired filter as no expiration logic)
     @State private var partyFilter: PartyFilter = .active
-    
+    @State private var wonPartyIds: Set<Int64> = []
+    @State private var lostPartyIds: Set<Int64> = []
+
     enum PartyFilter: String, CaseIterable, Identifiable {
         case active = "Active"
-        case archived = "Archived"
-        case deleted = "Deleted"
-        
+        case wins = "Wins"
+        case losses = "Losses"
         var id: String { rawValue }
     }
-    
+
     var filteredParties: [Party] {
         switch partyFilter {
         case .active:
-            return parties.filter { party in
-                !archivedParties.contains(where: { $0.id == party.id }) &&
-                !deletedParties.contains(where: { $0.id == party.id })
-            }
-        case .archived:
-            return archivedParties
-        case .deleted:
-            return deletedParties
+            return parties.filter { !wonPartyIds.contains($0.id ?? -1) && !lostPartyIds.contains($0.id ?? -1) }
+        case .wins:
+            return parties.filter { wonPartyIds.contains($0.id ?? -1) }
+        case .losses:
+            return parties.filter { lostPartyIds.contains($0.id ?? -1) }
         }
     }
-    
+
     private var partyRows: [(party: Party, memberCount: Int, betType: String)] {
         let currentMemberCounts = memberCounts
         return filteredParties.compactMap { party in
-            guard let id = party.id else { return nil } // skip parties without id
+            guard let id = party.id else { return nil }
             return (
                 party: party,
                 memberCount: currentMemberCounts[id] ?? 1,
@@ -71,17 +59,15 @@ struct MyPartiesView: View {
             )
         }
     }
-    
+
     private var partyListSection: some View {
-        if isLoading {
-            AnyView(
+        Group {
+            if isLoading {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     .scaleEffect(1.5)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            )
-        } else if let error = errorMessage {
-            AnyView(
+            } else if let error = errorMessage {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 40))
@@ -91,7 +77,7 @@ struct MyPartiesView: View {
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
-                    
+
                     Button("Retry") {
                         Task {
                             await loadParties()
@@ -103,9 +89,7 @@ struct MyPartiesView: View {
                     .cornerRadius(10)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            )
-        } else if filteredParties.isEmpty {
-            AnyView(
+            } else if filteredParties.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "person.3.fill")
                         .font(.system(size: 48))
@@ -113,26 +97,29 @@ struct MyPartiesView: View {
                     Text("No \(partyFilter.rawValue.lowercased()) parties")
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
-                    Text(partyFilter == .active ? "Create a new party to get started" : "")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.5))
+                    if partyFilter == .active {
+                        Text("Create a new party to get started")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            )
-        } else {
-            AnyView(
+            } else {
                 List {
                     ForEach(partyRows, id: \.party.id) { row in
-                        NavigationLink(value: PartyNavigation(partyCode: row.party.party_code, email: email)) {
+                        NavigationLink(value: PartyNavigation(partyCode: row.party.party_code ?? "", email: email)) {
                             PartyCard(
                                 party: row.party,
                                 memberCount: row.memberCount,
-                                betType: row.betType
+                                betType: row.betType,
+                                backgroundColor: wonPartyIds.contains(row.party.id ?? -1) ? Color.green.opacity(0.2) :
+                                                 lostPartyIds.contains(row.party.id ?? -1) ? Color.red.opacity(0.2) :
+                                                 Color.white.opacity(0.08)
                             )
                         }
-                        .listRowBackground(Color.clear) // Make list row background transparent
-                        .listRowSeparator(.hidden) // Hide default separators
-                        .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 8, trailing: 24)) // Add proper spacing
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 8, trailing: 24))
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if partyFilter == .active {
                                 Button(role: .destructive) {
@@ -147,29 +134,21 @@ struct MyPartiesView: View {
                                 } label: {
                                     Label("Archive", systemImage: "archivebox")
                                 }
-                            } else if partyFilter == .archived {
-                                Button(role: .destructive) {
-                                    deletedParties.append(row.party)
-                                    archivedParties.removeAll { $0.id == row.party.id }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
                             }
                         }
                     }
                 }
                 .listStyle(PlainListStyle())
-                .scrollContentBackground(.hidden) // Hide default list background
+                .scrollContentBackground(.hidden)
                 .padding(.horizontal, 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            )
+            }
         }
     }
-    
+
     var body: some View {
-        NavigationStack { // Make sure you're using NavigationStack
+        NavigationStack {
             ZStack {
-                // Background gradient
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(red: 0.1, green: 0.1, blue: 0.2),
@@ -177,11 +156,9 @@ struct MyPartiesView: View {
                     ]),
                     startPoint: .top,
                     endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
+                ).ignoresSafeArea()
+
                 VStack(spacing: 0) {
-                    // Fixed Header
                     VStack(spacing: 8) {
                         Text("My Parties")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
@@ -191,10 +168,9 @@ struct MyPartiesView: View {
                             .foregroundColor(.white.opacity(0.7))
                     }
                     .padding(.top, 16)
-                    
+
                     Spacer().frame(height: 18)
-                    
-                    // Filter control
+
                     Picker("Party Filter", selection: $partyFilter) {
                         ForEach(PartyFilter.allCases) { filter in
                             Text(filter.rawValue).tag(filter)
@@ -202,10 +178,9 @@ struct MyPartiesView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal, 24)
-                    
+
                     Spacer().frame(height: 14)
-                    
-                    // Party Invites Button
+
                     Button(action: { showPartyInvites = true }) {
                         HStack {
                             Image(systemName: "envelope.open.fill")
@@ -220,8 +195,7 @@ struct MyPartiesView: View {
                     }
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
-                    
-                    // Scrollable party list area
+
                     partyListSection
                 }
             }
@@ -259,8 +233,6 @@ struct MyPartiesView: View {
                     let userIdRows = try JSONDecoder().decode([UserIdRow].self, from: userResponse.data)
                     if let first = userIdRows.first {
                         userId = first.user_id
-                    } else {
-                        print("[MyPartiesView] Failed to fetch userId: User not found")
                     }
                 } catch {
                     print("[MyPartiesView] Failed to fetch userId: \(error)")
@@ -272,143 +244,84 @@ struct MyPartiesView: View {
             }
         }
     }
-    
-    private func loadParties() async {
+
+    func loadParties() async {
         isLoading = true
         errorMessage = nil
         
+        struct PartyRow: Decodable {
+            let id: Int64
+            let party_name: String
+            let bet_type: String?
+            let party_code: String?
+            let created_by: String?
+        }
+        struct WinRow: Decodable { let party_id: Int64 }
+
         do {
-            print("🔍 Starting to load parties for email:", email)
-            
-            // Get user_id from Login Information table
-            let userResponse = try await supabaseClient
-                .from("Login Information")
-                .select("user_id")
-                .eq("email", value: email)
-                .execute()
-            
-            struct UserIDResponse: Codable {
-                let user_id: String
-            }
-            
-            let decoder = JSONDecoder()
-            
-            // Debug: Print raw response
-            if let rawString = String(data: userResponse.data, encoding: .utf8) {
-                print("🔍 Raw user response: \(rawString)")
-            }
-            
-            let userData = try decoder.decode([UserIDResponse].self, from: userResponse.data)
-            
-            guard let userId = userData.first?.user_id else {
-                errorMessage = "User not found"
-                isLoading = false
-                return
-            }
-            
-            self.userId = userId
-            print("🔍 Found userId: \(userId)")
-            
-            // Get parties where user is the creator - select specific fields
-            let createdPartiesResponse = try await supabaseClient
+            // Fetch parties
+            let partiesResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, party_code, created_by, bet_type, max_members, status, created_at, bet, terms, options, game_status")
-                .eq("created_by", value: userId)
+                .select("id, party_name, bet_type, party_code, created_by")
                 .execute()
+            let partiesData = partiesResponse.data
+            let parties = try JSONDecoder().decode([PartyRow].self, from: partiesData)
             
-            // Debug: Print raw response
-            if let rawString = String(data: createdPartiesResponse.data, encoding: .utf8) {
-                print("🔍 Raw created parties response: \(rawString)")
-            }
-            
-            let createdParties = try decoder.decode([Party].self, from: createdPartiesResponse.data)
-            print("🔍 Created parties count: \(createdParties.count)")
-            
-            // Get party IDs where user is a member
-            let memberPartiesResponse = try await supabaseClient
-                .from("Party Members")
+            // Fetch winning party IDs for this user
+            let userWinsResponse = try await supabaseClient
+                .from("User Bets")
                 .select("party_id")
                 .eq("user_id", value: userId)
+                .eq("is_winner", value: true)
                 .execute()
+            let winsData = userWinsResponse.data
+            let winRows = try JSONDecoder().decode([WinRow].self, from: winsData)
+            let winPartyIds = Set(winRows.map { $0.party_id })
             
-            struct MemberPartyResponse: Codable {
-                let party_id: Int
+            // Fetch losing party IDs for this user
+            let userLossesResponse = try await supabaseClient
+                .from("User Bets")
+                .select("party_id")
+                .eq("user_id", value: userId)
+                .eq("is_winner", value: false)
+                .execute()
+            let lossesData = userLossesResponse.data
+            let lossRows = try JSONDecoder().decode([WinRow].self, from: lossesData)
+            let lossPartyIds = Set(lossRows.map { $0.party_id })
+            
+            let loadedParties = parties.map { p in
+                Party(
+                    id: p.id,
+                    party_name: p.party_name ?? "",
+                    party_code: p.party_code ?? "",
+                    created_by: p.created_by ?? "",
+                    bet_type: p.bet_type,
+                    max_members: nil,
+                    status: nil,
+                    created_at: nil,
+                    bet: nil,
+                    terms: nil,
+                    options: nil,
+                    game_status: nil,
+                    privacy_option: nil
+                )
             }
             
-            // Debug: Print raw response
-            if let rawString = String(data: memberPartiesResponse.data, encoding: .utf8) {
-                print("🔍 Raw member parties response: \(rawString)")
-            }
-            
-            let memberPartyData = try decoder.decode([MemberPartyResponse].self, from: memberPartiesResponse.data)
-            let memberPartyIds = memberPartyData.map { $0.party_id }
-            print("🔍 Member party IDs: \(memberPartyIds)")
-            
-            var memberParties: [Party] = []
-            if !memberPartyIds.isEmpty {
-                let memberPartiesResponse = try await supabaseClient
-                    .from("Parties")
-                    .select("id, party_name, party_code, created_by, bet_type, max_members, status, created_at, bet, terms, options, game_status")
-                    .in("id", values: memberPartyIds)
-                    .execute()
-                
-                // Debug: Print raw response
-                if let rawString = String(data: memberPartiesResponse.data, encoding: .utf8) {
-                    print("🔍 Raw member parties details response: \(rawString)")
-                }
-                
-                memberParties = try decoder.decode([Party].self, from: memberPartiesResponse.data)
-                print("🔍 Member parties count: \(memberParties.count)")
-            }
-            
-            // Combine created and member parties, removing duplicates
-            var allParties = createdParties
-            for memberParty in memberParties {
-                if !allParties.contains(where: { $0.id == memberParty.id }) {
-                    allParties.append(memberParty)
-                }
-            }
-            
-            print("🔍 Total parties count: \(allParties.count)")
-            
-            // Fetch member counts for all parties
-            let partyIds = allParties.compactMap { party -> Int? in
-                guard let id = party.id else { return nil }
-                return Int(id)
-            }
-            
-            var memberCounts: [Int64: Int] = [:]
-            if !partyIds.isEmpty {
-                let membersResponse = try await supabaseClient
-                    .from("Party Members")
-                    .select("party_id")
-                    .in("party_id", values: partyIds)
-                    .execute()
-                struct MemberRow: Codable { let party_id: Int64 }
-                let memberRows = try decoder.decode([MemberRow].self, from: membersResponse.data)
-                memberCounts = Dictionary(grouping: memberRows, by: { $0.party_id }).mapValues { $0.count }
-            }
-            
-            await MainActor.run {
-                self.parties = allParties
+            DispatchQueue.main.async {
+                self.parties = loadedParties
+                self.wonPartyIds = winPartyIds
+                self.lostPartyIds = lossPartyIds
                 self.isLoading = false
-                self.memberCounts = memberCounts
-                print("🔍 Successfully loaded \(allParties.count) parties")
             }
-            
         } catch {
-            print("❌ Error loading parties:", error)
-            print("❌ Error details: \(error.localizedDescription)")
-            if let decodingError = error as? DecodingError {
-                print("❌ Decoding error: \(decodingError)")
+            DispatchQueue.main.async {
+                errorMessage = "Error loading parties: \(error.localizedDescription)"
+                isLoading = false
             }
-            await MainActor.run {
-                self.errorMessage = "Error loading parties: \(error.localizedDescription)"
-                self.isLoading = false
-            }
+            print("Error loading parties: \(error)")
         }
     }
-    
+
     private func fetchCreatorDetails(for party: Party) async -> String? {
         do {
             let response = try await supabaseClient
@@ -417,9 +330,8 @@ struct MyPartiesView: View {
                 .eq("user_id", value: party.created_by)
                 .limit(1)
                 .execute()
-            let decoder = JSONDecoder()
             struct CreatorInfo: Codable { let email: String }
-            let info = try decoder.decode([CreatorInfo].self, from: response.data)
+            let info = try JSONDecoder().decode([CreatorInfo].self, from: response.data)
             return info.first?.email
         } catch {
             print("❌ Error fetching creator details: \(error)")
@@ -432,7 +344,8 @@ struct PartyCard: View {
     let party: Party
     let memberCount: Int
     let betType: String
-    
+    let backgroundColor: Color
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -451,10 +364,9 @@ struct PartyCard: View {
             }
         }
         .padding()
-        .background(Color.white.opacity(0.08))
+        .background(backgroundColor)
         .cornerRadius(14)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        // Add a subtle overlay to indicate it's tappable
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)

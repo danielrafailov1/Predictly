@@ -167,6 +167,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		4B1F1B1E2E3993D200197463 /* Friends */ = {
+			isa = PBXGroup;
+			children = (
+				4B6AE10B2E05BAFF00656DF3 /* FriendsView.swift */,
+				4B6AE1092E05BAF900656DF3 /* FriendRequestsView.swift */,
+				4B6AE1072E05BAF400656DF3 /* AddFriendView.swift */,
+				4B56EEF42E1B50DB0088E513 /* DirectMessageView.swift */,
+			);
+			path = Friends;
+			sourceTree = "<group>";
+		};
 		4B2D15782DFCB3B50068E5E4 /* Assets */ = {
 			isa = PBXGroup;
 			children = (
@@ -205,16 +216,16 @@
 		4B2D158E2DFCB3CB0068E5E4 /* Bet Management */ = {
 			isa = PBXGroup;
 			children = (
-				4BE606D12E36F22F009E0EBC /* GameResultsView.swift */,
-				4BE606CF2E36F1F1009E0EBC /* ConfirmBetOutcomeView.swift */,
+				4B56EEED2E15B20D0088E513 /* HostBetGenerationView.swift */,
 				4BE606BD2E36CC14009E0EBC /* PlaceBetView.swift */,
 				4B786A242E314C72004E5105 /* NormalBetView.swift */,
 				4B786A222E314C20004E5105 /* ContestBetView.swift */,
+				4BE606CF2E36F1F1009E0EBC /* ConfirmBetOutcomeView.swift */,
 				4B56EEFC2E1C99E20088E513 /* LifeEventsBetView.swift */,
 				4B56EEFA2E1C99D80088E513 /* PoliticsBetView.swift */,
 				4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */,
 				4B7C5B832DFFB05400AE8600 /* BetTypeView.swift */,
-				4BDD17892E01F37200CD117D /* MyPartiesView.swift */,
+				4BE606D12E36F22F009E0EBC /* GameResultsView.swift */,
 				4BDD17852E01F13F00CD117D /* SportSelectionView.swift */,
 				4BDD178F2E01F53F00CD117D /* GameEventView.swift */,
 			);
@@ -224,15 +235,10 @@
 		4B2D15922DFCB3CB0068E5E4 /* Credentials */ = {
 			isa = PBXGroup;
 			children = (
-				4B56EEF42E1B50DB0088E513 /* DirectMessageView.swift */,
-				4B5D5CE72E0CD767000B05AC /* RootView.swift */,
-				4B6AE10B2E05BAFF00656DF3 /* FriendsView.swift */,
-				4B6AE1092E05BAF900656DF3 /* FriendRequestsView.swift */,
-				4B6AE1072E05BAF400656DF3 /* AddFriendView.swift */,
-				4B6AE1052E03579D00656DF3 /* ChooseUsernameView.swift */,
 				4BDD178B2E01F3F400CD117D /* LoginSignupView.swift */,
 				4B2D15902DFCB3CB0068E5E4 /* LoggedInView.swift */,
 				4B2D15912DFCB3CB0068E5E4 /* ProfileView.swift */,
+				4B6AE1052E03579D00656DF3 /* ChooseUsernameView.swift */,
 			);
 			path = Credentials;
 			sourceTree = "<group>";
@@ -240,8 +246,8 @@
 		4B2D15972DFCB3CB0068E5E4 /* PartyManagement */ = {
 			isa = PBXGroup;
 			children = (
+				4BDD17892E01F37200CD117D /* MyPartiesView.swift */,
 				4BE606D32E37DD85009E0EBC /* PartyInviteHandler.swift */,
-				4B56EEED2E15B20D0088E513 /* HostBetGenerationView.swift */,
 				4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */,
 				4B6AE10F2E05CF5C00656DF3 /* InviteOthersToPartyView.swift */,
 				4B6AE10D2E05CF5500656DF3 /* InviteFriendsToPartyView.swift */,
@@ -270,6 +276,7 @@
 		4B2D159E2DFCB3CB0068E5E4 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4B1F1B1E2E3993D200197463 /* Friends */,
 				4B786A182E309176004E5105 /* TimedBet */,
 				4BF3C89B2E0A451A00872BEC /* Shared */,
 				4B2D158E2DFCB3CB0068E5E4 /* Bet Management */,
@@ -398,6 +405,7 @@
 				4BF3C89A2E0A451A00872BEC /* ProfileIconOverlay.swift */,
 				4B56EF002E1C9F8F0088E513 /* SidebarView.swift */,
 				4B56EF022E1C9F960088E513 /* RootWithSidebarView.swift */,
+				4B5D5CE72E0CD767000B05AC /* RootView.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
