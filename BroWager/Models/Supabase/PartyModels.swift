@@ -42,6 +42,7 @@ struct PartyInsertPayload: Codable {
     let privacy_option: String
     let max_members: Int
     let bet: String
+    let bet_date: String
     let bet_type: String
     let options: [String]
     let terms: String
@@ -51,12 +52,13 @@ struct PartyInsertPayload: Codable {
     // Optional fields that might be set by database defaults
     let game_status: String?
     
-    init(created_by: String, party_name: String, privacy_option: String, max_members: Int, bet: String, bet_type: String, options: [String], terms: String, status: String, party_code: String, game_status: String? = "waiting") {
+    init(created_by: String, party_name: String, privacy_option: String, max_members: Int, bet: String, bet_date: String, bet_type: String, options: [String], terms: String, status: String, party_code: String, game_status: String? = "waiting") {
         self.created_by = created_by
         self.party_name = party_name
         self.privacy_option = privacy_option
         self.max_members = max_members
         self.bet = bet
+        self.bet_date = bet_date
         self.bet_type = bet_type
         self.options = options
         self.terms = terms

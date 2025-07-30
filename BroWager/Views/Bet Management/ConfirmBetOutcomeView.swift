@@ -16,6 +16,7 @@ struct ConfirmBetOutcomeView: View {
     @State private var showAIVerification = false
     @State private var aiVerificationResult: String = ""
     @State private var showConfirmation = false
+    @State private var betDate: Date?
     
     var body: some View {
         NavigationView {
@@ -49,6 +50,17 @@ struct ConfirmBetOutcomeView: View {
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundColor(.white.opacity(0.8))
                                     .multilineTextAlignment(.center)
+                                
+                                // Display bet date if available
+                                if let betDate = betDate {
+                                    HStack {
+                                        Image(systemName: "calendar")
+                                            .foregroundColor(.blue)
+                                        Text("Bet Date: \(betDate, style: .date)")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.8))
+                                    }
+                                }
                             }
                             .padding(.top, 20)
                             
@@ -193,6 +205,11 @@ struct ConfirmBetOutcomeView: View {
             .toolbarBackground(.hidden, for: .navigationBar) // Hide the navigation bar background
         }
         .onAppear {
+            // Load bet date when view appears
+            Task {
+                await loadBetDate()
+            }
+            
             // Set navigation bar appearance
             let appearance = UINavigationBarAppearance()
             appearance.configureWithTransparentBackground()
@@ -212,8 +229,35 @@ struct ConfirmBetOutcomeView: View {
         }
     }
     
-    // Replace your askAIForVerification() function with this updated version
-
+    // Load bet date from database
+    private func loadBetDate() async {
+        do {
+            let response = try await supabaseClient
+                .from("Parties")
+                .select("bet_date")
+                .eq("id", value: Int(partyId))
+                .single()
+                .execute()
+            
+            struct PartyDateResponse: Codable {
+                let bet_date: String
+            }
+            
+            let partyDateResponse = try JSONDecoder().decode(PartyDateResponse.self, from: response.data)
+            
+            // Parse the date string
+            let dateFormatter = ISO8601DateFormatter()
+            if let parsedDate = dateFormatter.date(from: partyDateResponse.bet_date) {
+                await MainActor.run {
+                    self.betDate = parsedDate
+                }
+            }
+        } catch {
+            print("Error loading bet date: \(error)")
+        }
+    }
+    
+    // Updated askAIForVerification function with date awareness
     private func askAIForVerification() async {
         await MainActor.run {
             isLoading = true
@@ -221,25 +265,45 @@ struct ConfirmBetOutcomeView: View {
         }
         
         do {
-            // Create a comprehensive prompt for bet outcome verification
+            // Get the bet date from the database first
+            let partyResponse = try await supabaseClient
+                .from("Parties")
+                .select("bet_date")
+                .eq("id", value: Int(partyId))
+                .single()
+                .execute()
+            
+            struct PartyDate: Codable {
+                let bet_date: String
+            }
+            
+            let partyDate = try JSONDecoder().decode(PartyDate.self, from: partyResponse.data)
+            
+            // Create a comprehensive prompt for bet outcome verification with date context
             let prompt = """
-            You are a sports betting outcome analyzer. Analyze the following bet and determine which option(s) are correct based on current game data.
+            You are a sports betting outcome analyzer with access to real-time sports data. Analyze the following bet for the specific date and determine which option(s) are correct.
 
+            Bet Date: \(partyDate.bet_date)
             Bet Question: \(betPrompt)
             Available Options: \(betOptions.joined(separator: ", "))
 
-            Please research the latest game results and statistics for this bet. Then provide your analysis in the following format:
+            IMPORTANT: Only analyze games and events that occurred on \(partyDate.bet_date). Do not use data from other dates.
+
+            Please research the game results and statistics specifically for \(partyDate.bet_date). Then provide your analysis in the following format:
 
             ANALYSIS:
-            [Your detailed analysis of why certain options are correct]
+            [Your detailed analysis of why certain options are correct based on events from \(partyDate.bet_date)]
 
             CORRECT OPTIONS:
-            [List the correct option(s) from the available options]
+            [List the correct option(s) from the available options based on \(partyDate.bet_date) results]
 
             CONFIDENCE:
             [High/Medium/Low confidence level with reasoning]
 
-            Note: Only select options that are definitely correct based on verified game data. If you cannot verify the results, please state that clearly.
+            DATE VERIFICATION:
+            [Confirm that your analysis is based on events from \(partyDate.bet_date) specifically]
+
+            Note: Only select options that are definitely correct based on verified game data from the specified date. If you cannot verify the results for that specific date, please state that clearly.
             """
 
             // Use your existing AIServices to get the analysis
@@ -247,7 +311,7 @@ struct ConfirmBetOutcomeView: View {
                 prompt,
                 model: "gemini-2.5-flash",
                 temperature: 0.1, // Low temperature for factual analysis
-                maxTokens: 1000
+                maxTokens: 1200
             )
 
             // Parse the AI response to extract suggested winners
@@ -293,7 +357,8 @@ struct ConfirmBetOutcomeView: View {
             if inCorrectOptionsSection {
                 // Stop if we hit another section
                 if trimmedLine.uppercased().contains("CONFIDENCE:") ||
-                   trimmedLine.uppercased().contains("ANALYSIS:") {
+                   trimmedLine.uppercased().contains("ANALYSIS:") ||
+                   trimmedLine.uppercased().contains("DATE VERIFICATION:") {
                     break
                 }
                 
@@ -334,183 +399,6 @@ struct ConfirmBetOutcomeView: View {
         
         print("🔍 Final AI suggested winners: \(suggestedWinners)")
         return suggestedWinners
-    }
-
-    // Enhanced version with specific game data (if you have game info available)
-    private func askAIForVerificationWithGameData() async {
-        await MainActor.run {
-            isLoading = true
-            errorMessage = nil
-        }
-        
-        do {
-            // You can enhance this by including specific game data if available
-            let prompt = """
-            You are a professional sports betting outcome analyzer with access to real-time sports data.
-
-            BETTING DETAILS:
-            Question: \(betPrompt)
-            Available Options: \(betOptions.joined(separator: " | "))
-
-            INSTRUCTIONS:
-            1. Research the latest verified sports data for this specific bet
-            2. Analyze each option against the actual game results
-            3. Only mark options as correct if you have confirmed data
-            4. If you cannot verify the results, clearly state this
-
-            RESPONSE FORMAT:
-            ANALYSIS:
-            [Your detailed research and reasoning]
-
-            VERIFIED CORRECT OPTIONS:
-            [Only list options that are definitively correct based on verified data]
-
-            CONFIDENCE LEVEL:
-            [High/Medium/Low] - [Explain your confidence level]
-
-            DATA SOURCES:
-            [Mention what data you used for verification]
-
-            Remember: Accuracy is critical. If uncertain, state that verification is not possible rather than guessing.
-            """
-
-            let aiResponse = try await AIServices.shared.sendPrompt(
-                prompt,
-                model: "gemini-2.5-flash",
-                temperature: 0.05, // Very low temperature for maximum accuracy
-                maxTokens: 1500
-            )
-
-            let suggestedWinners = parseAIResponse(aiResponse)
-
-            await MainActor.run {
-                self.aiVerificationResult = aiResponse
-                
-                // Only auto-select if AI expressed high confidence
-                if aiResponse.lowercased().contains("high") &&
-                   aiResponse.lowercased().contains("confidence") &&
-                   !suggestedWinners.isEmpty {
-                    self.selectedWinningOptions = Set(suggestedWinners)
-                }
-                
-                self.isLoading = false
-            }
-
-        } catch let aiError as AIServiceError {
-            await MainActor.run {
-                self.aiVerificationResult = "AI Service Error: \(aiError.errorDescription ?? "Unknown error")"
-                self.errorMessage = aiError.errorDescription
-                self.isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                self.aiVerificationResult = "Verification Error: \(error.localizedDescription)"
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
-            }
-        }
-    }
-
-    // Alternative function for JSON-structured response
-    private func askAIForStructuredVerification() async {
-        await MainActor.run {
-            isLoading = true
-            errorMessage = nil
-        }
-        
-        do {
-            let prompt = """
-            Analyze this sports bet and return a JSON response with the verification results.
-
-            Bet Question: \(betPrompt)
-            Options: \(betOptions)
-
-            Return JSON format:
-            {
-                "analysis": "Your detailed analysis",
-                "correct_options": ["option1", "option2"],
-                "confidence": "High/Medium/Low",
-                "reasoning": "Why these options are correct",
-                "data_verified": true/false
-            }
-
-            Only include options in correct_options that are definitively correct based on verified sports data.
-            """
-
-            let aiResponse = try await AIServices.shared.sendPrompt(
-                prompt,
-                model: "gemini-2.5-flash",
-                temperature: 0.1,
-                maxTokens: 800
-            )
-
-            // Try to parse JSON response
-            if let jsonData = extractJSON(from: aiResponse),
-               let verificationResult = try? JSONDecoder().decode(AIVerificationResult.self, from: jsonData) {
-                
-                await MainActor.run {
-                    self.aiVerificationResult = """
-                    ANALYSIS: \(verificationResult.analysis)
-                    
-                    CONFIDENCE: \(verificationResult.confidence)
-                    
-                    REASONING: \(verificationResult.reasoning)
-                    
-                    DATA VERIFIED: \(verificationResult.data_verified ? "Yes" : "No")
-                    """
-                    
-                    if verificationResult.data_verified &&
-                       verificationResult.confidence.lowercased() == "high" {
-                        self.selectedWinningOptions = Set(verificationResult.correct_options)
-                    }
-                    
-                    self.isLoading = false
-                }
-            } else {
-                // Fallback to text parsing
-                await MainActor.run {
-                    self.aiVerificationResult = aiResponse
-                    self.isLoading = false
-                }
-            }
-
-        } catch {
-            await MainActor.run {
-                self.aiVerificationResult = "Error: \(error.localizedDescription)"
-                self.isLoading = false
-            }
-        }
-    }
-
-    // Helper struct for JSON parsing
-    private struct AIVerificationResult: Codable {
-        let analysis: String
-        let correct_options: [String]
-        let confidence: String
-        let reasoning: String
-        let data_verified: Bool
-    }
-
-    // Helper function to extract JSON from AI response
-    private func extractJSON(from text: String) -> Data? {
-        guard let start = text.firstIndex(of: "{"),
-              let end = text.lastIndex(of: "}") else {
-            return nil
-        }
-        
-        let jsonString = String(text[start...end])
-        return jsonString.data(using: .utf8)
-    }
-    
-    private func generateMockAIResponse() -> String {
-       
-        let responses = [
-            "Based on game data analysis, the selected options appear to be correct.",
-            "I recommend reviewing the final game statistics to confirm the outcome.",
-            "The selected winning conditions match the expected results based on the game's final state.",
-            "Please verify the game's final score and statistics to ensure accuracy."
-        ]
-        return responses.randomElement() ?? responses[0]
     }
     
     private func confirmBetOutcome() async {
@@ -625,17 +513,4 @@ struct ConfirmBetOutcomeView: View {
         
         return hasMatch
     }
-}
-
-#Preview {
-    ConfirmBetOutcomeView(
-        partyId: 1,
-        partyName: "Test Party",
-        betOptions: ["Option A", "Option B", "Option C"],
-        betPrompt: "Which team will win the game?"
-    )
-    .environmentObject(SessionManager(supabaseClient: SupabaseClient(
-        supabaseURL: URL(string: "https://example.supabase.co")!,
-        supabaseKey: "public-anon-key"
-    )))
 }
