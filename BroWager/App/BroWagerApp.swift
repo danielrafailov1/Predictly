@@ -14,13 +14,20 @@ extension Notification.Name {
 
 @main
 struct BroWagerApp: App {
-    
+
     @AppStorage("isMusicOn") private var isMusicOn: Bool = true
-    
-    static let client = SupabaseClient(
-      supabaseURL: URL(string: "https://wwqbjakkuprsyvwxlgch.supabase.co")!,
-      supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cWJqYWtrdXByc3l2d3hsZ2NoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczMzMxNDUsImV4cCI6MjA2MjkwOTE0NX0.9BTfCnpDCIzQ8Zve69JpJ6_B_AeGier_uuEQgNBlqMM"
-    )
+
+    // Load Supabase credentials from Info.plist
+    static let client: SupabaseClient = {
+        guard
+            let urlString = Bundle.main.infoDictionary?["SUPABASE_URL"] as? String,
+            let key = Bundle.main.infoDictionary?["SUPABASE_KEY"] as? String,
+            let url = URL(string: urlString)
+        else {
+            fatalError("Missing or invalid Supabase URL or Key in Info.plist")
+        }
+        return SupabaseClient(supabaseURL: url, supabaseKey: key)
+    }()
 
     @State private var showSplash = true
     @StateObject private var sessionManager: SessionManager

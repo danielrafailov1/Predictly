@@ -2,22 +2,30 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>GEMINI_API_KEY</key>
-	<string>AIzaSyAunbuh_N_W_mkRpvKIosu-TDajJvJO8Q8</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>browager</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>browager</string>
-			</array>
-		</dict>
-	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs access to your microphone to send voice messages.</string>
+    <key>GEMINI_API_KEY</key>
+    <string>AIzaSyAunbuh_N_W_mkRpvKIosu-TDajJvJO8Q8</string>
+
+    <key>SUPABASE_URL</key>
+    <string>https://wwqbjakkuprsyvwxlgch.supabase.co</string>
+
+    <key>SUPABASE_KEY</key>
+    <string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cWJqYWtrdXByc3l2d3hsZ2NoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczMzMxNDUsImV4cCI6MjA2MjkwOTE0NX0.9BTfCnpDCIzQ8Zve69JpJ6_B_AeGier_uuEQgNBlqMM</string>
+
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>browager</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>browager</string>
+            </array>
+        </dict>
+    </array>
+
+    <key>NSMicrophoneUsageDescription</key>
+    <string>This app needs access to your microphone to send voice messages.</string>
 </dict>
 </plist>
