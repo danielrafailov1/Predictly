@@ -134,36 +134,6 @@ struct BetCategoryView: View {
                     }
                     .padding(.horizontal)
                     
-                    // Continue Button (if needed for manual navigation)
-                    if selectedCategory != nil {
-                        Button(action: {
-                            isNavigating = true
-                        }) {
-                            HStack {
-                                Text("Continue with \(selectedCategory?.rawValue ?? "")")
-                                    .font(.system(size: 18, weight: .semibold))
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 16, weight: .bold))
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [selectedCategory?.color ?? .blue, (selectedCategory?.color ?? .blue).opacity(0.8)]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(12)
-                            .shadow(color: (selectedCategory?.color ?? .blue).opacity(0.3), radius: 8, x: 0, y: 4)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: selectedCategory)
-                    }
-                    
                     Spacer(minLength: 20)
                 }
                 .padding(.bottom, 30)
@@ -171,8 +141,7 @@ struct BetCategoryView: View {
         }
         .navigationDestination(isPresented: $isNavigating) {
             if let category = selectedCategory {
-                NormalBetView(navPath: $navPath, email: email, userId: userId)
-//                BetTypeView(navPath: $navPath, email: email, selectedCategory: category)
+                NormalBetView(navPath: $navPath, email: email, userId: userId, selectedCategory: selectedCategory)
             }
         }
     }

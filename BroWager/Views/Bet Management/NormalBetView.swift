@@ -1,4 +1,4 @@
-// Updated Bet Creation Flow with Random AI Suggestions and Validation
+// Updated Bet Creation Flow with Category-Influenced AI Suggestions
 
 import SwiftUI
 
@@ -6,7 +6,8 @@ import SwiftUI
     NormalBetView(
         navPath: .constant(NavigationPath()),
         email: "preview@example.com",
-        userId: UUID()
+        userId: UUID(),
+        selectedCategory: BetCategoryView.BetCategory.sports
     )
 }
 
@@ -14,6 +15,7 @@ struct NormalBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
     let userId: UUID?
+    let selectedCategory: BetCategoryView.BetCategory?
 
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
@@ -64,6 +66,27 @@ struct NormalBetView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     
+                    // Category Header
+                    if let category = selectedCategory {
+                        HStack {
+                            Image(systemName: category.icon)
+                                .foregroundColor(category.color)
+                                .font(.title2)
+                            VStack(alignment: .leading) {
+                                Text(category.rawValue)
+                                    .foregroundColor(.white)
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                Text(category.description)
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.caption)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.top)
+                    }
+                    
                     // AI Suggestions Header
                     VStack(spacing: 12) {
                         HStack {
@@ -87,7 +110,6 @@ struct NormalBetView: View {
                             }
                         }
                         .padding(.horizontal)
-                        .padding(.top)
                     }
                     
                     // Scrollable Suggestion Buttons
@@ -282,7 +304,8 @@ struct NormalBetView: View {
                             selectedDate: selectedDate,
                             email: email,
                             userId: userId,
-                            optionCount: optionCount
+                            optionCount: optionCount,
+                            selectedCategory: selectedCategory
                         ),
                         isActive: $isNextActive
                     ) {
@@ -365,24 +388,75 @@ struct NormalBetView: View {
     @MainActor
     func refreshAISuggestions() async {
         do {
-            print("Attempting to fetch random AI suggestions...")
+            print("Attempting to fetch category-based AI suggestions...")
             
-            let result = try await AIServices.shared.generateRandomBetSuggestions(count: 5)
+            let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                category: selectedCategory,
+                count: 5
+            )
             print("Raw AI Response: \(result)")
             aiSuggestions = result
         } catch {
             print("AI decoding error: \(error.localizedDescription)")
             
-            // Random fallback suggestions
-            let fallbackSuggestions = [
+            // Category-specific fallback suggestions
+            let fallbackSuggestions = getCategoryFallbackSuggestions()
+            aiSuggestions = fallbackSuggestions
+        }
+    }
+    
+    private func getCategoryFallbackSuggestions() -> [String] {
+        guard let category = selectedCategory else {
+            return [
                 "Who will finish their coffee first this morning?",
                 "What will be the next song that comes on shuffle?",
                 "Which elevator will arrive first when we press the button?",
                 "How many red cars will we see in the next 10 minutes?",
                 "Who will get the most likes on their next social media post?"
             ]
-            
-            aiSuggestions = fallbackSuggestions
+        }
+        
+        switch category {
+        case .sports:
+            return [
+                "Which team will score first in the next game?",
+                "Who will run the fastest mile in our group?",
+                "Which player will have the most assists this season?",
+                "Will the home team win their next match?",
+                "Who will make the most free throws out of 10 attempts?"
+            ]
+        case .food:
+            return [
+                "Which restaurant will we choose for dinner tonight?",
+                "Who can eat the spiciest food without drinking water?",
+                "What will be the most popular pizza topping ordered?",
+                "Which of us will finish our meal first?",
+                "Will the new restaurant get good reviews this week?"
+            ]
+        case .lifeEvents:
+            return [
+                "Who will get engaged first in our friend group?",
+                "Which of us will get promoted this year?",
+                "Who will move to a new city first?",
+                "Which couple will celebrate their anniversary first?",
+                "Who will learn a new skill by the end of the month?"
+            ]
+        case .politics:
+            return [
+                "Which candidate will win the local election?",
+                "What will be the voter turnout percentage?",
+                "Which political party will gain more seats?",
+                "Will the new policy be approved this quarter?",
+                "Which state will announce results first?"
+            ]
+        case .other:
+            return [
+                "What will be the weather like tomorrow?",
+                "Which movie will be #1 at the box office this weekend?",
+                "Who will get the next text message first?",
+                "What color car will drive by next?",
+                "Which of us will wake up earliest tomorrow?"
+            ]
         }
     }
 }
@@ -394,6 +468,7 @@ struct BetOptionsView: View {
     let email: String
     let userId: UUID?
     let optionCount: Int
+    let selectedCategory: BetCategoryView.BetCategory?
 
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
@@ -414,14 +489,27 @@ struct BetOptionsView: View {
             ).ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 16) {
-                // Date Display
+                // Category and Date Display
                 HStack {
-                    Image(systemName: "calendar")
-                        .foregroundColor(.blue)
-                    Text("Bet Date: \(selectedDate, style: .date)")
-                        .foregroundColor(.white.opacity(0.8))
-                        .font(.subheadline)
+                    if let category = selectedCategory {
+                        HStack {
+                            Image(systemName: category.icon)
+                                .foregroundColor(category.color)
+                            Text(category.rawValue)
+                                .foregroundColor(.white)
+                                .font(.headline)
+                        }
+                    }
+                    
                     Spacer()
+                    
+                    HStack {
+                        Image(systemName: "calendar")
+                            .foregroundColor(.blue)
+                        Text("Bet Date: \(selectedDate, style: .date)")
+                            .foregroundColor(.white.opacity(0.8))
+                            .font(.subheadline)
+                    }
                 }
                 .padding(.horizontal)
 
@@ -546,27 +634,33 @@ struct BetOptionsView: View {
                 let isBinaryBet = detectBinaryBet(betPrompt)
                 let targetCount = isBinaryBet ? 2 : optionCount
                 
+                let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+                
                 let prompt: String
                 
                 if isBinaryBet {
                     prompt = """
-                    Based on this bet: "\(betPrompt)", generate exactly 2 simple, direct answer options.
+                    Based on this \(categoryContext) bet: "\(betPrompt)", generate exactly 2 simple, direct answer options.
                     
-                    This appears to be a simple either/or question. Provide only the two most obvious choices.
+                    This appears to be a simple either/or question in the \(selectedCategory?.rawValue.lowercased() ?? "general") category. 
+                    Provide only the two most obvious choices that are relevant to \(categoryContext).
+                    
                     For example:
                     - If it's "Who will win X vs Y", return: "Team X" and "Team Y"
                     - If it's "Will X happen", return: "Yes" and "No"
                     
-                    Keep options short (1-4 words each) and direct. No complex scenarios.
+                    Keep options short (1-4 words each) and directly related to \(categoryContext).
                     Return only the options, one per line, no numbering.
                     """
                 } else {
                     prompt = """
-                    Based on this bet: "\(betPrompt)", generate exactly \(targetCount) realistic and specific options.
+                    Based on this \(categoryContext) bet: "\(betPrompt)", generate exactly \(targetCount) realistic and specific options.
                     
                     Create measurable outcomes that can be definitively determined as true or false.
-                    Each option should be one clear sentence.
-                    Keep options concise but specific enough to be interesting.
+                    Each option should be one clear sentence and must be relevant to \(categoryContext).
+                    Keep options concise but specific enough to be interesting for a \(selectedCategory?.rawValue.lowercased() ?? "general") bet.
+                    
+                    The bet is scheduled for \(formattedDate), so make sure options are appropriate for that timeframe.
                     
                     Return only the options, one per line, no numbering or extra text.
                     """
@@ -670,20 +764,94 @@ struct BetOptionsView: View {
             
             return ["Option A", "Option B"]
         } else {
-            let baseOptions = [
-                "Most likely outcome",
-                "Second most likely",
-                "Unexpected result",
-                "Long shot possibility",
-                "Alternative scenario",
-                "Dark horse option",
-                "Wildcard choice",
-                "Backup possibility",
-                "Outside chance",
-                "Final option"
-            ]
+            // Category-specific fallback options
+            guard let category = selectedCategory else {
+                let baseOptions = [
+                    "Most likely outcome",
+                    "Second most likely",
+                    "Unexpected result",
+                    "Long shot possibility",
+                    "Alternative scenario",
+                    "Dark horse option",
+                    "Wildcard choice",
+                    "Backup possibility",
+                    "Outside chance",
+                    "Final option"
+                ]
+                return Array(baseOptions.prefix(count))
+            }
             
-            return Array(baseOptions.prefix(count))
+            let categoryOptions: [String] = {
+                switch category {
+                case .sports:
+                    return [
+                        "Home team wins",
+                        "Away team wins",
+                        "Game goes to overtime",
+                        "Under total score",
+                        "Over total score",
+                        "First half leader",
+                        "Most fouls",
+                        "Fastest goal",
+                        "Defensive play",
+                        "Surprise outcome"
+                    ]
+                case .food:
+                    return [
+                        "Spicy option",
+                        "Sweet choice",
+                        "Healthy alternative",
+                        "Comfort food",
+                        "New cuisine",
+                        "Local favorite",
+                        "Chef's special",
+                        "Vegetarian option",
+                        "Popular choice",
+                        "Unique dish"
+                    ]
+                case .lifeEvents:
+                    return [
+                        "Within a month",
+                        "Within 6 months",
+                        "By end of year",
+                        "Next year",
+                        "Sooner than expected",
+                        "Later than planned",
+                        "Exactly on time",
+                        "With celebration",
+                        "Quietly",
+                        "Unexpected timing"
+                    ]
+                case .politics:
+                    return [
+                        "Incumbent wins",
+                        "Challenger wins",
+                        "Close margin",
+                        "Landslide victory",
+                        "High turnout",
+                        "Low turnout",
+                        "Policy passes",
+                        "Policy fails",
+                        "Delayed decision",
+                        "Surprise outcome"
+                    ]
+                case .other:
+                    return [
+                        "Most likely outcome",
+                        "Second choice",
+                        "Unexpected result",
+                        "Popular option",
+                        "Unique possibility",
+                        "Traditional choice",
+                        "Modern alternative",
+                        "Safe bet",
+                        "Risky option",
+                        "Wild card"
+                    ]
+                }
+            }()
+            
+            return Array(categoryOptions.prefix(count))
         }
     }
 
@@ -695,10 +863,22 @@ struct BetOptionsView: View {
                 dateFormatter.dateStyle = .full
                 let formattedDate = dateFormatter.string(from: date)
                 
+                let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+                let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
+                
                 let prompt = """
-                Generate concise, user-friendly terms and conditions for a bet scheduled for \(formattedDate) involving these options: \(betDescription). \
-                Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], \
-                and keep the response under 300 words. Include basic rules about how the bet will be determined and what happens if there are disputes.
+                Generate concise, user-friendly terms and conditions for a \(categoryName) bet scheduled for \(formattedDate) 
+                involving these options: \(betDescription). 
+                
+                This bet is specifically about \(categoryContext), so include relevant rules and considerations for this type of bet.
+                Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], 
+                and keep the response under 300 words. 
+                
+                Include:
+                - Basic rules about how the bet will be determined for \(categoryContext)
+                - What happens if there are disputes specific to \(categoryName) bets
+                - Any special considerations for \(categoryContext)
+                - Simple consequences or rewards appropriate for friends betting on \(categoryName)
                 """
                 
                 let responseText = try await AIServices.shared.sendPrompt(
@@ -716,14 +896,123 @@ struct BetOptionsView: View {
                 dateFormatter.dateStyle = .medium
                 let formattedDate = dateFormatter.string(from: date)
                 
-                betTerms = """
-                Bet is valid for \(formattedDate). \
-                Results will be determined based on the agreed upon criteria. \
-                All participants must confirm their selections before the bet begins. \
-                In case of disputes, the majority vote of participants will determine the outcome. \
-                Have fun and bet responsibly!
-                """
+                // Category-specific fallback terms
+                let categorySpecificTerms = getCategoryFallbackTerms(date: formattedDate)
+                betTerms = categorySpecificTerms
             }
+        }
+    }
+    
+    private func getCategoryFallbackTerms(date: String) -> String {
+        guard let category = selectedCategory else {
+            return """
+            Bet is valid for \(date). \
+            Results will be determined based on the agreed upon criteria. \
+            All participants must confirm their selections before the bet begins. \
+            In case of disputes, the majority vote of participants will determine the outcome. \
+            Have fun and bet responsibly!
+            """
+        }
+        
+        switch category {
+        case .sports:
+            return """
+            Sports bet valid for \(date). Results determined by official game/match outcomes. \
+            All participants must lock in predictions before the event starts. \
+            Disputes resolved using official statistics and scores. \
+            In case of game cancellation or postponement, bet extends to rescheduled date. \
+            Winner buys the group drinks or snacks!
+            """
+        case .food:
+            return """
+            Food bet valid for \(date). Results determined by actual choices made or outcomes achieved. \
+            All participants must confirm their predictions before the meal/event. \
+            Taste tests and food challenges must be conducted fairly with all participants present. \
+            Disputes resolved by group consensus or neutral taste tester. \
+            Loser pays for the meal or treats everyone to dessert!
+            """
+        case .lifeEvents:
+            return """
+            Life events bet valid for \(date). Results determined by actual life events as they occur. \
+            All participants must confirm predictions before the deadline. \
+            Personal milestones must be verified through social media or mutual friends. \
+            Respect privacy - no pressure on participants to rush life decisions. \
+            Winner gets bragging rights and a celebration dinner from the group!
+            """
+        case .politics:
+            return """
+            Political bet valid for \(date). Results determined by official election results or policy announcements. \
+            All participants must confirm predictions before voting/announcement deadlines. \
+            Disputes resolved using official government sources and verified news outlets. \
+            Keep discussions respectful regardless of political affiliations. \
+            Winner gets to choose the next group discussion topic!
+            """
+        case .other:
+            return """
+            General bet valid for \(date). Results determined based on observable, verifiable outcomes. \
+            All participants must confirm their selections before the event/deadline. \
+            Evidence must be clear and agreed upon by all participants. \
+            In case of disputes, majority vote or neutral observer determines the outcome. \
+            Winner gets bragging rights and a small prize from the group!
+            """
+        }
+    }
+}
+
+// Extension to AIServices for category-based bet suggestions
+extension AIServices {
+    @available(iOS 15.0, *)
+    func generateCategoryBetSuggestions(category: BetCategoryView.BetCategory?, count: Int) async throws -> [String] {
+        let categoryContext = category?.aiPromptContext ?? "general everyday activities"
+        let categoryName = category?.rawValue.lowercased() ?? "general"
+        
+        let prompt = """
+        Generate \(count) fun and creative betting questions specifically about \(categoryContext).
+        These should be engaging \(categoryName) situations that friends can make bets about.
+        
+        Focus exclusively on \(categoryContext) and make them:
+        - Realistic and achievable
+        - Fun for friends to bet on
+        - Measurable with clear outcomes
+        - Appropriate for social betting
+        
+        Examples of \(categoryName) bets should include scenarios like \(getSamplePrompts(for: category)).
+        
+        Return only the betting questions, one per line, without numbering or additional text.
+        Make them diverse and engaging for \(categoryName) enthusiasts.
+        """
+        
+        let response = try await sendPrompt(
+            prompt,
+            model: "gemini-2.5-flash-lite",
+            temperature: 0.8,
+            maxTokens: 400
+        )
+        
+        return response
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0.count > 15 }
+            .prefix(count)
+            .map { String($0) }
+    }
+    
+    private func getSamplePrompts(for category: BetCategoryView.BetCategory?) -> String {
+        guard let category = category else {
+            return "everyday random events, social situations, or general predictions"
+        }
+        
+        switch category {
+        case .sports:
+            return "which team will score first, who will have the most assists, what the final score margin will be"
+        case .food:
+            return "which restaurant will have the longest wait, who can finish the spiciest dish, what the most popular menu item will be"
+        case .lifeEvents:
+            return "who will get engaged first, which friend will move cities, who will get promoted this year"
+        case .politics:
+            return "which candidate will win, what the voter turnout will be, which policy will pass first"
+        case .other:
+            return "what the weather will be like, which movie will top the box office, who will reply to texts fastest"
         }
     }
 }
@@ -1019,39 +1308,5 @@ struct FinalizeBetView: View {
                 }
             }
         }
-    }
-}
-
-// Extension to AIServices for random bet suggestions
-extension AIServices {
-    @available(iOS 15.0, *)
-    func generateRandomBetSuggestions(count: Int) async throws -> [String] {
-        let prompt = """
-        Generate \(count) completely random, fun, and creative betting questions that friends can make bets about. 
-        These should be everyday situations, random events, or silly challenges that have nothing to do with sports.
-        Make them engaging and something people would actually want to bet on with friends.
-        
-        Examples of the style:
-        - "Who will get a text message first in the next hour?"
-        - "What color shirt will the next person we see be wearing?"
-        - "How many dogs will we see on our walk?"
-        
-        Return only the betting questions, one per line, without numbering or additional text.
-        Make them diverse and creative - avoid sports entirely.
-        """
-        
-        let response = try await sendPrompt(
-            prompt,
-            model: "gemini-2.5-flash-lite",
-            temperature: 0.9,
-            maxTokens: 400
-        )
-        
-        return response
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && $0.count > 10 }
-            .prefix(count)
-            .map { String($0) }
     }
 }
