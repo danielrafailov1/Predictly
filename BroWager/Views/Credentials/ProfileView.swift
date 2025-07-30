@@ -624,6 +624,7 @@ struct EditableInfoRow: View {
                 TextField(title, text: $draftValue)
                     .font(.system(size: 16))
                     .foregroundColor(.white)
+                    .lineLimit(1)
                 
                 Spacer()
                 
@@ -646,14 +647,20 @@ struct EditableInfoRow: View {
                     Text(value)
                         .font(.system(size: 12))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 } else if let identifier = identifier, !identifier.isEmpty {
                     Text("\(value)#\(identifier)")
                         .font(.system(size: 16))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 } else {
                     Text(value)
                         .font(.system(size: 16))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 Spacer()
                 Button(action: {
@@ -697,10 +704,12 @@ struct EditablePasswordRow: View {
                     TextField("New Password", text: $password)
                         .font(.system(size: 16))
                         .foregroundColor(.white)
+                        .lineLimit(1)
                 } else {
                     SecureField("New Password", text: $password)
                         .font(.system(size: 16))
                         .foregroundColor(.white)
+                        .lineLimit(1)
                 }
 
                 Button(action: { isPasswordVisible.toggle() }) {
@@ -730,6 +739,7 @@ struct EditablePasswordRow: View {
                 Text("••••••••••")
                     .font(.system(size: 16))
                     .foregroundColor(.white)
+                    .lineLimit(1)
                 
                 Spacer()
                 
