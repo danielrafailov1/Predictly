@@ -1,4 +1,4 @@
-// Updated Bet Creation Flow with Date Selection
+// Updated Bet Creation Flow with Random AI Suggestions and Validation
 
 import SwiftUI
 
@@ -19,6 +19,39 @@ struct NormalBetView: View {
     @State private var betPrompt: String = ""
     @State private var selectedDate = Date()
     @State private var isNextActive = false
+    @State private var optionCount = 4
+    
+    // Date picker states
+    @State private var selectedMonth = Calendar.current.component(.month, from: Date())
+    @State private var selectedDay = Calendar.current.component(.day, from: Date())
+    @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    
+    private let months = Calendar.current.monthSymbols
+    private let currentYear = Calendar.current.component(.year, from: Date())
+    
+    private var years: [Int] {
+        Array(currentYear...(currentYear + 5))
+    }
+    
+    private var days: [Int] {
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = selectedYear
+        components.month = selectedMonth
+        components.day = 1
+        
+        guard let date = calendar.date(from: components),
+              let range = calendar.range(of: .day, in: .month, for: date) else {
+            return Array(1...31)
+        }
+        
+        return Array(1...range.count)
+    }
+    
+    // Validation computed property
+    private var canProceed: Bool {
+        !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         ZStack {
@@ -31,31 +64,33 @@ struct NormalBetView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     
-                    // AI Suggestions Header + Refresh Button (fixed position)
-                    HStack {
-                        Text("AI Suggestions: Click to fill")
-                            .foregroundColor(.white)
-                            .font(.title2)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            Task {
-                                await refreshAISuggestions()
-                            }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
+                    // AI Suggestions Header
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("AI Suggestions: Click to fill")
                                 .foregroundColor(.white)
                                 .font(.title2)
-                                .padding(8)
-                                .background(Color.blue.opacity(0.7))
-                                .clipShape(Circle())
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                Task {
+                                    await refreshAISuggestions()
+                                }
+                            }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundColor(.white)
+                                    .font(.title2)
+                                    .padding(8)
+                                    .background(Color.blue.opacity(0.7))
+                                    .clipShape(Circle())
+                            }
                         }
+                        .padding(.horizontal)
+                        .padding(.top)
                     }
-                    .padding(.horizontal)
-                    .padding(.top)
                     
-                    // Scrollable Suggestion Buttons (dynamic content in fixed height)
+                    // Scrollable Suggestion Buttons
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(aiSuggestions, id: \.self) { suggestion in
@@ -74,7 +109,7 @@ struct NormalBetView: View {
                         }
                         .padding(.horizontal)
                     }
-                    .frame(height: 150) // Fixed height container
+                    .frame(height: 150)
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Write your Bet")
@@ -92,32 +127,153 @@ struct NormalBetView: View {
                     }
                     .padding(.horizontal)
                     
-                    // Date Picker Section
-                    VStack(alignment: .leading, spacing: 8) {
+                    // Custom Scrollable Date Picker Section
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Choose a date for your bet")
                             .foregroundColor(.white)
                             .font(.title2)
                             .padding(.horizontal)
                         
-                        DatePicker(
-                            "Bet Date",
-                            selection: $selectedDate,
-                            in: Date()..., // Only allow future dates
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(GraphicalDatePickerStyle())
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                        .accentColor(.blue)
-                        .colorScheme(.dark) // Ensure dark theme for date picker
+                        HStack(spacing: 20) {
+                            // Month Picker
+                            VStack {
+                                Text("Month")
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.system(size: 14, weight: .medium))
+                                
+                                ScrollView {
+                                    VStack(spacing: 8) {
+                                        ForEach(Array(months.enumerated()), id: \.offset) { index, month in
+                                            Button(action: {
+                                                selectedMonth = index + 1
+                                                updateSelectedDate()
+                                            }) {
+                                                Text(month)
+                                                    .padding(.vertical, 8)
+                                                    .padding(.horizontal, 12)
+                                                    .foregroundColor(selectedMonth == index + 1 ? .blue : .white)
+                                                    .font(.system(size: 16, weight: selectedMonth == index + 1 ? .semibold : .regular))
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(height: 120)
+                            }
+                            .frame(maxWidth: .infinity)
+                            
+                            // Day Picker
+                            VStack {
+                                Text("Day")
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.system(size: 14, weight: .medium))
+                                
+                                ScrollView {
+                                    VStack(spacing: 8) {
+                                        ForEach(days, id: \.self) { day in
+                                            Button(action: {
+                                                selectedDay = day
+                                                updateSelectedDate()
+                                            }) {
+                                                Text("\(day)")
+                                                    .padding(.vertical, 8)
+                                                    .padding(.horizontal, 12)
+                                                    .foregroundColor(selectedDay == day ? .blue : .white)
+                                                    .font(.system(size: 16, weight: selectedDay == day ? .semibold : .regular))
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(height: 120)
+                            }
+                            .frame(maxWidth: .infinity)
+                            
+                            // Year Picker
+                            VStack {
+                                Text("Year")
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.system(size: 14, weight: .medium))
+                                
+                                ScrollView {
+                                    VStack(spacing: 8) {
+                                        ForEach(years, id: \.self) { year in
+                                            Button(action: {
+                                                selectedYear = year
+                                                updateSelectedDate()
+                                            }) {
+                                                Text(String(year))
+                                                    .padding(.vertical, 8)
+                                                    .padding(.horizontal, 12)
+                                                    .foregroundColor(selectedYear == year ? .blue : .white)
+                                                    .font(.system(size: 16, weight: selectedYear == year ? .semibold : .regular))
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(height: 120)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
                         .padding(.horizontal)
-                        .onChange(of: selectedDate) { _ in
-                            // Refresh AI suggestions when date changes
-                            Task {
-                                await refreshAISuggestions()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                        
+                        // Display selected date
+                        HStack {
+                            Spacer()
+                            Text("Selected: \(formattedSelectedDate())")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 16, weight: .semibold))
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    // Number of Options Section
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("Number of options")
+                                .foregroundColor(.white)
+                                .font(.system(size: 16, weight: .medium))
+                            
+                            Spacer()
+                            
+                            // Counter/Ticker on the right
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    if optionCount > 2 {
+                                        optionCount -= 1
+                                    }
+                                }) {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundColor(optionCount > 2 ? .blue : .gray)
+                                        .font(.title2)
+                                }
+                                .disabled(optionCount <= 2)
+                                
+                                Text("\(optionCount)")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .frame(minWidth: 30)
+                                
+                                Button(action: {
+                                    if optionCount < 10 {
+                                        optionCount += 1
+                                    }
+                                }) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(optionCount < 10 ? .blue : .gray)
+                                        .font(.title2)
+                                }
+                                .disabled(optionCount >= 10)
                             }
                         }
                     }
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
                     
                     NavigationLink(
                         destination: BetOptionsView(
@@ -125,7 +281,8 @@ struct NormalBetView: View {
                             betPrompt: betPrompt,
                             selectedDate: selectedDate,
                             email: email,
-                            userId: userId
+                            userId: userId,
+                            optionCount: optionCount
                         ),
                         isActive: $isNextActive
                     ) {
@@ -133,14 +290,25 @@ struct NormalBetView: View {
                     }
                     
                     Button("Next") {
-                        isNextActive = true
+                        if canProceed {
+                            isNextActive = true
+                        }
                     }
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background(Color.green)
+                    .background(canProceed ? Color.green : Color.gray)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .padding(.horizontal)
+                    .disabled(!canProceed)
+                    
+                    // Validation message
+                    if !canProceed {
+                        Text("Please enter a bet question to continue")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                            .padding(.horizontal)
+                    }
                     
                     Spacer()
                 }
@@ -148,9 +316,47 @@ struct NormalBetView: View {
             }
         }
     }
+    
+    private func dateFromComponents() -> Date {
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = selectedYear
+        components.month = selectedMonth
+        components.day = selectedDay
+        
+        if let date = calendar.date(from: components) {
+            return date
+        } else {
+            components.day = 1
+            guard let firstOfMonth = calendar.date(from: components),
+                  let range = calendar.range(of: .day, in: .month, for: firstOfMonth) else {
+                return Date()
+            }
+            components.day = min(selectedDay, range.count)
+            return calendar.date(from: components) ?? Date()
+        }
+    }
+    
+    private func updateSelectedDate() {
+        let newDate = dateFromComponents()
+        selectedDate = newDate
+    }
+    
+    private func formattedSelectedDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        return formatter.string(from: selectedDate)
+    }
 
     @MainActor
     func loadAISuggestions() {
+        let calendar = Calendar.current
+        let currentDate = selectedDate
+        
+        selectedMonth = calendar.component(.month, from: currentDate)
+        selectedDay = calendar.component(.day, from: currentDate)
+        selectedYear = calendar.component(.year, from: currentDate)
+        
         Task {
             await refreshAISuggestions()
         }
@@ -159,35 +365,24 @@ struct NormalBetView: View {
     @MainActor
     func refreshAISuggestions() async {
         do {
-            print("Attempting to fetch AI suggestions for date: \(selectedDate)...")
+            print("Attempting to fetch random AI suggestions...")
             
-            // Format the date for AI context
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateStyle = .full
-            let formattedDate = dateFormatter.string(from: selectedDate)
-            
-            let result = try await AIServices.shared.generateBetSuggestionsWithDate(
-                betType: "sports",
-                count: 5,
-                targetDate: formattedDate
-            )
+            let result = try await AIServices.shared.generateRandomBetSuggestions(count: 5)
             print("Raw AI Response: \(result)")
             aiSuggestions = result
         } catch {
             print("AI decoding error: \(error.localizedDescription)")
             
-            // Fallback suggestions that are date-aware
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "EEEE, MMMM d"
-            let dateString = dateFormatter.string(from: selectedDate)
-            
-            aiSuggestions = [
-                "Which game on \(dateString) will have the highest total score?",
-                "What will happen first in the \(dateString) games: a touchdown, field goal, or turnover?",
-                "Which team will score first in the prime time game on \(dateString)?",
-                "Will any game on \(dateString) go into overtime?",
-                "Which player will have the most rushing yards on \(dateString)?"
+            // Random fallback suggestions
+            let fallbackSuggestions = [
+                "Who will finish their coffee first this morning?",
+                "What will be the next song that comes on shuffle?",
+                "Which elevator will arrive first when we press the button?",
+                "How many red cars will we see in the next 10 minutes?",
+                "Who will get the most likes on their next social media post?"
             ]
+            
+            aiSuggestions = fallbackSuggestions
         }
     }
 }
@@ -198,10 +393,17 @@ struct BetOptionsView: View {
     let selectedDate: Date
     let email: String
     let userId: UUID?
+    let optionCount: Int
 
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
     @State private var isNextActive = false
+    
+    // Validation computed property
+    private var canProceed: Bool {
+        betOptions.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } &&
+        !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         ZStack {
@@ -224,7 +426,7 @@ struct BetOptionsView: View {
                 .padding(.horizontal)
 
                 HStack {
-                    Text("Options")
+                    Text("Options (\(optionCount) required)")
                         .foregroundColor(.white)
                         .font(.headline)
                     Spacer()
@@ -237,12 +439,6 @@ struct BetOptionsView: View {
                             .foregroundColor(.yellow)
                             .font(.system(size: 20))
                     }
-
-                    Button { betOptions.append("") } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundColor(.blue)
-                            .font(.system(size: 22))
-                    }
                 }
                 .padding(.horizontal)
 
@@ -250,24 +446,22 @@ struct BetOptionsView: View {
                     VStack(spacing: 10) {
                         ForEach(betOptions.indices, id: \.self) { index in
                             HStack {
-                                TextField("Option", text: $betOptions[index])
+                                Text("\(index + 1).")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .frame(width: 20)
+                                
+                                TextField("Option \(index + 1)", text: $betOptions[index])
                                     .padding()
                                     .background(Color.gray.opacity(0.2))
                                     .cornerRadius(8)
                                     .foregroundColor(.white)
-                                Button {
-                                    betOptions.remove(at: index)
-                                } label: {
-                                    Image(systemName: "x.circle.fill")
-                                        .foregroundColor(.red)
-                                        .font(.system(size: 22))
-                                }
                             }
                             .padding(.horizontal)
                         }
                     }
                 }
-                .frame(maxHeight: 200) // limit height for scrolling
+                .frame(maxHeight: 250)
 
                 HStack {
                     Text("Terms (Penalties, Prizes, Rules)")
@@ -311,17 +505,34 @@ struct BetOptionsView: View {
                 }
                 
                 Button("Next") {
-                    isNextActive = true
+                    if canProceed {
+                        isNextActive = true
+                    }
                 }
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(Color.green)
+                .background(canProceed ? Color.green : Color.gray)
                 .foregroundColor(.white)
                 .cornerRadius(10)
                 .padding(.horizontal)
-                .padding(.bottom)
+                .disabled(!canProceed)
+                
+                // Validation message
+                if !canProceed {
+                    Text("Please fill out all options and terms to continue")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                        .padding(.horizontal)
+                }
+                
             }
             .padding(.top)
+        }
+        .onAppear {
+            // Initialize with the specified number of empty options
+            if betOptions.isEmpty {
+                betOptions = Array(repeating: "", count: optionCount)
+            }
         }
     }
 
@@ -332,30 +543,29 @@ struct BetOptionsView: View {
                 dateFormatter.dateStyle = .full
                 let formattedDate = dateFormatter.string(from: date)
                 
-                // Smart detection of bet type
                 let isBinaryBet = detectBinaryBet(betPrompt)
-                let optionCount = isBinaryBet ? 2 : 4 // Binary gets 2, others get 4
+                let targetCount = isBinaryBet ? 2 : optionCount
                 
                 let prompt: String
                 
                 if isBinaryBet {
                     prompt = """
-                    Based on this bet: "\(betPrompt)" scheduled for \(formattedDate), generate exactly \(optionCount) simple, direct answer options.
+                    Based on this bet: "\(betPrompt)", generate exactly 2 simple, direct answer options.
                     
                     This appears to be a simple either/or question. Provide only the two most obvious choices.
                     For example:
                     - If it's "Who will win X vs Y", return: "Team X" and "Team Y"
                     - If it's "Will X happen", return: "Yes" and "No"
                     
-                    Keep options short (1-4 words each) and direct. No complex scenarios or point spreads.
+                    Keep options short (1-4 words each) and direct. No complex scenarios.
                     Return only the options, one per line, no numbering.
                     """
                 } else {
                     prompt = """
-                    Based on this bet: "\(betPrompt)" scheduled for \(formattedDate), generate exactly \(optionCount) realistic and specific options.
+                    Based on this bet: "\(betPrompt)", generate exactly \(targetCount) realistic and specific options.
                     
-                    Consider what's likely to happen on \(formattedDate) and create measurable outcomes.
-                    Each option should be one clear sentence that can be definitively determined as true or false.
+                    Create measurable outcomes that can be definitively determined as true or false.
+                    Each option should be one clear sentence.
                     Keep options concise but specific enough to be interesting.
                     
                     Return only the options, one per line, no numbering or extra text.
@@ -365,59 +575,70 @@ struct BetOptionsView: View {
                 let responseText = try await AIServices.shared.sendPrompt(
                     prompt,
                     model: "gemini-2.5-flash-lite",
-                    temperature: 0.6, // Lower temperature for more focused responses
-                    maxTokens: 200 // Reduced token limit to encourage brevity
+                    temperature: 0.6,
+                    maxTokens: 200
                 )
 
-                // Clean and process the response
                 let cleanedLines = responseText
                     .components(separatedBy: .newlines)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
                     .map {
-                        // Remove common prefixes
                         $0.replacingOccurrences(of: #"^\s*[\d\-\•\*]+\.?\s*"#, with: "", options: .regularExpression)
                     }
-                    .filter { $0.count > 2 && $0.count < 100 } // Reasonable length bounds
+                    .filter { $0.count > 2 && $0.count < 100 }
 
-                betOptions = Array(cleanedLines.prefix(optionCount))
+                let generatedOptions = Array(cleanedLines.prefix(targetCount))
+                
+                // Update the existing betOptions array with generated content
+                for (index, option) in generatedOptions.enumerated() {
+                    if index < betOptions.count {
+                        betOptions[index] = option
+                    }
+                }
 
-                // Fallback with smart defaults
-                if betOptions.isEmpty {
-                    betOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet)
+                // Fill remaining slots with fallback if needed
+                if generatedOptions.isEmpty {
+                    let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount)
+                    for (index, option) in fallbackOptions.enumerated() {
+                        if index < betOptions.count {
+                            betOptions[index] = option
+                        }
+                    }
                 }
 
             } catch {
                 print("Failed to generate bet options: \(error)")
-                betOptions = generateFallbackOptions(for: betPrompt, isBinary: detectBinaryBet(betPrompt))
+                let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: detectBinaryBet(betPrompt), count: optionCount)
+                for (index, option) in fallbackOptions.enumerated() {
+                    if index < betOptions.count {
+                        betOptions[index] = option
+                    }
+                }
             }
         }
     }
 
-    // Helper function to detect if a bet is binary
     func detectBinaryBet(_ prompt: String) -> Bool {
         let lowercased = prompt.lowercased()
         
-        // Check for binary indicators
         let binaryKeywords = [
             "who will win", "vs", " v ", "or", "will there be", "will it", "yes or no",
             "true or false", "happen or not", "over or under"
         ]
         
         let versusPatterns = [
-            " vs? ",  // "vs" or "v"
+            " vs? ",
             " versus ",
-            "\\b\\w+ or \\w+\\b" // "team1 or team2"
+            "\\b\\w+ or \\w+\\b"
         ]
         
-        // Check for direct binary language
         for keyword in binaryKeywords {
             if lowercased.contains(keyword) {
                 return true
             }
         }
         
-        // Check for versus patterns with regex
         for pattern in versusPatterns {
             if lowercased.range(of: pattern, options: .regularExpression) != nil {
                 return true
@@ -427,13 +648,11 @@ struct BetOptionsView: View {
         return false
     }
     
-    func generateFallbackOptions(for prompt: String, isBinary: Bool) -> [String] {
+    func generateFallbackOptions(for prompt: String, isBinary: Bool, count: Int) -> [String] {
         if isBinary {
             let lowercased = prompt.lowercased()
             
-            // Try to extract team names or entities
             if lowercased.contains("who will win") {
-                // Look for team names after common patterns
                 if let vsRange = lowercased.range(of: " vs ") ?? lowercased.range(of: " v ") {
                     let afterVs = String(lowercased[vsRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
                     let beforeVs = String(lowercased[..<vsRange.lowerBound])
@@ -445,20 +664,26 @@ struct BetOptionsView: View {
                 }
             }
             
-            // Generic binary fallbacks
             if lowercased.contains("will") {
                 return ["Yes", "No"]
             }
             
             return ["Option A", "Option B"]
         } else {
-            // Multi-option fallbacks
-            return [
+            let baseOptions = [
                 "Most likely outcome",
                 "Second most likely",
                 "Unexpected result",
-                "Long shot possibility"
+                "Long shot possibility",
+                "Alternative scenario",
+                "Dark horse option",
+                "Wildcard choice",
+                "Backup possibility",
+                "Outside chance",
+                "Final option"
             ]
+            
+            return Array(baseOptions.prefix(count))
         }
     }
 
@@ -471,10 +696,9 @@ struct BetOptionsView: View {
                 let formattedDate = dateFormatter.string(from: date)
                 
                 let prompt = """
-                Generate concise, user-friendly terms and conditions for a sports bet scheduled for \(formattedDate) involving these options: \(betDescription). \
-                Include date-specific considerations such as game cancellations due to weather, postponements, or schedule changes that might affect bets on \(formattedDate). \
+                Generate concise, user-friendly terms and conditions for a bet scheduled for \(formattedDate) involving these options: \(betDescription). \
                 Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], \
-                and keep the response under 300 words. Make sure to address what happens if events are moved or cancelled on the target date.
+                and keep the response under 300 words. Include basic rules about how the bet will be determined and what happens if there are disputes.
                 """
                 
                 let responseText = try await AIServices.shared.sendPrompt(
@@ -493,11 +717,11 @@ struct BetOptionsView: View {
                 let formattedDate = dateFormatter.string(from: date)
                 
                 betTerms = """
-                Bet is valid for games and events occurring on \(formattedDate). \
-                If any scheduled games are postponed or cancelled on the target date, affected bets will be void. \
-                Results will be determined based on official game statistics from \(formattedDate). \
-                Weather-related cancellations or delays beyond \(formattedDate) will result in bet cancellation. \
-                All participants must confirm their selections before the first scheduled event on \(formattedDate).
+                Bet is valid for \(formattedDate). \
+                Results will be determined based on the agreed upon criteria. \
+                All participants must confirm their selections before the bet begins. \
+                In case of disputes, the majority vote of participants will determine the outcome. \
+                Have fun and bet responsibly!
                 """
             }
         }
@@ -524,6 +748,11 @@ struct FinalizeBetView: View {
     @State private var errorMessage: String = ""
     
     @Environment(\.supabaseClient) private var supabaseClient
+    
+    // Validation computed property
+    private var canProceed: Bool {
+        !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         ZStack {
@@ -550,6 +779,44 @@ struct FinalizeBetView: View {
                                 .font(.headline)
                         }
                         Spacer()
+                    }
+                    .padding(.horizontal)
+                    
+                    // Bet Summary Section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Bet Summary")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Question:")
+                                .foregroundColor(.white.opacity(0.7))
+                                .font(.caption)
+                            Text(betPrompt)
+                                .foregroundColor(.white)
+                                .font(.system(size: 16))
+                                .padding(8)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(6)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Options (\(betOptions.count)):")
+                                .foregroundColor(.white.opacity(0.7))
+                                .font(.caption)
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
+                                    if !option.isEmpty {
+                                        Text("• \(option)")
+                                            .foregroundColor(.white)
+                                            .font(.system(size: 14))
+                                    }
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(6)
+                        }
                     }
                     .padding(.horizontal)
                     
@@ -607,11 +874,19 @@ struct FinalizeBetView: View {
                         }
                     }
                     .padding()
-                    .background(Color.green)
+                    .background(canProceed ? Color.green : Color.gray)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .padding(.horizontal)
-                    .disabled(isSubmitting)
+                    .disabled(!canProceed || isSubmitting)
+                    
+                    // Validation message
+                    if !canProceed {
+                        Text("Please enter a party name to continue")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                            .padding(.horizontal)
+                    }
                 }
                 .padding(.top)
             }
@@ -622,24 +897,25 @@ struct FinalizeBetView: View {
     }
 
     func randomizePartyName() {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d"
-        let dateString = dateFormatter.string(from: selectedDate)
-        
         let suggestions = [
-            "\(dateString) Bet Bros",
-            "\(dateString) Wager Warriors",
-            "\(dateString) Game Day Squad",
-            "\(dateString) Prediction Party",
-            "\(dateString) Lock & Load",
-            "\(dateString) Sure Things",
-            "\(dateString) Betting Brigade",
-            "\(dateString) Odds Squad",
-            "\(dateString) Props & Profits",
-            "\(dateString) Smart Money"
+            "Bet Bros",
+            "Wager Warriors",
+            "Game Day Squad",
+            "Prediction Party",
+            "Lock & Load",
+            "Sure Things",
+            "Betting Brigade",
+            "Odds Squad",
+            "Props & Profits",
+            "Smart Money",
+            "The Predictors",
+            "Bet Busters",
+            "Wager Wizards",
+            "Lucky Legends",
+            "Risk Takers"
         ]
 
-        partyName = suggestions.randomElement() ?? "My \(dateString) Party"
+        partyName = suggestions.randomElement() ?? "My Betting Party"
     }
 
     func submitBet() {
@@ -655,6 +931,13 @@ struct FinalizeBetView: View {
             return
         }
         
+        // Validate that we have valid bet options (filter out empty ones)
+        let validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard validOptions.count >= 2 else {
+            errorMessage = "At least 2 valid options are required"
+            return
+        }
+        
         isSubmitting = true
         errorMessage = ""
 
@@ -663,9 +946,6 @@ struct FinalizeBetView: View {
         // Fix: Properly configure the DateFormatter
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
-        // Alternative formats you could use:
-        // dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss" // If you need timestamp
-        // dateFormatter.dateStyle = .medium // For human-readable format
         
         let formattedDate = dateFormatter.string(from: selectedDate)
         print("🔄 Formatted date: \(formattedDate)") // Debug log to verify format
@@ -678,7 +958,7 @@ struct FinalizeBetView: View {
             bet: betPrompt,
             bet_date: formattedDate, // Now properly formatted
             bet_type: betType,
-            options: betOptions,
+            options: validOptions, // Use filtered valid options
             terms: betTerms,
             status: "open",
             party_code: String(partyCode)
@@ -742,22 +1022,28 @@ struct FinalizeBetView: View {
     }
 }
 
-// Extension to AIServices for date-aware suggestions
+// Extension to AIServices for random bet suggestions
 extension AIServices {
-    func generateBetSuggestionsWithDate(betType: String, count: Int, targetDate: String) async throws -> [String] {
+    @available(iOS 15.0, *)
+    func generateRandomBetSuggestions(count: Int) async throws -> [String] {
         let prompt = """
-        Generate \(count) creative and engaging sports betting suggestions for \(targetDate). 
-        Consider what sports events, games, or activities are likely to occur on \(targetDate).
-        Make the suggestions specific to the day of the week and season.
-        Each suggestion should be a complete betting question that users can answer with multiple choice options.
-        Focus on \(betType) betting scenarios that would be relevant for \(targetDate).
+        Generate \(count) completely random, fun, and creative betting questions that friends can make bets about. 
+        These should be everyday situations, random events, or silly challenges that have nothing to do with sports.
+        Make them engaging and something people would actually want to bet on with friends.
+        
+        Examples of the style:
+        - "Who will get a text message first in the next hour?"
+        - "What color shirt will the next person we see be wearing?"
+        - "How many dogs will we see on our walk?"
+        
         Return only the betting questions, one per line, without numbering or additional text.
+        Make them diverse and creative - avoid sports entirely.
         """
         
         let response = try await sendPrompt(
             prompt,
             model: "gemini-2.5-flash-lite",
-            temperature: 0.8,
+            temperature: 0.9,
             maxTokens: 400
         )
         
