@@ -13,10 +13,10 @@ struct ConfirmBetOutcomeView: View {
     @State private var selectedWinningOptions: Set<String> = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var showAIVerification = false
     @State private var aiVerificationResult: String = ""
     @State private var showConfirmation = false
     @State private var betDate: Date?
+    @State private var isAIVerifying = false
     
     var body: some View {
         NavigationView {
@@ -79,6 +79,50 @@ struct ConfirmBetOutcomeView: View {
                             }
                             .padding(.horizontal, 24)
                             
+                            // AI Verification Status
+                            if isAIVerifying {
+                                VStack(spacing: 12) {
+                                    HStack {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                                            .scaleEffect(0.8)
+                                        Text("AI is verifying bet outcome...")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.blue)
+                                    }
+                                    .padding()
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(12)
+                                    .padding(.horizontal, 24)
+                                }
+                            }
+                            
+                            // AI Verification Result
+                            if !aiVerificationResult.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "brain.head.profile")
+                                            .foregroundColor(.yellow)
+                                        Text("AI Verification Result:")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.yellow)
+                                    }
+                                    
+                                    Text(aiVerificationResult)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .padding()
+                                        .background(Color.blue.opacity(0.2))
+                                        .cornerRadius(10)
+                                    
+                                    Text("AI has automatically selected the recommended options. Review and modify if needed.")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .italic()
+                                }
+                                .padding(.horizontal, 24)
+                            }
+                            
                             // Options Selection
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Select the correct answer(s):")
@@ -124,47 +168,7 @@ struct ConfirmBetOutcomeView: View {
                                         )
                                     }
                                     .padding(.horizontal, 24)
-                                }
-                            }
-                            
-                            // AI Verification Section
-                            VStack(spacing: 16) {
-                                Button(action: {
-                                    Task {
-                                        await askAIForVerification()
-                                    }
-                                }) {
-                                    HStack {
-                                        Image(systemName: "brain.head.profile")
-                                        Text("Ask AI to Verify")
-                                    }
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .padding(.vertical, 12)
-                                    .padding(.horizontal, 24)
-                                    .background(Color.blue.opacity(0.8))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(12)
-                                }
-                                
-                                if !aiVerificationResult.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("AI Verification Result:")
-                                            .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(.yellow)
-                                        
-                                        Text(aiVerificationResult)
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.9))
-                                            .padding()
-                                            .background(Color.blue.opacity(0.2))
-                                            .cornerRadius(10)
-                                        
-                                        Text("Review the AI result and make any necessary changes above.")
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                            .italic()
-                                    }
-                                    .padding(.horizontal, 24)
+                                    .disabled(isAIVerifying)
                                 }
                             }
                             
@@ -190,11 +194,11 @@ struct ConfirmBetOutcomeView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .padding(.vertical, 14)
                                 .padding(.horizontal, 32)
-                                .background(selectedWinningOptions.isEmpty ? Color.gray : Color.green.opacity(0.9))
+                                .background(selectedWinningOptions.isEmpty || isAIVerifying ? Color.gray : Color.green.opacity(0.9))
                                 .foregroundColor(.white)
                                 .cornerRadius(14)
                             }
-                            .disabled(selectedWinningOptions.isEmpty)
+                            .disabled(selectedWinningOptions.isEmpty || isAIVerifying)
                             .padding(.top, 20)
                         }
                         .padding(.bottom, 30)
@@ -205,9 +209,10 @@ struct ConfirmBetOutcomeView: View {
             .toolbarBackground(.hidden, for: .navigationBar) // Hide the navigation bar background
         }
         .onAppear {
-            // Load bet date when view appears
+            // Load bet date and automatically trigger AI verification
             Task {
                 await loadBetDate()
+                await askAIForVerification()
             }
             
             // Set navigation bar appearance
@@ -257,10 +262,10 @@ struct ConfirmBetOutcomeView: View {
         }
     }
     
-    // Updated askAIForVerification function with date awareness
+    // Updated askAIForVerification function that runs automatically
     private func askAIForVerification() async {
         await MainActor.run {
-            isLoading = true
+            isAIVerifying = true
             errorMessage = nil
         }
         
@@ -325,7 +330,7 @@ struct ConfirmBetOutcomeView: View {
                     self.selectedWinningOptions = Set(suggestedWinners)
                 }
                 
-                self.isLoading = false
+                self.isAIVerifying = false
             }
 
         } catch {
@@ -333,7 +338,7 @@ struct ConfirmBetOutcomeView: View {
                 let errorMsg = "AI Verification Error: \(error.localizedDescription)"
                 self.aiVerificationResult = errorMsg
                 self.errorMessage = errorMsg
-                self.isLoading = false
+                self.isAIVerifying = false
             }
         }
     }
