@@ -1,6 +1,14 @@
-// Updated Bet Creation Flow (NormalBetView, BetOptionsView, FinalizeBetView)
+// Updated Bet Creation Flow with Date Selection
 
 import SwiftUI
+
+#Preview {
+    NormalBetView(
+        navPath: .constant(NavigationPath()),
+        email: "preview@example.com",
+        userId: UUID()
+    )
+}
 
 struct NormalBetView: View {
     @Binding var navPath: NavigationPath
@@ -9,6 +17,7 @@ struct NormalBetView: View {
 
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
+    @State private var selectedDate = Date()
     @State private var isNextActive = false
 
     var body: some View {
@@ -19,90 +28,124 @@ struct NormalBetView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-
-            VStack(spacing: 20) {
-
-                // AI Suggestions Header + Refresh Button (fixed position)
-                HStack {
-                    Text("AI Suggestions: Click to fill")
-                        .foregroundColor(.white)
-                        .font(.title2)
-
-                    Spacer()
-
-                    Button(action: {
-                        Task {
-                            await refreshAISuggestions()
-                        }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
+            ScrollView {
+                VStack(spacing: 20) {
+                    
+                    // AI Suggestions Header + Refresh Button (fixed position)
+                    HStack {
+                        Text("AI Suggestions: Click to fill")
                             .foregroundColor(.white)
                             .font(.title2)
-                            .padding(8)
-                            .background(Color.blue.opacity(0.7))
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.top)
-
-                // Scrollable Suggestion Buttons (dynamic content in fixed height)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(aiSuggestions, id: \.self) { suggestion in
-                            Button(action: {
-                                betPrompt = suggestion
-                            }) {
-                                Text(suggestion)
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 12)
-                                    .background(Color.white.opacity(0.15))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(12)
-                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            Task {
+                                await refreshAISuggestions()
                             }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.white)
+                                .font(.title2)
+                                .padding(8)
+                                .background(Color.blue.opacity(0.7))
+                                .clipShape(Circle())
                         }
                     }
                     .padding(.horizontal)
-                }
-                .frame(height: 150) // Fixed height container
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Write your Bet")
-                        .foregroundColor(.white)
-                        .font(.title2)
-                        .padding(.vertical)
+                    .padding(.top)
                     
-                    TextEditor(text: $betPrompt)
-                        .scrollContentBackground(.hidden)
-                        .frame(height: 130)
-                        .background(Color.gray.opacity(0.2))
-                        .cornerRadius(10)
-                        .foregroundColor(.white)
-                        .font(.system(size: 18))
+                    // Scrollable Suggestion Buttons (dynamic content in fixed height)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(aiSuggestions, id: \.self) { suggestion in
+                                Button(action: {
+                                    betPrompt = suggestion
+                                }) {
+                                    Text(suggestion)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 12)
+                                        .background(Color.white.opacity(0.15))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(12)
+                                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .frame(height: 150) // Fixed height container
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Write your Bet")
+                            .foregroundColor(.white)
+                            .font(.title2)
+                            .padding(.vertical)
+                        
+                        TextEditor(text: $betPrompt)
+                            .scrollContentBackground(.hidden)
+                            .frame(height: 130)
+                            .background(Color.gray.opacity(0.2))
+                            .cornerRadius(10)
+                            .foregroundColor(.white)
+                            .font(.system(size: 18))
+                    }
+                    .padding(.horizontal)
+                    
+                    // Date Picker Section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Choose a date for your bet")
+                            .foregroundColor(.white)
+                            .font(.title2)
+                            .padding(.horizontal)
+                        
+                        DatePicker(
+                            "Bet Date",
+                            selection: $selectedDate,
+                            in: Date()..., // Only allow future dates
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(GraphicalDatePickerStyle())
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        .accentColor(.blue)
+                        .colorScheme(.dark) // Ensure dark theme for date picker
+                        .padding(.horizontal)
+                        .onChange(of: selectedDate) { _ in
+                            // Refresh AI suggestions when date changes
+                            Task {
+                                await refreshAISuggestions()
+                            }
+                        }
+                    }
+                    
+                    NavigationLink(
+                        destination: BetOptionsView(
+                            navPath: $navPath,
+                            betPrompt: betPrompt,
+                            selectedDate: selectedDate,
+                            email: email,
+                            userId: userId
+                        ),
+                        isActive: $isNextActive
+                    ) {
+                        EmptyView()
+                    }
+                    
+                    Button("Next") {
+                        isNextActive = true
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    
+                    Spacer()
                 }
-                .padding(.horizontal)
-
-                NavigationLink(
-                    destination: BetOptionsView(navPath: $navPath, betPrompt: betPrompt, email: email, userId: userId),
-                    isActive: $isNextActive
-                ) {
-                    EmptyView()
-                }
-
-                Button("Next") {
-                    isNextActive = true
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(Color.green)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .padding(.horizontal)
-
-                Spacer()
+                .onAppear(perform: loadAISuggestions)
             }
-            .onAppear(perform: loadAISuggestions)
         }
     }
 
@@ -116,36 +159,43 @@ struct NormalBetView: View {
     @MainActor
     func refreshAISuggestions() async {
         do {
-            print("Attempting to fetch AI suggestions...")
-            let result = try await AIServices.shared.generateBetSuggestions(betType: "sports", count: 5)
+            print("Attempting to fetch AI suggestions for date: \(selectedDate)...")
+            
+            // Format the date for AI context
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .full
+            let formattedDate = dateFormatter.string(from: selectedDate)
+            
+            let result = try await AIServices.shared.generateBetSuggestionsWithDate(
+                betType: "sports",
+                count: 5,
+                targetDate: formattedDate
+            )
             print("Raw AI Response: \(result)")
             aiSuggestions = result
         } catch {
             print("AI decoding error: \(error.localizedDescription)")
             
-            // Fallback suggestion that matches hardcoded options and terms
+            // Fallback suggestions that are date-aware
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "EEEE, MMMM d"
+            let dateString = dateFormatter.string(from: selectedDate)
+            
             aiSuggestions = [
-                "Which of these game outcomes will happen: Team A wins by more than 10 points, Team B scores first, game goes into overtime, total points over 45.5, or a player scores 2+ touchdowns?"
+                "Which game on \(dateString) will have the highest total score?",
+                "What will happen first in the \(dateString) games: a touchdown, field goal, or turnover?",
+                "Which team will score first in the prime time game on \(dateString)?",
+                "Will any game on \(dateString) go into overtime?",
+                "Which player will have the most rushing yards on \(dateString)?"
             ]
         }
     }
-
-}
-
-
-
-
-#Preview {
-    NormalBetView(
-        navPath: .constant(NavigationPath()),
-        email: "preview@example.com",
-        userId: UUID()
-    )
 }
 
 struct BetOptionsView: View {
     @Binding var navPath: NavigationPath
     let betPrompt: String
+    let selectedDate: Date
     let email: String
     let userId: UUID?
 
@@ -162,6 +212,17 @@ struct BetOptionsView: View {
             ).ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 16) {
+                // Date Display
+                HStack {
+                    Image(systemName: "calendar")
+                        .foregroundColor(.blue)
+                    Text("Bet Date: \(selectedDate, style: .date)")
+                        .foregroundColor(.white.opacity(0.8))
+                        .font(.subheadline)
+                    Spacer()
+                }
+                .padding(.horizontal)
+
                 HStack {
                     Text("Options")
                         .foregroundColor(.white)
@@ -169,7 +230,7 @@ struct BetOptionsView: View {
                     Spacer()
                     Button {
                         Task {
-                            await generateOptions(betPrompt: betPrompt)
+                            await generateOptions(betPrompt: betPrompt, date: selectedDate)
                         }
                     } label: {
                         Image(systemName: "sparkles")
@@ -212,7 +273,9 @@ struct BetOptionsView: View {
                     Text("Terms (Penalties, Prizes, Rules)")
                         .foregroundColor(.white)
                     Spacer()
-                    Button { generateTerms() } label: {
+                    Button {
+                        generateTerms(date: selectedDate)
+                    } label: {
                         Image(systemName: "sparkles")
                             .foregroundColor(.yellow)
                             .font(.system(size: 20))
@@ -236,6 +299,7 @@ struct BetOptionsView: View {
                         navPath: $navPath,
                         email: email,
                         betPrompt: betPrompt,
+                        selectedDate: selectedDate,
                         betOptions: betOptions,
                         betTerms: betTerms,
                         betType: "normal",
@@ -261,12 +325,18 @@ struct BetOptionsView: View {
         }
     }
 
-    func generateOptions(betPrompt: String) {
+    func generateOptions(betPrompt: String, date: Date) {
         Task {
             do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateStyle = .full
+                let formattedDate = dateFormatter.string(from: date)
+                
                 let prompt = """
-                Based on the following bet prompt: "\(betPrompt)", generate exactly 5 short and specific bet options. \
-                Each option should be one sentence, measurable, and phrased like a realistic sports prop bet. \
+                Based on the following bet prompt: "\(betPrompt)" scheduled for \(formattedDate), generate exactly 5 short and specific bet options. \
+                Consider what sports events, games, or activities are likely to occur on \(formattedDate). \
+                Each option should be one sentence, measurable, and phrased like a realistic sports prop bet for that specific date. \
+                Make the options relevant to the timeframe and day of the week. \
                 Do not include any introductory text. Only return the 5 options, one per line.
                 """
 
@@ -302,27 +372,45 @@ struct BetOptionsView: View {
 
             } catch {
                 print("Failed to generate bet options: \(error)")
-                betOptions = [
-                    "Team A wins by more than 10 points",
-                    "Team B scores first",
-                    "Game goes into overtime",
-                    "Total points over 45.5",
-                    "A player scores 2 or more touchdowns"
-                ]
+                
+                // Date-aware fallback options
+                let dayOfWeek = Calendar.current.component(.weekday, from: date)
+                let isWeekend = dayOfWeek == 1 || dayOfWeek == 7 // Sunday or Saturday
+                
+                if isWeekend {
+                    betOptions = [
+                        "Which team will score first in the weekend games",
+                        "Total combined points will be over 50.5",
+                        "A game will go into overtime",
+                        "More than 3 field goals will be scored",
+                        "The winning margin will be less than 7 points"
+                    ]
+                } else {
+                    betOptions = [
+                        "Which team will perform better in weekday practice",
+                        "Player injury report will include more than 2 players",
+                        "Weather will affect the scheduled games",
+                        "Ticket prices will be higher than average",
+                        "Social media buzz will exceed 10k mentions"
+                    ]
+                }
             }
         }
     }
 
-    func generateTerms() {
+    func generateTerms(date: Date) {
         Task {
             do {
                 let betDescription = betOptions.joined(separator: ", ")
-                print("Generate concise, user-friendly terms and conditions for a bet involving: \(betDescription). Use simple language, no placeholders, and keep it under 300 words.")
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateStyle = .full
+                let formattedDate = dateFormatter.string(from: date)
                 
                 let prompt = """
-                Generate concise, user-friendly terms and conditions for a sports bet involving these options: \(betDescription). \
+                Generate concise, user-friendly terms and conditions for a sports bet scheduled for \(formattedDate) involving these options: \(betDescription). \
+                Include date-specific considerations such as game cancellations due to weather, postponements, or schedule changes that might affect bets on \(formattedDate). \
                 Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], \
-                and keep the response under 300 words.
+                and keep the response under 300 words. Make sure to address what happens if events are moved or cancelled on the target date.
                 """
                 
                 let responseText = try await AIServices.shared.sendPrompt(
@@ -336,23 +424,27 @@ struct BetOptionsView: View {
                 
             } catch {
                 print("Failed to generate bet terms: \(error)")
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateStyle = .medium
+                let formattedDate = dateFormatter.string(from: date)
+                
                 betTerms = """
-                If Team A wins by more than 10 points, the bettor wins. \
-                If Team B scores first but loses, the bet is void. \
-                Overtime bets only apply if the game officially enters overtime. \
-                'Total points over 45.5' is based on final score. \
-                A player scoring 2+ touchdowns must be on the starting roster.
+                Bet is valid for games and events occurring on \(formattedDate). \
+                If any scheduled games are postponed or cancelled on the target date, affected bets will be void. \
+                Results will be determined based on official game statistics from \(formattedDate). \
+                Weather-related cancellations or delays beyond \(formattedDate) will result in bet cancellation. \
+                All participants must confirm their selections before the first scheduled event on \(formattedDate).
                 """
             }
         }
     }
-
 }
 
 struct FinalizeBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
     let betPrompt: String
+    let selectedDate: Date
     let betOptions: [String]
     let betTerms: String
     let betType: String
@@ -379,6 +471,24 @@ struct FinalizeBetView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    
+                    // Date Display
+                    HStack {
+                        Image(systemName: "calendar.badge.clock")
+                            .foregroundColor(.blue)
+                            .font(.title2)
+                        VStack(alignment: .leading) {
+                            Text("Bet Date")
+                                .foregroundColor(.white.opacity(0.7))
+                                .font(.caption)
+                            Text(selectedDate, style: .date)
+                                .foregroundColor(.white)
+                                .font(.headline)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    
                     VStack(alignment: .leading) {
                         Text("Enter party name")
                             .foregroundColor(.white)
@@ -405,8 +515,9 @@ struct FinalizeBetView: View {
                             .padding(.horizontal)
 
                         Picker("Privacy", selection: $privacy) {
-                            Text("Public").tag("Public")
-                            Text("Private").tag("Private")
+                            Text("Open").tag("Open")
+                            Text("Friends Only").tag("Friends Only")
+                            Text("Invite Only").tag("Invite Only")
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
@@ -447,60 +558,24 @@ struct FinalizeBetView: View {
     }
 
     func randomizePartyName() {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMM d"
+        let dateString = dateFormatter.string(from: selectedDate)
+        
         let suggestions = [
-            "Bet Bros",
-            "Wager Warriors",
-            "Odds Squad",
-            "Risky Business",
-            "The Punters",
-            "Bet Brigade",
-            "High Stakes Hustlers",
-            "The Sure Things",
-            "Bankroll Bandits",
-            "The Spread Heads",
-            "Line Chasers",
-            "Over/Underlords",
-            "The Parlay Posse",
-            "Chalk Talkers",
-            "The Longshots",
-            "BetMates",
-            "Lock It In",
-            "Stake Syndicate",
-            "The Action Club",
-            "Prop Kings",
-            "Moneyline Mafia",
-            "Sharp Side",
-            "Field Goal Frenzy",
-            "Pick Six Crew",
-            "Wager Warlords",
-            "Gamblers Anonymous (Not Really)",
-            "Sunday Sweat",
-            "Cover Kings",
-            "Bad Beats Club",
-            "Bookie Busters",
-            "All-In Alliance",
-            "The Underdogs",
-            "Bet & Breakfast",
-            "Smart Money Mob",
-            "Cash It Crew",
-            "Lay the Points",
-            "Hedge Fund",
-            "Futures Fiends",
-            "The Juice Boys",
-            "Late Night Locks",
-            "The Bet Set",
-            "Spread Eagles",
-            "Next Play Paydays",
-            "Betflix & Chill",
-            "The Bet Cave",
-            "Degens United",
-            "Any Given Wager",
-            "Fantasy to Reality",
-            "Win or Wine",
-            "Stats Don't Lie"
+            "\(dateString) Bet Bros",
+            "\(dateString) Wager Warriors",
+            "\(dateString) Game Day Squad",
+            "\(dateString) Prediction Party",
+            "\(dateString) Lock & Load",
+            "\(dateString) Sure Things",
+            "\(dateString) Betting Brigade",
+            "\(dateString) Odds Squad",
+            "\(dateString) Props & Profits",
+            "\(dateString) Smart Money"
         ]
 
-        partyName = suggestions.randomElement() ?? "My Party"
+        partyName = suggestions.randomElement() ?? "My \(dateString) Party"
     }
 
     func submitBet() {
@@ -521,12 +596,23 @@ struct FinalizeBetView: View {
 
         let partyCode = UUID().uuidString.prefix(6).uppercased()
 
+        // Fix: Properly configure the DateFormatter
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
+        // Alternative formats you could use:
+        // dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss" // If you need timestamp
+        // dateFormatter.dateStyle = .medium // For human-readable format
+        
+        let formattedDate = dateFormatter.string(from: selectedDate)
+        print("🔄 Formatted date: \(formattedDate)") // Debug log to verify format
+        
         let payload = PartyInsertPayload(
             created_by: userId.uuidString,
             party_name: partyName,
             privacy_option: privacy,
             max_members: maxMembers,
             bet: betPrompt,
+            bet_date: formattedDate, // Now properly formatted
             bet_type: betType,
             options: betOptions,
             terms: betTerms,
@@ -536,7 +622,7 @@ struct FinalizeBetView: View {
 
         Task {
             do {
-                print("🔄 Creating party with code: \(partyCode)")
+                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate)")
                 
                 // First, insert the party
                 let response = try await supabaseClient
@@ -589,5 +675,33 @@ struct FinalizeBetView: View {
                 }
             }
         }
+    }
+}
+
+// Extension to AIServices for date-aware suggestions
+extension AIServices {
+    func generateBetSuggestionsWithDate(betType: String, count: Int, targetDate: String) async throws -> [String] {
+        let prompt = """
+        Generate \(count) creative and engaging sports betting suggestions for \(targetDate). 
+        Consider what sports events, games, or activities are likely to occur on \(targetDate).
+        Make the suggestions specific to the day of the week and season.
+        Each suggestion should be a complete betting question that users can answer with multiple choice options.
+        Focus on \(betType) betting scenarios that would be relevant for \(targetDate).
+        Return only the betting questions, one per line, without numbering or additional text.
+        """
+        
+        let response = try await sendPrompt(
+            prompt,
+            model: "gemini-2.5-flash-lite",
+            temperature: 0.8,
+            maxTokens: 400
+        )
+        
+        return response
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0.count > 10 }
+            .prefix(count)
+            .map { String($0) }
     }
 }
