@@ -109,11 +109,7 @@ struct BetTypeView: View {
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
+                    EmptyView()
                 }
             }
             .sheet(isPresented: $showProfile) {
@@ -244,6 +240,6 @@ struct BetTypeView: View {
 
 #Preview {
     NavigationView {
-        BetTypeView(navPath: .constant(NavigationPath()), email: "test@example.com")
+        BetTypeView(navPath: .constant(NavigationPath()), email: "danielrafailov7@gmail.com")
     }
 }
