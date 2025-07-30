@@ -332,69 +332,133 @@ struct BetOptionsView: View {
                 dateFormatter.dateStyle = .full
                 let formattedDate = dateFormatter.string(from: date)
                 
-                let prompt = """
-                Based on the following bet prompt: "\(betPrompt)" scheduled for \(formattedDate), generate exactly 5 short and specific bet options. \
-                Consider what sports events, games, or activities are likely to occur on \(formattedDate). \
-                Each option should be one sentence, measurable, and phrased like a realistic sports prop bet for that specific date. \
-                Make the options relevant to the timeframe and day of the week. \
-                Do not include any introductory text. Only return the 5 options, one per line.
-                """
+                // Smart detection of bet type
+                let isBinaryBet = detectBinaryBet(betPrompt)
+                let optionCount = isBinaryBet ? 2 : 4 // Binary gets 2, others get 4
+                
+                let prompt: String
+                
+                if isBinaryBet {
+                    prompt = """
+                    Based on this bet: "\(betPrompt)" scheduled for \(formattedDate), generate exactly \(optionCount) simple, direct answer options.
+                    
+                    This appears to be a simple either/or question. Provide only the two most obvious choices.
+                    For example:
+                    - If it's "Who will win X vs Y", return: "Team X" and "Team Y"
+                    - If it's "Will X happen", return: "Yes" and "No"
+                    
+                    Keep options short (1-4 words each) and direct. No complex scenarios or point spreads.
+                    Return only the options, one per line, no numbering.
+                    """
+                } else {
+                    prompt = """
+                    Based on this bet: "\(betPrompt)" scheduled for \(formattedDate), generate exactly \(optionCount) realistic and specific options.
+                    
+                    Consider what's likely to happen on \(formattedDate) and create measurable outcomes.
+                    Each option should be one clear sentence that can be definitively determined as true or false.
+                    Keep options concise but specific enough to be interesting.
+                    
+                    Return only the options, one per line, no numbering or extra text.
+                    """
+                }
 
                 let responseText = try await AIServices.shared.sendPrompt(
                     prompt,
                     model: "gemini-2.5-flash-lite",
-                    temperature: 0.7,
-                    maxTokens: 300
+                    temperature: 0.6, // Lower temperature for more focused responses
+                    maxTokens: 200 // Reduced token limit to encourage brevity
                 )
 
-                // Split and clean the response
+                // Clean and process the response
                 let cleanedLines = responseText
                     .components(separatedBy: .newlines)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter {
-                        !$0.isEmpty &&
-                        !$0.lowercased().contains("option") &&
-                        !$0.lowercased().contains("here") &&
-                        !$0.lowercased().contains("bet prompt") &&
-                        !$0.lowercased().contains("generate")
-                    }
+                    .filter { !$0.isEmpty }
                     .map {
-                        // Remove leading "1.", "-", etc.
-                        $0.replacingOccurrences(of: #"^\s*[\d\-\•]+\s*"#, with: "", options: .regularExpression)
+                        // Remove common prefixes
+                        $0.replacingOccurrences(of: #"^\s*[\d\-\•\*]+\.?\s*"#, with: "", options: .regularExpression)
                     }
-                    .filter { $0.count > 8 }  // reasonable length
+                    .filter { $0.count > 2 && $0.count < 100 } // Reasonable length bounds
 
-                betOptions = Array(cleanedLines.prefix(5))
+                betOptions = Array(cleanedLines.prefix(optionCount))
 
+                // Fallback with smart defaults
                 if betOptions.isEmpty {
-                    throw NSError(domain: "AIResponseParsing", code: 1, userInfo: [NSLocalizedDescriptionKey: "No valid options found"])
+                    betOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet)
                 }
 
             } catch {
                 print("Failed to generate bet options: \(error)")
-                
-                // Date-aware fallback options
-                let dayOfWeek = Calendar.current.component(.weekday, from: date)
-                let isWeekend = dayOfWeek == 1 || dayOfWeek == 7 // Sunday or Saturday
-                
-                if isWeekend {
-                    betOptions = [
-                        "Which team will score first in the weekend games",
-                        "Total combined points will be over 50.5",
-                        "A game will go into overtime",
-                        "More than 3 field goals will be scored",
-                        "The winning margin will be less than 7 points"
-                    ]
-                } else {
-                    betOptions = [
-                        "Which team will perform better in weekday practice",
-                        "Player injury report will include more than 2 players",
-                        "Weather will affect the scheduled games",
-                        "Ticket prices will be higher than average",
-                        "Social media buzz will exceed 10k mentions"
-                    ]
+                betOptions = generateFallbackOptions(for: betPrompt, isBinary: detectBinaryBet(betPrompt))
+            }
+        }
+    }
+
+    // Helper function to detect if a bet is binary
+    func detectBinaryBet(_ prompt: String) -> Bool {
+        let lowercased = prompt.lowercased()
+        
+        // Check for binary indicators
+        let binaryKeywords = [
+            "who will win", "vs", " v ", "or", "will there be", "will it", "yes or no",
+            "true or false", "happen or not", "over or under"
+        ]
+        
+        let versusPatterns = [
+            " vs? ",  // "vs" or "v"
+            " versus ",
+            "\\b\\w+ or \\w+\\b" // "team1 or team2"
+        ]
+        
+        // Check for direct binary language
+        for keyword in binaryKeywords {
+            if lowercased.contains(keyword) {
+                return true
+            }
+        }
+        
+        // Check for versus patterns with regex
+        for pattern in versusPatterns {
+            if lowercased.range(of: pattern, options: .regularExpression) != nil {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    func generateFallbackOptions(for prompt: String, isBinary: Bool) -> [String] {
+        if isBinary {
+            let lowercased = prompt.lowercased()
+            
+            // Try to extract team names or entities
+            if lowercased.contains("who will win") {
+                // Look for team names after common patterns
+                if let vsRange = lowercased.range(of: " vs ") ?? lowercased.range(of: " v ") {
+                    let afterVs = String(lowercased[vsRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let beforeVs = String(lowercased[..<vsRange.lowerBound])
+                    
+                    if let lastWord = beforeVs.components(separatedBy: " ").last,
+                       let firstWord = afterVs.components(separatedBy: " ").first {
+                        return [lastWord.capitalized, firstWord.capitalized]
+                    }
                 }
             }
+            
+            // Generic binary fallbacks
+            if lowercased.contains("will") {
+                return ["Yes", "No"]
+            }
+            
+            return ["Option A", "Option B"]
+        } else {
+            // Multi-option fallbacks
+            return [
+                "Most likely outcome",
+                "Second most likely",
+                "Unexpected result",
+                "Long shot possibility"
+            ]
         }
     }
 
