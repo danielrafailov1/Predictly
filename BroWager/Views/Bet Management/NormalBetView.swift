@@ -28,7 +28,7 @@ struct NormalBetView: View {
     @State private var selectedDay = Calendar.current.component(.day, from: Date())
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
     
-    private let months = Calendar.current.monthSymbols
+    private let months = Array(1...12)
     private let currentYear = Calendar.current.component(.year, from: Date())
     
     private var years: [Int] {
@@ -149,96 +149,34 @@ struct NormalBetView: View {
                     }
                     .padding(.horizontal)
                     
-                    // Custom Scrollable Date Picker Section
+                    // TimerSetView-style Date Picker Section
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Choose a date for your bet")
                             .foregroundColor(.white)
                             .font(.title2)
                             .padding(.horizontal)
                         
-                        HStack(spacing: 20) {
-                            // Month Picker
-                            VStack {
-                                Text("Month")
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.system(size: 14, weight: .medium))
-                                
-                                ScrollView {
-                                    VStack(spacing: 8) {
-                                        ForEach(Array(months.enumerated()), id: \.offset) { index, month in
-                                            Button(action: {
-                                                selectedMonth = index + 1
-                                                updateSelectedDate()
-                                            }) {
-                                                Text(month)
-                                                    .padding(.vertical, 8)
-                                                    .padding(.horizontal, 12)
-                                                    .foregroundColor(selectedMonth == index + 1 ? .blue : .white)
-                                                    .font(.system(size: 16, weight: selectedMonth == index + 1 ? .semibold : .regular))
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(height: 120)
-                            }
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 0) {
+                            DatePickerView(title: "Month",
+                                         range: 1...12,
+                                         binding: $selectedMonth,
+                                         formatter: { monthNumber in
+                                             Calendar.current.monthSymbols[monthNumber - 1]
+                                         })
                             
-                            // Day Picker
-                            VStack {
-                                Text("Day")
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.system(size: 14, weight: .medium))
-                                
-                                ScrollView {
-                                    VStack(spacing: 8) {
-                                        ForEach(days, id: \.self) { day in
-                                            Button(action: {
-                                                selectedDay = day
-                                                updateSelectedDate()
-                                            }) {
-                                                Text("\(day)")
-                                                    .padding(.vertical, 8)
-                                                    .padding(.horizontal, 12)
-                                                    .foregroundColor(selectedDay == day ? .blue : .white)
-                                                    .font(.system(size: 16, weight: selectedDay == day ? .semibold : .regular))
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(height: 120)
-                            }
-                            .frame(maxWidth: .infinity)
+                            DatePickerView(title: "Day",
+                                         range: 1...days.count,
+                                         binding: $selectedDay)
                             
-                            // Year Picker
-                            VStack {
-                                Text("Year")
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.system(size: 14, weight: .medium))
-                                
-                                ScrollView {
-                                    VStack(spacing: 8) {
-                                        ForEach(years, id: \.self) { year in
-                                            Button(action: {
-                                                selectedYear = year
-                                                updateSelectedDate()
-                                            }) {
-                                                Text(String(year))
-                                                    .padding(.vertical, 8)
-                                                    .padding(.horizontal, 12)
-                                                    .foregroundColor(selectedYear == year ? .blue : .white)
-                                                    .font(.system(size: 16, weight: selectedYear == year ? .semibold : .regular))
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(height: 120)
-                            }
-                            .frame(maxWidth: .infinity)
+                            DatePickerView(title: "Year",
+                                         range: currentYear...(currentYear + 5),
+                                         binding: $selectedYear)
                         }
+                        .frame(height: 100)
                         .padding(.horizontal)
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
+                        .onChange(of: selectedMonth) { _ in updateSelectedDate() }
+                        .onChange(of: selectedDay) { _ in updateSelectedDate() }
+                        .onChange(of: selectedYear) { _ in updateSelectedDate() }
                         
                         // Display selected date
                         HStack {
@@ -457,6 +395,44 @@ struct NormalBetView: View {
                 "What color car will drive by next?",
                 "Which of us will wake up earliest tomorrow?"
             ]
+        }
+    }
+}
+
+// New DatePickerView component similar to TimerSetView
+struct DatePickerView: View {
+    private let pickerViewTitlePadding: CGFloat = 4.0
+    
+    let title: String
+    let range: ClosedRange<Int>
+    let binding: Binding<Int>
+    let formatter: ((Int) -> String)?
+    
+    init(title: String, range: ClosedRange<Int>, binding: Binding<Int>, formatter: ((Int) -> String)? = nil) {
+        self.title = title
+        self.range = range
+        self.binding = binding
+        self.formatter = formatter
+    }
+    
+    var body: some View {
+        HStack(spacing: -pickerViewTitlePadding) {
+            Picker(title, selection: binding) {
+                ForEach(range, id: \.self) { value in
+                    HStack {
+                        Spacer()
+                        Text(formatter?(value) ?? "\(value)")
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+            .pickerStyle(InlinePickerStyle())
+            .labelsHidden()
+            
+            Text(title)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
         }
     }
 }
