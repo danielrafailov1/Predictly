@@ -99,7 +99,8 @@ struct BetTypeView: View {
             .navigationDestination(for: BetTypePath.self) { path in
                 switch path {
                 case .normal:
-                    NormalBetView(navPath: $navPath, email: email, userId: userId)
+                    BetCategoryView(navPath: $navPath, email: email, userId: userId)
+//                    NormalBetView(navPath: $navPath, email: email, userId: userId)
                 case .timed:
                     TimedBetSettingView()
                 case .contest:

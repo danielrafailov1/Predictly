@@ -18,6 +18,35 @@ struct ConfirmBetOutcomeView: View {
     @State private var betDate: Date?
     @State private var isAIVerifying = false
     
+    // New AI verification states
+    @State private var aiVerificationStatus: [String: AIVerificationStatus] = [:]
+    @State private var showAIOverrideWarning = false
+    
+    enum AIVerificationStatus {
+        case correct      // Green checkmark ✓
+        case incorrect    // Red X ✗
+        case uncertain    // Orange dash –
+        case notVerified  // No indicator
+        
+        var color: Color {
+            switch self {
+            case .correct: return .green
+            case .incorrect: return .red
+            case .uncertain: return .orange
+            case .notVerified: return .clear
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .correct: return "checkmark"
+            case .incorrect: return "xmark"
+            case .uncertain: return "minus"
+            case .notVerified: return ""
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -30,7 +59,7 @@ struct ConfirmBetOutcomeView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea(.all) // This ensures the gradient covers everything
+                .ignoresSafeArea(.all)
                 
                 if isLoading {
                     ProgressView()
@@ -86,7 +115,7 @@ struct ConfirmBetOutcomeView: View {
                                         ProgressView()
                                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
                                             .scaleEffect(0.8)
-                                        Text("AI is verifying bet outcome...")
+                                        Text("AI is analyzing bet outcome...")
                                             .font(.system(size: 16, weight: .medium))
                                             .foregroundColor(.blue)
                                     }
@@ -97,33 +126,62 @@ struct ConfirmBetOutcomeView: View {
                                 }
                             }
                             
-                            // AI Verification Result
-                            if !aiVerificationResult.isEmpty {
-                                VStack(alignment: .leading, spacing: 8) {
+                            // AI Verification Summary
+                            if !aiVerificationResult.isEmpty && !isAIVerifying {
+                                VStack(alignment: .leading, spacing: 12) {
                                     HStack {
                                         Image(systemName: "brain.head.profile")
                                             .foregroundColor(.yellow)
-                                        Text("AI Verification Result:")
+                                        Text("AI Analysis Complete")
                                             .font(.system(size: 16, weight: .semibold))
                                             .foregroundColor(.yellow)
                                     }
                                     
-                                    Text(aiVerificationResult)
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.9))
-                                        .padding()
-                                        .background(Color.blue.opacity(0.2))
-                                        .cornerRadius(10)
+                                    // AI Verification Legend
+                                    HStack(spacing: 20) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.green)
+                                                .font(.system(size: 12, weight: .bold))
+                                            Text("Correct")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.green)
+                                        }
+                                        
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "minus")
+                                                .foregroundColor(.orange)
+                                                .font(.system(size: 12, weight: .bold))
+                                            Text("Uncertain")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.orange)
+                                        }
+                                        
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "xmark")
+                                                .foregroundColor(.red)
+                                                .font(.system(size: 12, weight: .bold))
+                                            Text("Incorrect")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.red)
+                                        }
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 8)
                                     
-                                    Text("AI has automatically selected the recommended options. Review and modify if needed.")
+                                    Text("Review AI suggestions below and modify your selection if needed.")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white.opacity(0.7))
                                         .italic()
                                 }
+                                .padding()
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(12)
                                 .padding(.horizontal, 24)
                             }
                             
-                            // Options Selection
+                            // Options Selection with AI Indicators
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Select the correct answer(s):")
                                     .font(.system(size: 18, weight: .semibold))
@@ -132,28 +190,43 @@ struct ConfirmBetOutcomeView: View {
                                 
                                 ForEach(betOptions, id: \.self) { option in
                                     Button(action: {
-                                        if selectedWinningOptions.contains(option) {
-                                            selectedWinningOptions.remove(option)
-                                        } else {
-                                            selectedWinningOptions.insert(option)
-                                        }
+                                        toggleOption(option)
                                     }) {
-                                        HStack {
+                                        HStack(spacing: 12) {
+                                            // User selection indicator
                                             Image(systemName: selectedWinningOptions.contains(option) ? "checkmark.circle.fill" : "circle")
-                                                .foregroundColor(selectedWinningOptions.contains(option) ? .green : .white.opacity(0.6))
+                                                .foregroundColor(selectedWinningOptions.contains(option) ? .blue : .white.opacity(0.6))
                                                 .font(.system(size: 20))
                                             
+                                            // Option text
                                             Text(option)
                                                 .font(.system(size: 16, weight: .medium))
                                                 .foregroundColor(.white)
                                                 .multilineTextAlignment(.leading)
                                             
                                             Spacer()
+                                            
+                                            // AI verification indicator
+                                            if let status = aiVerificationStatus[option], status != .notVerified {
+                                                VStack(spacing: 2) {
+                                                    Image(systemName: status.icon)
+                                                        .foregroundColor(status.color)
+                                                        .font(.system(size: 14, weight: .bold))
+                                                    
+                                                    Text("AI")
+                                                        .font(.system(size: 8, weight: .bold))
+                                                        .foregroundColor(status.color)
+                                                }
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 4)
+                                                .background(status.color.opacity(0.2))
+                                                .cornerRadius(6)
+                                            }
                                         }
                                         .padding()
                                         .background(
                                             selectedWinningOptions.contains(option)
-                                            ? Color.green.opacity(0.2)
+                                            ? Color.blue.opacity(0.2)
                                             : Color.white.opacity(0.1)
                                         )
                                         .cornerRadius(12)
@@ -161,7 +234,7 @@ struct ConfirmBetOutcomeView: View {
                                             RoundedRectangle(cornerRadius: 12)
                                                 .stroke(
                                                     selectedWinningOptions.contains(option)
-                                                    ? Color.green
+                                                    ? Color.blue
                                                     : Color.white.opacity(0.2),
                                                     lineWidth: selectedWinningOptions.contains(option) ? 2 : 1
                                                 )
@@ -170,6 +243,28 @@ struct ConfirmBetOutcomeView: View {
                                     .padding(.horizontal, 24)
                                     .disabled(isAIVerifying)
                                 }
+                            }
+                            
+                            // User Override Warning
+                            if hasUserOverride() {
+                                VStack(spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(.orange)
+                                        Text("Manual Override Detected")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.orange)
+                                    }
+                                    
+                                    Text("Your selection differs from AI recommendations. Please double-check before confirming.")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .multilineTextAlignment(.center)
+                                }
+                                .padding()
+                                .background(Color.orange.opacity(0.1))
+                                .cornerRadius(10)
+                                .padding(.horizontal, 24)
                             }
                             
                             // Error Message
@@ -183,22 +278,46 @@ struct ConfirmBetOutcomeView: View {
                                     .padding(.horizontal, 24)
                             }
                             
-                            // Confirm Outcome Button
-                            Button(action: {
-                                showConfirmation = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                    Text("Confirm Bet Outcome")
+                            // Action Buttons
+                            VStack(spacing: 12) {
+                                // Rerun AI Verification Button
+                                if !aiVerificationResult.isEmpty {
+                                    Button(action: {
+                                        Task {
+                                            await askAIForVerification()
+                                        }
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "arrow.clockwise")
+                                            Text("Re-run AI Analysis")
+                                        }
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 24)
+                                        .background(Color.blue.opacity(0.8))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
+                                    }
+                                    .disabled(isAIVerifying)
                                 }
-                                .font(.system(size: 20, weight: .bold))
-                                .padding(.vertical, 14)
-                                .padding(.horizontal, 32)
-                                .background(selectedWinningOptions.isEmpty || isAIVerifying ? Color.gray : Color.green.opacity(0.9))
-                                .foregroundColor(.white)
-                                .cornerRadius(14)
+                                
+                                // Confirm Outcome Button
+                                Button(action: {
+                                    showConfirmation = true
+                                }) {
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                        Text("Confirm Bet Outcome")
+                                    }
+                                    .font(.system(size: 20, weight: .bold))
+                                    .padding(.vertical, 14)
+                                    .padding(.horizontal, 32)
+                                    .background(selectedWinningOptions.isEmpty || isAIVerifying ? Color.gray : Color.green.opacity(0.9))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(14)
+                                }
+                                .disabled(selectedWinningOptions.isEmpty || isAIVerifying)
                             }
-                            .disabled(selectedWinningOptions.isEmpty || isAIVerifying)
                             .padding(.top, 20)
                         }
                         .padding(.bottom, 30)
@@ -206,16 +325,14 @@ struct ConfirmBetOutcomeView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar) // Hide the navigation bar background
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .onAppear {
-            // Load bet date and automatically trigger AI verification
             Task {
                 await loadBetDate()
                 await askAIForVerification()
             }
             
-            // Set navigation bar appearance
             let appearance = UINavigationBarAppearance()
             appearance.configureWithTransparentBackground()
             appearance.backgroundColor = .clear
@@ -230,11 +347,33 @@ struct ConfirmBetOutcomeView: View {
                 }
             }
         } message: {
-            Text("Are you sure these are the correct winning options? This action cannot be undone.")
+            let overrideText = hasUserOverride() ? " Note: Your selection differs from AI recommendations." : ""
+            Text("Are you sure these are the correct winning options? This action cannot be undone.\(overrideText)")
         }
     }
     
-    // Load bet date from database
+    // MARK: - Helper Functions
+    
+    private func toggleOption(_ option: String) {
+        if selectedWinningOptions.contains(option) {
+            selectedWinningOptions.remove(option)
+        } else {
+            selectedWinningOptions.insert(option)
+        }
+    }
+    
+    private func hasUserOverride() -> Bool {
+        // Check if user's selection differs from AI recommendations
+        let aiCorrectOptions = aiVerificationStatus.compactMap { key, value in
+            value == .correct ? key : nil
+        }
+        
+        let aiCorrectSet = Set(aiCorrectOptions)
+        return !aiCorrectSet.isEmpty && selectedWinningOptions != aiCorrectSet
+    }
+    
+    // MARK: - Data Loading
+    
     private func loadBetDate() async {
         do {
             let response = try await supabaseClient
@@ -250,7 +389,6 @@ struct ConfirmBetOutcomeView: View {
             
             let partyDateResponse = try JSONDecoder().decode(PartyDateResponse.self, from: response.data)
             
-            // Parse the date string
             let dateFormatter = ISO8601DateFormatter()
             if let parsedDate = dateFormatter.date(from: partyDateResponse.bet_date) {
                 await MainActor.run {
@@ -262,15 +400,16 @@ struct ConfirmBetOutcomeView: View {
         }
     }
     
-    // Updated askAIForVerification function that runs automatically
+    // MARK: - AI Verification
+    
     private func askAIForVerification() async {
         await MainActor.run {
             isAIVerifying = true
             errorMessage = nil
+            aiVerificationStatus = [:]
         }
         
         do {
-            // Get the bet date from the database first
             let partyResponse = try await supabaseClient
                 .from("Parties")
                 .select("bet_date")
@@ -284,23 +423,26 @@ struct ConfirmBetOutcomeView: View {
             
             let partyDate = try JSONDecoder().decode(PartyDate.self, from: partyResponse.data)
             
-            // Create a comprehensive prompt for bet outcome verification with date context
             let prompt = """
-            You are a sports betting outcome analyzer with access to real-time sports data. Analyze the following bet for the specific date and determine which option(s) are correct.
+            You are a sports betting outcome analyzer with access to real-time sports data. Analyze the following bet for the specific date and determine the status of each option.
 
             Bet Date: \(partyDate.bet_date)
             Bet Question: \(betPrompt)
-            Available Options: \(betOptions.joined(separator: ", "))
+            Available Options: \(betOptions.numbered())
 
             IMPORTANT: Only analyze games and events that occurred on \(partyDate.bet_date). Do not use data from other dates.
 
             Please research the game results and statistics specifically for \(partyDate.bet_date). Then provide your analysis in the following format:
 
             ANALYSIS:
-            [Your detailed analysis of why certain options are correct based on events from \(partyDate.bet_date)]
+            [Your detailed analysis of the game/event results from \(partyDate.bet_date)]
 
-            CORRECT OPTIONS:
-            [List the correct option(s) from the available options based on \(partyDate.bet_date) results]
+            OPTION VERIFICATION:
+            For each option, classify as CORRECT, INCORRECT, or UNCERTAIN:
+            \(betOptions.enumerated().map { "Option \($0.offset + 1): \($0.element) - [CORRECT/INCORRECT/UNCERTAIN]" }.joined(separator: "\n"))
+
+            EXPLANATION:
+            [Explain your reasoning for each option's classification]
 
             CONFIDENCE:
             [High/Medium/Low confidence level with reasoning]
@@ -308,28 +450,27 @@ struct ConfirmBetOutcomeView: View {
             DATE VERIFICATION:
             [Confirm that your analysis is based on events from \(partyDate.bet_date) specifically]
 
-            Note: Only select options that are definitely correct based on verified game data from the specified date. If you cannot verify the results for that specific date, please state that clearly.
+            Note: 
+            - CORRECT: The option is definitely true based on verified results
+            - INCORRECT: The option is definitely false based on verified results  
+            - UNCERTAIN: Cannot verify with confidence due to insufficient data or ambiguity
             """
 
-            // Use your existing AIServices to get the analysis
             let aiResponse = try await AIServices.shared.sendPrompt(
                 prompt,
                 model: "gemini-2.5-flash",
-                temperature: 0.1, // Low temperature for factual analysis
-                maxTokens: 1200
+                temperature: 0.1,
+                maxTokens: 1500
             )
 
-            // Parse the AI response to extract suggested winners
-            let suggestedWinners = parseAIResponse(aiResponse)
+            let (verificationStatus, autoSelections) = parseAIVerificationResponse(aiResponse)
 
             await MainActor.run {
                 self.aiVerificationResult = aiResponse
+                self.aiVerificationStatus = verificationStatus
                 
-                // Auto-select the AI's suggested winners if any were found
-                if !suggestedWinners.isEmpty {
-                    self.selectedWinningOptions = Set(suggestedWinners)
-                }
-                
+                // Auto-select AI's correct options
+                self.selectedWinningOptions = Set(autoSelections)
                 self.isAIVerifying = false
             }
 
@@ -342,69 +483,83 @@ struct ConfirmBetOutcomeView: View {
             }
         }
     }
-
-    // Helper function to parse AI response and extract suggested winners
-    private func parseAIResponse(_ response: String) -> [String] {
-        var suggestedWinners: [String] = []
+    
+    private func parseAIVerificationResponse(_ response: String) -> ([String: AIVerificationStatus], [String]) {
+        var verificationStatus: [String: AIVerificationStatus] = [:]
+        var autoSelections: [String] = []
         
-        // Look for the "CORRECT OPTIONS:" section
         let lines = response.components(separatedBy: .newlines)
-        var inCorrectOptionsSection = false
+        var inVerificationSection = false
         
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
-            if trimmedLine.uppercased().contains("CORRECT OPTION") {
-                inCorrectOptionsSection = true
+            if trimmedLine.uppercased().contains("OPTION VERIFICATION") {
+                inVerificationSection = true
                 continue
             }
             
-            if inCorrectOptionsSection {
-                // Stop if we hit another section
-                if trimmedLine.uppercased().contains("CONFIDENCE:") ||
-                   trimmedLine.uppercased().contains("ANALYSIS:") ||
+            if inVerificationSection {
+                if trimmedLine.uppercased().contains("EXPLANATION:") ||
+                   trimmedLine.uppercased().contains("CONFIDENCE:") ||
                    trimmedLine.uppercased().contains("DATE VERIFICATION:") {
                     break
                 }
                 
-                // Check if any of our bet options are mentioned in this line
-                for option in betOptions {
-                    // Clean the option for comparison
-                    let cleanOption = option.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let cleanLine = trimmedLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                    
-                    // Look for exact matches or close matches
-                    if cleanLine.lowercased().contains(cleanOption.lowercased()) &&
-                       !suggestedWinners.contains(cleanOption) {
-                        suggestedWinners.append(cleanOption)
-                        print("🔍 AI suggested winner: '\(cleanOption)' from line: '\(cleanLine)'")
+                // Parse option verification lines
+                for (index, option) in betOptions.enumerated() {
+                    let optionPattern = "Option \\(index + 1):"
+                    if trimmedLine.range(of: optionPattern, options: .regularExpression) != nil {
+                        if trimmedLine.uppercased().contains("CORRECT") {
+                            verificationStatus[option] = .correct
+                            autoSelections.append(option)
+                            print("🔍 AI marked as CORRECT: \(option)")
+                        } else if trimmedLine.uppercased().contains("INCORRECT") {
+                            verificationStatus[option] = .incorrect
+                            print("🔍 AI marked as INCORRECT: \(option)")
+                        } else if trimmedLine.uppercased().contains("UNCERTAIN") {
+                            verificationStatus[option] = .uncertain
+                            print("🔍 AI marked as UNCERTAIN: \(option)")
+                        }
+                        break
                     }
                 }
             }
         }
         
-        // Fallback: scan the entire response for bet options
-        if suggestedWinners.isEmpty {
+        // Fallback parsing if structured format wasn't found
+        if verificationStatus.isEmpty {
             for option in betOptions {
-                let cleanOption = option.trimmingCharacters(in: .whitespacesAndNewlines)
+                let optionLower = option.lowercased()
                 let responseLower = response.lowercased()
-                let optionLower = cleanOption.lowercased()
                 
-                // Look for the option mentioned with positive indicators
-                if responseLower.contains(optionLower) &&
-                   (responseLower.contains("correct") ||
-                    responseLower.contains("winner") ||
-                    responseLower.contains("true") ||
-                    responseLower.contains("yes")) {
-                    suggestedWinners.append(cleanOption)
-                    print("🔍 AI fallback suggested winner: '\(cleanOption)'")
+                if responseLower.contains(optionLower) {
+                    if responseLower.contains("correct") && responseLower.contains(optionLower) {
+                        verificationStatus[option] = .correct
+                        autoSelections.append(option)
+                    } else if responseLower.contains("incorrect") && responseLower.contains(optionLower) {
+                        verificationStatus[option] = .incorrect
+                    } else {
+                        verificationStatus[option] = .uncertain
+                    }
                 }
             }
         }
         
-        print("🔍 Final AI suggested winners: \(suggestedWinners)")
-        return suggestedWinners
+        // Set any unverified options to notVerified
+        for option in betOptions {
+            if verificationStatus[option] == nil {
+                verificationStatus[option] = .notVerified
+            }
+        }
+        
+        print("🔍 AI Verification Status: \(verificationStatus)")
+        print("🔍 AI Auto-selections: \(autoSelections)")
+        
+        return (verificationStatus, autoSelections)
     }
+    
+    // MARK: - Bet Confirmation
     
     private func confirmBetOutcome() async {
         await MainActor.run {
@@ -415,7 +570,6 @@ struct ConfirmBetOutcomeView: View {
         do {
             let winningOptionsArray = Array(selectedWinningOptions)
             
-            // Alternative approach: Use a struct for the update
             struct PartyUpdate: Codable {
                 let winning_options: [String]
                 let game_status: String
@@ -426,14 +580,12 @@ struct ConfirmBetOutcomeView: View {
                 game_status: "ended"
             )
             
-            // 1. Update the party with the winning options and game status
             _ = try await supabaseClient
                 .from("Parties")
                 .update(updateData)
                 .eq("id", value: Int(partyId))
                 .execute()
             
-            // 2. Calculate and update bet results
             await calculateBetResults(winningOptions: winningOptionsArray)
             
             await MainActor.run {
@@ -454,7 +606,6 @@ struct ConfirmBetOutcomeView: View {
         print("🔍 Starting bet results calculation with winning options: \(winningOptions)")
         
         do {
-            // Fetch all user bets for this party
             let userBetsResponse = try await supabaseClient
                 .from("User Bets")
                 .select("id, user_id, bet_selection")
@@ -464,22 +615,19 @@ struct ConfirmBetOutcomeView: View {
             struct UserBetResult: Codable {
                 let id: Int64
                 let user_id: String
-                let bet_selection: String // This is stored as text (comma-separated)
+                let bet_selection: String
             }
             
             let userBets = try JSONDecoder().decode([UserBetResult].self, from: userBetsResponse.data)
             print("🔍 Found \(userBets.count) user bets to evaluate")
             
-            // Calculate results for each user
             for userBet in userBets {
-                // Parse the user's selection from comma-separated text
                 let userSelectionArray = userBet.bet_selection.components(separatedBy: ", ").filter { !$0.isEmpty }
                 let isWinner = calculateIfWinner(userSelection: userSelectionArray, winningOptions: winningOptions)
                 
                 print("🔍 User \(userBet.user_id) selected: \(userSelectionArray)")
                 print("🔍 User \(userBet.user_id) is winner: \(isWinner)")
                 
-                // Update the bet with the result
                 _ = try await supabaseClient
                     .from("User Bets")
                     .update(["is_winner": isWinner])
@@ -493,29 +641,32 @@ struct ConfirmBetOutcomeView: View {
             
         } catch {
             print("❌ Error calculating bet results: \(error)")
-            // Don't throw here to avoid disrupting the main flow
         }
     }
     
     private func calculateIfWinner(userSelection: [String], winningOptions: [String]) -> Bool {
-        // Clean and normalize both user selections and winning options
         let cleanUserSelection = Set(userSelection.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         })
         
         let cleanWinningOptions = Set(winningOptions.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         })
         
         print("🔍 Comparing user selection: \(cleanUserSelection)")
         print("🔍 Against winning options: \(cleanWinningOptions)")
         
-        // Check if user's selection contains any of the winning options
         let hasMatch = !cleanUserSelection.intersection(cleanWinningOptions).isEmpty
         print("🔍 Match found: \(hasMatch)")
         
         return hasMatch
+    }
+}
+
+// MARK: - Extensions
+
+extension Array where Element == String {
+    func numbered() -> String {
+        return self.enumerated().map { "Option \($0.offset + 1): \($0.element)" }.joined(separator: "\n")
     }
 }

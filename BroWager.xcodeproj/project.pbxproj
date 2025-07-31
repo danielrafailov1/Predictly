@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4B1F1B2F2E3AE34D00197463 /* BetCategoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1F1B2E2E3AE34900197463 /* BetCategoryView.swift */; };
 		4B2D15792DFCB3B50068E5E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4B2D15772DFCB3B50068E5E4 /* Assets.xcassets */; };
 		4B2D157C2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2D157A2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift */; };
 		4B2D15812DFCB3BD0068E5E4 /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2D157E2DFCB3BD0068E5E4 /* ProfileManager.swift */; };
@@ -78,6 +79,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4B1F1B2E2E3AE34900197463 /* BetCategoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetCategoryView.swift; sourceTree = "<group>"; };
 		4B2D15772DFCB3B50068E5E4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4B2D157A2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "SupabaseClient+Extensions.swift"; sourceTree = "<group>"; };
 		4B2D157E2DFCB3BD0068E5E4 /* ProfileManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ProfileManager.swift; sourceTree = "<group>"; };
@@ -216,6 +218,7 @@
 		4B2D158E2DFCB3CB0068E5E4 /* Bet Management */ = {
 			isa = PBXGroup;
 			children = (
+				4B1F1B2E2E3AE34900197463 /* BetCategoryView.swift */,
 				4B56EEED2E15B20D0088E513 /* HostBetGenerationView.swift */,
 				4BE606BD2E36CC14009E0EBC /* PlaceBetView.swift */,
 				4B786A242E314C72004E5105 /* NormalBetView.swift */,
@@ -546,6 +549,7 @@
 				4B2D15AE2DFCB3CB0068E5E4 /* SoccerView.swift in Sources */,
 				4BFA57052DFCB36400D69E6C /* BroWagerApp.swift in Sources */,
 				4BF3C8962E08C95C00872BEC /* BetTypePath.swift in Sources */,
+				4B1F1B2F2E3AE34D00197463 /* BetCategoryView.swift in Sources */,
 				4B786A252E314C79004E5105 /* NormalBetView.swift in Sources */,
 				4BDD178C2E01F3F400CD117D /* LoginSignupView.swift in Sources */,
 				4B2D15AD2DFCB3CB0068E5E4 /* HockeyView.swift in Sources */,
