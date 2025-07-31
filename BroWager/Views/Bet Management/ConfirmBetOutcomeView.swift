@@ -18,9 +18,12 @@ struct ConfirmBetOutcomeView: View {
     @State private var betDate: Date?
     @State private var isAIVerifying = false
     
-    // New AI verification states
+    // Enhanced AI verification states
     @State private var aiVerificationStatus: [String: AIVerificationStatus] = [:]
     @State private var showAIOverrideWarning = false
+    @State private var searchResults: String = ""
+    @State private var searchQuery: String = ""
+    @State private var showDetailedAnalysis = false
     
     enum AIVerificationStatus {
         case correct      // Green checkmark ✓
@@ -108,71 +111,86 @@ struct ConfirmBetOutcomeView: View {
                             }
                             .padding(.horizontal, 24)
                             
-                            // AI Verification Status
+                            // Enhanced AI Verification Status
                             if isAIVerifying {
                                 VStack(spacing: 12) {
                                     HStack {
                                         ProgressView()
                                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
                                             .scaleEffect(0.8)
-                                        Text("AI is analyzing bet outcome...")
+                                        Text("AI is searching and analyzing...")
                                             .font(.system(size: 16, weight: .medium))
                                             .foregroundColor(.blue)
                                     }
-                                    .padding()
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(12)
-                                    .padding(.horizontal, 24)
+                                    
+                                    if !searchQuery.isEmpty {
+                                        Text("Search: \(searchQuery)")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.blue.opacity(0.8))
+                                            .italic()
+                                    }
                                 }
+                                .padding()
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(12)
+                                .padding(.horizontal, 24)
                             }
                             
-                            // AI Verification Summary
+                            // Enhanced AI Analysis Display (when complete)
                             if !aiVerificationResult.isEmpty && !isAIVerifying {
-                                VStack(alignment: .leading, spacing: 12) {
+                                VStack(spacing: 12) {
+                                    // Quick Summary Header
                                     HStack {
-                                        Image(systemName: "brain.head.profile")
-                                            .foregroundColor(.yellow)
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .foregroundColor(.green)
                                         Text("AI Analysis Complete")
                                             .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(.yellow)
+                                            .foregroundColor(.white)
+                                        
+                                        Spacer()
+                                        
+                                        // Status indicators
+                                        let statusCounts = getStatusCounts()
+                                        
+                                        HStack(spacing: 8) {
+                                            if statusCounts.correct > 0 {
+                                                StatusBadge(count: statusCounts.correct, type: .correct)
+                                            }
+                                            
+                                            if statusCounts.uncertain > 0 {
+                                                StatusBadge(count: statusCounts.uncertain, type: .uncertain)
+                                            }
+                                            
+                                            if statusCounts.incorrect > 0 {
+                                                StatusBadge(count: statusCounts.incorrect, type: .incorrect)
+                                            }
+                                        }
                                     }
                                     
-                                    // AI Verification Legend
+                                    // AI Legend
                                     HStack(spacing: 20) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "checkmark")
-                                                .foregroundColor(.green)
-                                                .font(.system(size: 12, weight: .bold))
-                                            Text("Correct")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(.green)
-                                        }
-                                        
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "minus")
-                                                .foregroundColor(.orange)
-                                                .font(.system(size: 12, weight: .bold))
-                                            Text("Uncertain")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(.orange)
-                                        }
-                                        
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "xmark")
-                                                .foregroundColor(.red)
-                                                .font(.system(size: 12, weight: .bold))
-                                            Text("Incorrect")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(.red)
-                                        }
-                                        
+                                        LegendItem(icon: "checkmark", text: "Correct", color: .green)
+                                        LegendItem(icon: "minus", text: "Uncertain", color: .orange)
+                                        LegendItem(icon: "xmark", text: "Incorrect", color: .red)
                                         Spacer()
                                     }
                                     .padding(.horizontal, 8)
                                     
-                                    Text("Review AI suggestions below and modify your selection if needed.")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
+                                    // Detailed Analysis (expandable)
+                                    AIAnalysisDetailView(
+                                        analysis: aiVerificationResult,
+                                        searchQuery: searchQuery,
+                                        isExpanded: showDetailedAnalysis,
+                                        onToggle: {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                showDetailedAnalysis.toggle()
+                                            }
+                                        }
+                                    )
+                                    
+                                    Text("AI analyzed live search results. Review suggestions and modify if needed.")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.6))
                                         .italic()
                                 }
                                 .padding()
@@ -256,7 +274,7 @@ struct ConfirmBetOutcomeView: View {
                                             .foregroundColor(.orange)
                                     }
                                     
-                                    Text("Your selection differs from AI recommendations. Please double-check before confirming.")
+                                    Text("Your selection differs from AI recommendations based on search results. Please double-check before confirming.")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white.opacity(0.8))
                                         .multilineTextAlignment(.center)
@@ -284,12 +302,12 @@ struct ConfirmBetOutcomeView: View {
                                 if !aiVerificationResult.isEmpty {
                                     Button(action: {
                                         Task {
-                                            await askAIForVerification()
+                                            await performSearchBasedAIVerification()
                                         }
                                     }) {
                                         HStack {
                                             Image(systemName: "arrow.clockwise")
-                                            Text("Re-run AI Analysis")
+                                            Text("Re-run Search & Analysis")
                                         }
                                         .font(.system(size: 16, weight: .semibold))
                                         .padding(.vertical, 12)
@@ -330,7 +348,7 @@ struct ConfirmBetOutcomeView: View {
         .onAppear {
             Task {
                 await loadBetDate()
-                await askAIForVerification()
+                await performSearchBasedAIVerification()
             }
             
             let appearance = UINavigationBarAppearance()
@@ -347,8 +365,66 @@ struct ConfirmBetOutcomeView: View {
                 }
             }
         } message: {
-            let overrideText = hasUserOverride() ? " Note: Your selection differs from AI recommendations." : ""
+            let overrideText = hasUserOverride() ? " Note: Your selection differs from AI recommendations based on search data." : ""
             Text("Are you sure these are the correct winning options? This action cannot be undone.\(overrideText)")
+        }
+    }
+    
+    // MARK: - Helper Views
+    struct StatusBadge: View {
+        let count: Int
+        let type: BadgeType
+        
+        enum BadgeType {
+            case correct, incorrect, uncertain
+            
+            var color: Color {
+                switch self {
+                case .correct: return .green
+                case .incorrect: return .red
+                case .uncertain: return .orange
+                }
+            }
+            
+            var icon: String {
+                switch self {
+                case .correct: return "checkmark"
+                case .incorrect: return "xmark"
+                case .uncertain: return "minus"
+                }
+            }
+        }
+        
+        var body: some View {
+            HStack(spacing: 4) {
+                Image(systemName: type.icon)
+                    .foregroundColor(type.color)
+                    .font(.system(size: 10, weight: .bold))
+                Text("\(count)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(type.color)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(type.color.opacity(0.2))
+            .cornerRadius(4)
+        }
+    }
+    
+    struct LegendItem: View {
+        let icon: String
+        let text: String
+        let color: Color
+        
+        var body: some View {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                    .font(.system(size: 12, weight: .bold))
+                Text(text)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(color)
+            }
         }
     }
     
@@ -370,6 +446,27 @@ struct ConfirmBetOutcomeView: View {
         
         let aiCorrectSet = Set(aiCorrectOptions)
         return !aiCorrectSet.isEmpty && selectedWinningOptions != aiCorrectSet
+    }
+    
+    private func getStatusCounts() -> (correct: Int, incorrect: Int, uncertain: Int) {
+        var correct = 0
+        var incorrect = 0
+        var uncertain = 0
+        
+        for (_, status) in aiVerificationStatus {
+            switch status {
+            case .correct:
+                correct += 1
+            case .incorrect:
+                incorrect += 1
+            case .uncertain:
+                uncertain += 1
+            case .notVerified:
+                break
+            }
+        }
+        
+        return (correct, incorrect, uncertain)
     }
     
     // MARK: - Data Loading
@@ -400,18 +497,21 @@ struct ConfirmBetOutcomeView: View {
         }
     }
     
-    // MARK: - AI Verification
+    // MARK: - Enhanced Search-Based AI Verification
     
-    private func askAIForVerification() async {
-        print("\n🔍 === STARTING AI VERIFICATION ===")
+    private func performSearchBasedAIVerification() async {
+        print("\n🔍 === STARTING ENHANCED SEARCH-BASED AI VERIFICATION ===")
         
         await MainActor.run {
             isAIVerifying = true
             errorMessage = nil
             aiVerificationStatus = [:]
+            searchResults = ""
+            searchQuery = ""
         }
         
         do {
+            // Get bet date with better validation
             let partyResponse = try await supabaseClient
                 .from("Parties")
                 .select("bet_date")
@@ -425,88 +525,291 @@ struct ConfirmBetOutcomeView: View {
             
             let partyDate = try JSONDecoder().decode(PartyDate.self, from: partyResponse.data)
             
-            print("🔍 Bet Date: \(partyDate.bet_date)")
-            print("🔍 Bet Prompt: \(betPrompt)")
-            print("🔍 Bet Options: \(betOptions)")
+            // Enhanced date checking with timezone consideration
+            let dateFormatter = ISO8601DateFormatter()
+            if let betDateObj = dateFormatter.date(from: partyDate.bet_date) {
+                let now = Date()
+                let calendar = Calendar.current
+                
+                // Check if bet date is today or in the past (more lenient)
+                let betDateComponents = calendar.dateComponents([.year, .month, .day], from: betDateObj)
+                let nowComponents = calendar.dateComponents([.year, .month, .day], from: now)
+                
+                if let betDate = calendar.date(from: betDateComponents),
+                   let currentDate = calendar.date(from: nowComponents) {
+                    
+                    if betDate > currentDate {
+                        print("⚠️ Bet date is in the future: \(partyDate.bet_date)")
+                        
+                        await MainActor.run {
+                            self.aiVerificationResult = "This bet is for a future date (\(betDate.formatted(date: .abbreviated, time: .omitted))). Game results are not yet available."
+                            for option in self.betOptions {
+                                self.aiVerificationStatus[option] = .uncertain
+                            }
+                            self.isAIVerifying = false
+                        }
+                        return
+                    } else if betDate == currentDate {
+                        print("✅ Bet date is today - results may be available")
+                    } else {
+                        print("✅ Bet date is in the past - results should be available")
+                    }
+                }
+            }
             
-            let prompt = """
-            You are a sports betting outcome analyzer with access to real-time sports data. Analyze the following bet for the specific date and determine the status of each option.
-
-            Bet Date: \(partyDate.bet_date)
-            Bet Question: \(betPrompt)
-            Available Options: \(betOptions.numbered())
-
-            IMPORTANT: Only analyze games and events that occurred on \(partyDate.bet_date). Do not use data from other dates.
-
-            Please research the game results and statistics specifically for \(partyDate.bet_date). Then provide your analysis in the following format:
-
-            ANALYSIS:
-            [Your detailed analysis of the game/event results from \(partyDate.bet_date)]
-
-            OPTION VERIFICATION:
-            For each option, classify as CORRECT, INCORRECT, or UNCERTAIN:
-            \(betOptions.enumerated().map { "Option \($0.offset + 1): \($0.element) - [CORRECT/INCORRECT/UNCERTAIN]" }.joined(separator: "\n"))
-
-            EXPLANATION:
-            [Explain your reasoning for each option's classification]
-
-            CONFIDENCE:
-            [High/Medium/Low confidence level with reasoning]
-
-            DATE VERIFICATION:
-            [Confirm that your analysis is based on events from \(partyDate.bet_date) specifically]
-
-            Note: 
-            - CORRECT: The option is definitely true based on verified results
-            - INCORRECT: The option is definitely false based on verified results  
-            - UNCERTAIN: Cannot verify with confidence due to insufficient data or ambiguity
-            """
-
-            print("\n🔍 === SENDING PROMPT TO AI ===")
-            print("🔍 Prompt: \(prompt)")
-            print("\n🔍 === WAITING FOR AI RESPONSE ===")
-
+            // Enhanced search with multiple strategies
+            var searchResults = ""
+            var finalSearchQuery = ""
+            var searchAttempts = 0
+            let maxAttempts = 3
+            
+            let searchStrategies = generateMultipleSearchStrategies(betPrompt: betPrompt, betDate: partyDate.bet_date)
+            
+            for strategy in searchStrategies {
+                searchAttempts += 1
+                print("🔍 Search attempt \(searchAttempts): \(strategy)")
+                
+                await MainActor.run {
+                    self.searchQuery = strategy
+                }
+                
+                do {
+                    let results = try await AIServices.shared.performGoogleCustomSearch(
+                        query: strategy,
+                        numResults: 8 // Increased for better results
+                    )
+                    
+                    // Check if results are relevant
+                    if isSearchResultRelevant(results, for: betPrompt, date: partyDate.bet_date) {
+                        searchResults = results
+                        finalSearchQuery = strategy
+                        print("✅ Found relevant results with strategy \(searchAttempts)")
+                        break
+                    } else {
+                        print("⚠️ Strategy \(searchAttempts) returned irrelevant results")
+                    }
+                    
+                } catch {
+                    print("❌ Search strategy \(searchAttempts) failed: \(error)")
+                    continue
+                }
+                
+                if searchAttempts >= maxAttempts {
+                    break
+                }
+            }
+            
+            await MainActor.run {
+                self.searchResults = searchResults
+                self.searchQuery = finalSearchQuery
+            }
+            
+            // Enhanced AI analysis prompt
+            let analysisPrompt = createEnhancedAnalysisPrompt(
+                betPrompt: betPrompt,
+                betOptions: betOptions,
+                betDate: partyDate.bet_date,
+                searchResults: searchResults,
+                searchQuery: finalSearchQuery
+            )
+            
+            print("\n🔍 === SENDING ENHANCED PROMPT TO AI ===")
+            print("🔍 Prompt length: \(analysisPrompt.count) characters")
+            
             let aiResponse = try await AIServices.shared.sendPrompt(
-                prompt,
+                analysisPrompt,
                 model: "gemini-2.5-flash",
                 temperature: 0.1,
-                maxTokens: 1500
+                maxTokens: 2000
             )
-
-            print("\n🔍 === AI RESPONSE RECEIVED ===")
-            print("🔍 Full AI Response: \(aiResponse)")
-            print("🔍 Response Length: \(aiResponse.count) characters")
-
+            
+            print("\n🔍 === AI ANALYSIS RESPONSE RECEIVED ===")
+            print("🔍 Response: \(aiResponse)")
+            
             let (verificationStatus, autoSelections) = parseAIVerificationResponse(aiResponse)
-
-            print("\n🔍 === PARSING RESULTS ===")
-            print("🔍 Final Verification Status: \(verificationStatus)")
-            print("🔍 Auto-selections from AI: \(autoSelections)")
-
+            
             await MainActor.run {
                 self.aiVerificationResult = aiResponse
                 self.aiVerificationStatus = verificationStatus
-                
-                // Auto-select AI's correct options
                 self.selectedWinningOptions = Set(autoSelections)
                 self.isAIVerifying = false
             }
-
+            
         } catch {
-            print("❌ AI Verification Error: \(error)")
+            print("❌ Enhanced AI Verification Error: \(error)")
             await MainActor.run {
-                let errorMsg = "AI Verification Error: \(error.localizedDescription)"
+                let errorMsg = "Enhanced Verification Error: \(error.localizedDescription)"
                 self.aiVerificationResult = errorMsg
                 self.errorMessage = errorMsg
                 self.isAIVerifying = false
             }
         }
         
-        print("🔍 === AI VERIFICATION COMPLETE ===\n")
+        print("🔍 === ENHANCED AI VERIFICATION COMPLETE ===\n")
+    }
+    
+    // MARK: - Multiple Search Strategies
+    private func generateMultipleSearchStrategies(betPrompt: String, betDate: String) -> [String] {
+        let dateFormatter = ISO8601DateFormatter()
+        var strategies: [String] = []
+        
+        // Parse date for day context
+        var dayDescription = ""
+        var monthDay = ""
+        
+        if let date = dateFormatter.date(from: betDate) {
+            let calendar = Calendar.current
+            let now = Date()
+            
+            // Determine relative day description
+            if calendar.isDate(date, inSameDayAs: now) {
+                dayDescription = "today"
+            } else if calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: now) ?? now) {
+                dayDescription = "yesterday"
+            } else if calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: now) ?? now) {
+                dayDescription = "tomorrow"
+            }
+            
+            let monthDayFormatter = DateFormatter()
+            monthDayFormatter.dateFormat = "MMMM d"
+            monthDay = monthDayFormatter.string(from: date)
+        }
+        
+        // Strategy 1: Use the bet prompt exactly as is
+        strategies.append(betPrompt)
+        
+        // Strategy 2: Add "result" or "score" to the bet prompt
+        strategies.append("\(betPrompt) result")
+        strategies.append("\(betPrompt) score")
+        
+        // Strategy 3: Add date context if available
+        if !dayDescription.isEmpty {
+            strategies.append("\(betPrompt) \(dayDescription)")
+        }
+        if !monthDay.isEmpty {
+            strategies.append("\(betPrompt) \(monthDay)")
+        }
+        
+        // Strategy 4: Add "final score" for games
+        if betPrompt.lowercased().contains("game") {
+            strategies.append("\(betPrompt) final score")
+        }
+        
+        return strategies.filter { !$0.isEmpty }
+    }
+    
+    // MARK: - Search Result Relevance Check
+    private func isSearchResultRelevant(_ results: String, for betPrompt: String, date: String) -> Bool {
+        let resultsLower = results.lowercased()
+        let promptLower = betPrompt.lowercased()
+        
+        // Check for irrelevant content
+        let irrelevantTerms = [
+            "sitemap", "fbi.gov", "privacy policy", "terms of service",
+            "404 error", "page not found", "coming soon", "under construction"
+        ]
+        for term in irrelevantTerms {
+            if resultsLower.contains(term) {
+                return false
+            }
+        }
+        
+        // Combine whitespaces and punctuation characters to split on
+        let delimiters = CharacterSet.whitespaces.union(CharacterSet.punctuationCharacters)
+        
+        // Extract key terms from the bet prompt
+        let promptWords = promptLower.components(separatedBy: delimiters)
+            .filter { $0.count > 2 } // Filter out short words like "vs", "who", etc.
+        
+        // Check if search results contain key terms from the bet prompt
+        var keyTermsFound = 0
+        for word in promptWords {
+            if resultsLower.contains(word) {
+                keyTermsFound += 1
+            }
+        }
+        
+        // Require at least half the key terms to be present
+        let relevanceThreshold = max(1, promptWords.count / 2)
+        let isRelevant = keyTermsFound >= relevanceThreshold
+        
+        print("🔍 Relevance check:")
+        print("🔍 Key terms from prompt: \(promptWords)")
+        print("🔍 Terms found in results: \(keyTermsFound)/\(promptWords.count)")
+        print("🔍 Threshold: \(relevanceThreshold)")
+        print("🔍 Is relevant: \(isRelevant)")
+        
+        return isRelevant && results.count > 100 // Also require substantial content
+    }
+
+    // MARK: - Enhanced Analysis Prompt
+    private func createEnhancedAnalysisPrompt(betPrompt: String, betOptions: [String], betDate: String, searchResults: String, searchQuery: String) -> String {
+        let dateFormatter = ISO8601DateFormatter()
+        var readableDate = betDate
+        var dayContext = ""
+        
+        if let date = dateFormatter.date(from: betDate) {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .full
+            readableDate = formatter.string(from: date)
+            
+            // Add day context
+            let calendar = Calendar.current
+            let now = Date()
+            
+            if calendar.isDate(date, inSameDayAs: now) {
+                dayContext = " (TODAY'S GAME)"
+            } else if calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: now) ?? now) {
+                dayContext = " (YESTERDAY'S GAME)"
+            } else if date < now {
+                dayContext = " (PAST GAME)"
+            } else {
+                dayContext = " (FUTURE GAME - may not have results yet)"
+            }
+        }
+        
+        return """
+        You are a professional sports outcome verifier analyzing search results for a specific bet. Your job is to find the EXACT outcome of this game and determine which option won.
+
+        BET DETAILS:
+        - Date: \(readableDate)\(dayContext)
+        - Question: \(betPrompt)
+        - Options: \(betOptions.enumerated().map { "Option \($0.offset + 1): \($0.element)" }.joined(separator: " | "))
+
+        SEARCH QUERY: "\(searchQuery)"
+
+        LIVE SEARCH RESULTS:
+        \(searchResults)
+
+        ANALYSIS INSTRUCTIONS:
+        1. Look for SPECIFIC final scores, game results, or match outcomes
+        2. Check for phrases like "final score", "won", "victory", "defeated", "beat", "game recap"
+        3. Pay attention to score formats like "9-8", "Team A 5, Team B 3", "W 9-8", etc.
+        4. ESPN results are highly reliable - trust clear ESPN game recaps and scores
+        5. Only mark as CORRECT if you find clear evidence of that team/option winning
+        6. Mark as INCORRECT if evidence shows the other option won
+        7. Use UNCERTAIN only if genuinely no outcome information is available
+
+        IMPORTANT: Be decisive when you find clear game results. Don't be overly cautious.
+
+        REQUIRED RESPONSE FORMAT:
+
+        SEARCH ANALYSIS:
+        [What specific game information did you find? Quote exact scores or results.]
+
+        OPTION VERIFICATION:
+        \(betOptions.enumerated().map { "Option \($0.offset + 1): \($0.element) - [CORRECT/INCORRECT/UNCERTAIN]" }.joined(separator: "\n"))
+
+        EVIDENCE FROM SEARCH:
+        [Quote the specific text that shows the winner, including the source]
+
+        CONFIDENCE:
+        [High/Medium/Low] - [Why this confidence level?]
+        """
     }
     
     private func parseAIVerificationResponse(_ response: String) -> ([String: AIVerificationStatus], [String]) {
-        print("\n🔍 === PARSING AI RESPONSE ===")
+        print("\n🔍 === PARSING SEARCH-BASED AI RESPONSE ===")
         
         var verificationStatus: [String: AIVerificationStatus] = [:]
         var autoSelections: [String] = []
@@ -528,35 +831,39 @@ struct ConfirmBetOutcomeView: View {
             }
             
             if inVerificationSection {
-                if trimmedLine.uppercased().contains("EXPLANATION:") ||
+                if trimmedLine.uppercased().contains("EVIDENCE FROM SEARCH:") ||
                    trimmedLine.uppercased().contains("CONFIDENCE:") ||
-                   trimmedLine.uppercased().contains("DATE VERIFICATION:") {
+                   trimmedLine.uppercased().contains("SEARCH QUERY USED:") {
                     print("🟡 Exiting verification section at line \(lineIndex) due to: \(trimmedLine)")
                     break
                 }
                 
-                // Parse option verification lines
+                // Parse option verification lines - FIXED PATTERN
                 for (index, option) in betOptions.enumerated() {
-                    let optionPattern = "Option \\(index + 1):"
+                    let optionNumber = index + 1
+                    let optionPattern = "Option \(optionNumber):"
                     
-                    print("🔍 Checking line for option \(index + 1) (\(option)): '\(trimmedLine)'")
+                    print("🔍 Checking line for option \(optionNumber) (\(option)): '\(trimmedLine)'")
                     print("🔍 Looking for pattern: \(optionPattern)")
                     
-                    if trimmedLine.range(of: optionPattern, options: .regularExpression) != nil {
-                        print("🟢 Found match for Option \(index + 1)")
+                    // Use contains instead of regex for more reliable matching
+                    if trimmedLine.contains(optionPattern) {
+                        print("🟢 Found match for Option \(optionNumber)")
                         
-                        if trimmedLine.uppercased().contains("CORRECT") {
+                        let lineUpper = trimmedLine.uppercased()
+                        if lineUpper.contains("CORRECT") && !lineUpper.contains("INCORRECT") {
                             verificationStatus[option] = .correct
                             autoSelections.append(option)
                             print("✅ AI marked as CORRECT: \(option)")
-                        } else if trimmedLine.uppercased().contains("INCORRECT") {
+                        } else if lineUpper.contains("INCORRECT") {
                             verificationStatus[option] = .incorrect
                             print("❌ AI marked as INCORRECT: \(option)")
-                        } else if trimmedLine.uppercased().contains("UNCERTAIN") {
+                        } else if lineUpper.contains("UNCERTAIN") {
                             verificationStatus[option] = .uncertain
                             print("🟡 AI marked as UNCERTAIN: \(option)")
                         } else {
                             print("⚠️ No classification found in line: '\(trimmedLine)'")
+                            verificationStatus[option] = .uncertain
                         }
                         break
                     }
@@ -579,11 +886,9 @@ struct ConfirmBetOutcomeView: View {
                 print("🔍 Fallback check for option \(index + 1): '\(option)'")
                 print("🔍 Option lowercase: '\(optionLower)'")
                 
-                // Check if the option appears in the response
                 if responseLower.contains(optionLower) {
                     print("🟢 Option found in response")
                     
-                    // Look for classification words near the option
                     let optionRange = responseLower.range(of: optionLower)!
                     let contextStart = max(optionRange.lowerBound.utf16Offset(in: responseLower) - 100, 0)
                     let contextEnd = min(optionRange.upperBound.utf16Offset(in: responseLower) + 100, responseLower.count)
@@ -594,7 +899,7 @@ struct ConfirmBetOutcomeView: View {
                     
                     print("🔍 Context around option: '\(context)'")
                     
-                    if context.contains("correct") {
+                    if context.contains("correct") && !context.contains("incorrect") {
                         verificationStatus[option] = .correct
                         autoSelections.append(option)
                         print("✅ Fallback: AI marked as CORRECT: \(option)")
@@ -615,29 +920,17 @@ struct ConfirmBetOutcomeView: View {
             }
         }
         
-        // Set any unverified options to notVerified
+        // Set any unverified options to uncertain
         for option in betOptions {
             if verificationStatus[option] == nil {
-                print("⚠️ Option not processed, setting to notVerified: \(option)")
-                verificationStatus[option] = .notVerified
+                print("⚠️ Option not processed, setting to uncertain: \(option)")
+                verificationStatus[option] = .uncertain
             }
         }
         
-        print("\n🔍 === FINAL PARSING RESULTS ===")
+        print("\n🔍 === FINAL SEARCH-BASED PARSING RESULTS ===")
         print("🔍 Final Verification Status: \(verificationStatus)")
         print("🔍 Final Auto-selections: \(autoSelections)")
-        
-        // Additional debug: Check if we have any correct options
-        let correctCount = verificationStatus.values.filter { $0 == .correct }.count
-        let incorrectCount = verificationStatus.values.filter { $0 == .incorrect }.count
-        let uncertainCount = verificationStatus.values.filter { $0 == .uncertain }.count
-        let notVerifiedCount = verificationStatus.values.filter { $0 == .notVerified }.count
-        
-        print("🔍 Classification Summary:")
-        print("  - Correct: \(correctCount)")
-        print("  - Incorrect: \(incorrectCount)")
-        print("  - Uncertain: \(uncertainCount)")
-        print("  - Not Verified: \(notVerifiedCount)")
         
         return (verificationStatus, autoSelections)
     }
