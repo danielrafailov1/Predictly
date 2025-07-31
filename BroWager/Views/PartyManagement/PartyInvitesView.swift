@@ -50,8 +50,8 @@ struct PartyInvitesView: View {
                                 invite: invite,
                                 partyName: partyNames[invite.partyId] ?? "Unknown Party",
                                 inviterUsername: inviterUsernames[invite.inviterUserId] ?? "Unknown User",
-                                onInviteProcessed: {
-                                    Task { await loadInvites() }
+                                onInviteProcessed: { inviteId in
+                                    invites.removeAll { $0.id == inviteId }
                                 }
                             )
                             .listRowBackground(Color.clear)
@@ -94,10 +94,13 @@ struct PartyInvitesView: View {
                 .from("Party Invites")
                 .select("id, party_id, inviter_user_id, invitee_user_id, status, created_at")
                 .eq("invitee_user_id", value: userId)
+                .eq("status", value: "pending")
                 .order("created_at", ascending: false)
                 .execute()
+
             
             let fetchedInvites = try JSONDecoder().decode([PartyInviteBasic].self, from: invitesResponse.data)
+                .filter { $0.status == "pending" }
             
             // Get party names
             let partyIds = Array(Set(fetchedInvites.map { Int($0.partyId) }))
@@ -159,7 +162,8 @@ struct PartyInviteRow: View {
     let invite: PartyInviteBasic
     let partyName: String
     let inviterUsername: String
-    let onInviteProcessed: () -> Void
+    let onInviteProcessed: (Int64) -> Void
+
     
     @Environment(\.supabaseClient) private var supabaseClient
     @State private var isProcessing = false
@@ -244,8 +248,8 @@ struct PartyInviteRow: View {
                 self.isProcessing = false
             }
             
-            // Refresh the parent view
-            onInviteProcessed()
+
+            onInviteProcessed(invite.id)
             
         } catch {
             await MainActor.run {
@@ -270,7 +274,7 @@ struct PartyInviteRow: View {
             }
             
             // Refresh the parent view
-            onInviteProcessed()
+            onInviteProcessed(invite.id)
             
         } catch {
             await MainActor.run {
