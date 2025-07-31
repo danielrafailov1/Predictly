@@ -1,4 +1,4 @@
-// Updated Bet Creation Flow with Category-Influenced AI Suggestions
+// Updated Bet Creation Flow with Optional Date
 
 import SwiftUI
 
@@ -20,6 +20,7 @@ struct NormalBetView: View {
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
     @State private var selectedDate = Date()
+    @State private var isDateEnabled = false // New toggle state
     @State private var isNextActive = false
     @State private var optionCount = 4
     @State private var maxSelections = 1
@@ -150,50 +151,68 @@ struct NormalBetView: View {
                     }
                     .padding(.horizontal)
                     
-                    // TimerSetView-style Date Picker Section
+                    // Date Toggle Section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Select time of match")
-                            .foregroundColor(.white)
-                            .font(.title2)
-                            .padding(.horizontal)
-                        
-                        HStack(spacing: 0) {
-                            DatePickerView(title: "Month",
-                                         range: 1...12,
-                                         binding: $selectedMonth,
-                                         formatter: { monthNumber in
-                                             Calendar.current.monthSymbols[monthNumber - 1]
-                                         })
-                            
-                            DatePickerView(title: "Day",
-                                         range: 1...days.count,
-                                         binding: $selectedDay)
-                            
-                            DatePickerView(title: "Year",
-                                         range: currentYear...(currentYear + 5),
-                                         binding: $selectedYear)
-                        }
-                        .frame(height: 100)
-                        .padding(.horizontal)
-                        .onChange(of: selectedMonth) { _ in updateSelectedDate() }
-                        .onChange(of: selectedDay) { _ in updateSelectedDate() }
-                        .onChange(of: selectedYear) { _ in updateSelectedDate() }
-                        .onChange(of: optionCount) { _ in
-                            // Ensure maxSelections doesn't exceed optionCount - 1
-                            if maxSelections >= optionCount {
-                                maxSelections = max(1, optionCount - 1)
-                            }
-                        }
-                        
-                        // Display selected date
                         HStack {
+                            Text("Set specific date for bet")
+                                .foregroundColor(.white)
+                                .font(.title2)
+                            
                             Spacer()
-                            Text("Selected: \(formattedSelectedDate())")
-                                .foregroundColor(.blue)
-                                .font(.system(size: 16, weight: .semibold))
-                            Spacer()
+                            
+                            Toggle("", isOn: $isDateEnabled)
+                                .toggleStyle(SwitchToggleStyle(tint: .blue))
                         }
                         .padding(.horizontal)
+                        
+                        // Date Picker Section (only shown when toggle is enabled)
+                        if isDateEnabled {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Select time of match")
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.headline)
+                                    .padding(.horizontal)
+                                
+                                HStack(spacing: 0) {
+                                    DatePickerView(title: "Month",
+                                                 range: 1...12,
+                                                 binding: $selectedMonth,
+                                                 formatter: { monthNumber in
+                                                     Calendar.current.monthSymbols[monthNumber - 1]
+                                                 })
+                                    
+                                    DatePickerView(title: "Day",
+                                                 range: 1...days.count,
+                                                 binding: $selectedDay)
+                                    
+                                    DatePickerView(title: "Year",
+                                                 range: currentYear...(currentYear + 5),
+                                                 binding: $selectedYear)
+                                }
+                                .frame(height: 100)
+                                .padding(.horizontal)
+                                .onChange(of: selectedMonth) { _ in updateSelectedDate() }
+                                .onChange(of: selectedDay) { _ in updateSelectedDate() }
+                                .onChange(of: selectedYear) { _ in updateSelectedDate() }
+                                
+                                // Display selected date
+                                HStack {
+                                    Spacer()
+                                    Text("Selected: \(formattedSelectedDate())")
+                                        .foregroundColor(.blue)
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Spacer()
+                                }
+                                .padding(.horizontal)
+                            }
+                            .transition(.opacity.combined(with: .slide))
+                        }
+                    }
+                    .onChange(of: optionCount) { _ in
+                        // Ensure maxSelections doesn't exceed optionCount - 1
+                        if maxSelections >= optionCount {
+                            maxSelections = max(1, optionCount - 1)
+                        }
                     }
                     
                     // Number of Options Section
@@ -292,7 +311,7 @@ struct NormalBetView: View {
                         destination: BetOptionsView(
                             navPath: $navPath,
                             betPrompt: betPrompt,
-                            selectedDate: selectedDate,
+                            selectedDate: isDateEnabled ? selectedDate : nil, // Pass nil if date is disabled
                             email: email,
                             userId: userId,
                             optionCount: optionCount,
@@ -497,7 +516,7 @@ struct DatePickerView: View {
 struct BetOptionsView: View {
     @Binding var navPath: NavigationPath
     let betPrompt: String
-    let selectedDate: Date
+    let selectedDate: Date? // Now optional
     let email: String
     let userId: UUID?
     let optionCount: Int
@@ -537,12 +556,23 @@ struct BetOptionsView: View {
                     
                     Spacer()
                     
-                    HStack {
-                        Image(systemName: "calendar")
-                            .foregroundColor(.blue)
-                        Text("Bet Date: \(selectedDate, style: .date)")
-                            .foregroundColor(.white.opacity(0.8))
-                            .font(.subheadline)
+                    // Only show date if it's set
+                    if let date = selectedDate {
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundColor(.blue)
+                            Text("Bet Date: \(date, style: .date)")
+                                .foregroundColor(.white.opacity(0.8))
+                                .font(.subheadline)
+                        }
+                    } else {
+                        HStack {
+                            Image(systemName: "calendar.badge.minus")
+                                .foregroundColor(.gray)
+                            Text("No specific date")
+                                .foregroundColor(.white.opacity(0.6))
+                                .font(.subheadline)
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -615,7 +645,7 @@ struct BetOptionsView: View {
                         navPath: $navPath,
                         email: email,
                         betPrompt: betPrompt,
-                        selectedDate: selectedDate,
+                        selectedDate: selectedDate, // Pass the optional date
                         betOptions: betOptions,
                         betTerms: betTerms,
                         betType: "normal",
@@ -662,13 +692,9 @@ struct BetOptionsView: View {
         }
     }
 
-    func generateOptions(betPrompt: String, date: Date) {
+    func generateOptions(betPrompt: String, date: Date?) {
         Task {
             do {
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateStyle = .full
-                let formattedDate = dateFormatter.string(from: date)
-                
                 let isBinaryBet = detectBinaryBet(betPrompt)
                 let targetCount = isBinaryBet ? 2 : optionCount
                 
@@ -695,6 +721,17 @@ struct BetOptionsView: View {
                     Return only the 2 options, one per line, no numbering or extra text.
                     """
                 } else {
+                    // Modified prompt to conditionally include date context
+                    let dateContext: String
+                    if let date = date {
+                        let dateFormatter = DateFormatter()
+                        dateFormatter.dateStyle = .full
+                        let formattedDate = dateFormatter.string(from: date)
+                        dateContext = "- Make them realistic for the date: \(formattedDate)"
+                    } else {
+                        dateContext = "- Make them generally realistic and timeless"
+                    }
+                    
                     prompt = """
                     Analyze this betting question: "\(betPrompt)"
                     
@@ -705,7 +742,7 @@ struct BetOptionsView: View {
                     - Be specific and measurable (avoid vague terms like "other" or "something else")
                     - If the question mentions specific entities, include them in relevant options
                     - Options should be mutually exclusive (only one can be correct)
-                    - Make them realistic for the date: \(formattedDate)
+                    \(dateContext)
                     - Keep each option concise (under 15 words)
                     - Ensure all \(targetCount) options are filled
                     
@@ -933,20 +970,28 @@ struct BetOptionsView: View {
         }
     }
 
-    func generateTerms(date: Date) {
+    func generateTerms(date: Date?) {
         Task {
             do {
                 let validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 let betDescription = validOptions.joined(separator: ", ")
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateStyle = .full
-                let formattedDate = dateFormatter.string(from: date)
                 
                 let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
                 let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
                 
+                // Conditionally include date context
+                let dateContext: String
+                if let date = date {
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateStyle = .full
+                    let formattedDate = dateFormatter.string(from: date)
+                    dateContext = "scheduled for \(formattedDate)"
+                } else {
+                    dateContext = "with no specific deadline"
+                }
+                
                 let prompt = """
-                Generate concise, user-friendly terms and conditions for a \(categoryName) bet scheduled for \(formattedDate) 
+                Generate concise, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
                 involving these options: \(betDescription). 
                 
                 This bet is specifically about \(categoryContext), so include relevant rules and considerations for this type of bet.
@@ -971,21 +1016,27 @@ struct BetOptionsView: View {
                 
             } catch {
                 print("Failed to generate bet terms: \(error)")
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateStyle = .medium
-                let formattedDate = dateFormatter.string(from: date)
                 
                 // Category-specific fallback terms
-                let categorySpecificTerms = getCategoryFallbackTerms(date: formattedDate)
+                let categorySpecificTerms = getCategoryFallbackTerms(date: date)
                 betTerms = categorySpecificTerms
             }
         }
     }
     
-    private func getCategoryFallbackTerms(date: String) -> String {
+    private func getCategoryFallbackTerms(date: Date?) -> String {
+        let dateString: String
+        if let date = date {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .medium
+            dateString = dateFormatter.string(from: date)
+        } else {
+            dateString = "no specific deadline"
+        }
+        
         guard let category = selectedCategory else {
             return """
-            Bet is valid for \(date). \
+            Bet is valid with \(dateString). \
             Results will be determined based on the agreed upon criteria. \
             All participants must confirm their selections before the bet begins. \
             In case of disputes, the majority vote of participants will determine the outcome. \
@@ -996,7 +1047,7 @@ struct BetOptionsView: View {
         switch category {
         case .sports:
             return """
-            Sports bet valid for \(date). Results determined by official game/match outcomes. \
+            Sports bet valid with \(dateString). Results determined by official game/match outcomes. \
             All participants must lock in predictions before the event starts. \
             Disputes resolved using official statistics and scores. \
             In case of game cancellation or postponement, bet extends to rescheduled date. \
@@ -1004,7 +1055,7 @@ struct BetOptionsView: View {
             """
         case .food:
             return """
-            Food bet valid for \(date). Results determined by actual choices made or outcomes achieved. \
+            Food bet valid with \(dateString). Results determined by actual choices made or outcomes achieved. \
             All participants must confirm their predictions before the meal/event. \
             Taste tests and food challenges must be conducted fairly with all participants present. \
             Disputes resolved by group consensus or neutral taste tester. \
@@ -1012,15 +1063,15 @@ struct BetOptionsView: View {
             """
         case .lifeEvents:
             return """
-            Life events bet valid for \(date). Results determined by actual life events as they occur. \
-            All participants must confirm predictions before the deadline. \
+            Life events bet valid with \(dateString). Results determined by actual life events as they occur. \
+            All participants must confirm predictions before any deadlines. \
             Personal milestones must be verified through social media or mutual friends. \
             Respect privacy - no pressure on participants to rush life decisions. \
             Winner gets bragging rights and a celebration dinner from the group!
             """
         case .politics:
             return """
-            Political bet valid for \(date). Results determined by official election results or policy announcements. \
+            Political bet valid with \(dateString). Results determined by official election results or policy announcements. \
             All participants must confirm predictions before voting/announcement deadlines. \
             Disputes resolved using official government sources and verified news outlets. \
             Keep discussions respectful regardless of political affiliations. \
@@ -1028,8 +1079,8 @@ struct BetOptionsView: View {
             """
         case .other:
             return """
-            General bet valid for \(date). Results determined based on observable, verifiable outcomes. \
-            All participants must confirm their selections before the event/deadline. \
+            General bet valid with \(dateString). Results determined based on observable, verifiable outcomes. \
+            All participants must confirm their selections before any event/deadline. \
             Evidence must be clear and agreed upon by all participants. \
             In case of disputes, majority vote or neutral observer determines the outcome. \
             Winner gets bragging rights and a small prize from the group!
@@ -1100,7 +1151,7 @@ struct FinalizeBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
     let betPrompt: String
-    let selectedDate: Date
+    let selectedDate: Date? // Now optional
     let betOptions: [String]
     let betTerms: String
     let betType: String
@@ -1134,22 +1185,40 @@ struct FinalizeBetView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     
-                    // Date Display
-                    HStack {
-                        Image(systemName: "calendar.badge.clock")
-                            .foregroundColor(.blue)
-                            .font(.title2)
-                        VStack(alignment: .leading) {
-                            Text("Bet Date")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
-                            Text(selectedDate, style: .date)
-                                .foregroundColor(.white)
-                                .font(.headline)
+                    // Date Display (conditional)
+                    if let date = selectedDate {
+                        HStack {
+                            Image(systemName: "calendar.badge.clock")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                            VStack(alignment: .leading) {
+                                Text("Bet Date")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.caption)
+                                Text(date, style: .date)
+                                    .foregroundColor(.white)
+                                    .font(.headline)
+                            }
+                            Spacer()
                         }
-                        Spacer()
+                        .padding(.horizontal)
+                    } else {
+                        HStack {
+                            Image(systemName: "calendar.badge.minus")
+                                .foregroundColor(.gray)
+                                .font(.title2)
+                            VStack(alignment: .leading) {
+                                Text("Bet Timing")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.caption)
+                                Text("No specific date set")
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.headline)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                     
                     // Bet Summary Section
                     VStack(alignment: .leading, spacing: 8) {
@@ -1330,12 +1399,17 @@ struct FinalizeBetView: View {
 
         let partyCode = UUID().uuidString.prefix(6).uppercased()
 
-        // Fix: Properly configure the DateFormatter
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
+        // Handle optional date formatting
+        let formattedDate: String?
+        if let date = selectedDate {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
+            formattedDate = dateFormatter.string(from: date)
+        } else {
+            formattedDate = nil
+        }
         
-        let formattedDate = dateFormatter.string(from: selectedDate)
-        print("🔄 Formatted date: \(formattedDate)") // Debug log to verify format
+        print("🔄 Formatted date: \(formattedDate ?? "nil")") // Debug log
         
         let payload = PartyInsertPayload(
             created_by: userId.uuidString,
@@ -1343,7 +1417,7 @@ struct FinalizeBetView: View {
             privacy_option: privacy,
             max_members: maxMembers,
             bet: betPrompt,
-            bet_date: formattedDate, // Now properly formatted
+            bet_date: formattedDate ?? "", // Use empty string if no date
             bet_type: betType,
             options: validOptions, // Use filtered valid options
             terms: betTerms,
@@ -1353,7 +1427,7 @@ struct FinalizeBetView: View {
 
         Task {
             do {
-                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate)")
+                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate ?? "no date")")
                 
                 // First, insert the party
                 let response = try await supabaseClient

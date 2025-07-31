@@ -403,6 +403,8 @@ struct ConfirmBetOutcomeView: View {
     // MARK: - AI Verification
     
     private func askAIForVerification() async {
+        print("\n🔍 === STARTING AI VERIFICATION ===")
+        
         await MainActor.run {
             isAIVerifying = true
             errorMessage = nil
@@ -422,6 +424,10 @@ struct ConfirmBetOutcomeView: View {
             }
             
             let partyDate = try JSONDecoder().decode(PartyDate.self, from: partyResponse.data)
+            
+            print("🔍 Bet Date: \(partyDate.bet_date)")
+            print("🔍 Bet Prompt: \(betPrompt)")
+            print("🔍 Bet Options: \(betOptions)")
             
             let prompt = """
             You are a sports betting outcome analyzer with access to real-time sports data. Analyze the following bet for the specific date and determine the status of each option.
@@ -456,6 +462,10 @@ struct ConfirmBetOutcomeView: View {
             - UNCERTAIN: Cannot verify with confidence due to insufficient data or ambiguity
             """
 
+            print("\n🔍 === SENDING PROMPT TO AI ===")
+            print("🔍 Prompt: \(prompt)")
+            print("\n🔍 === WAITING FOR AI RESPONSE ===")
+
             let aiResponse = try await AIServices.shared.sendPrompt(
                 prompt,
                 model: "gemini-2.5-flash",
@@ -463,7 +473,15 @@ struct ConfirmBetOutcomeView: View {
                 maxTokens: 1500
             )
 
+            print("\n🔍 === AI RESPONSE RECEIVED ===")
+            print("🔍 Full AI Response: \(aiResponse)")
+            print("🔍 Response Length: \(aiResponse.count) characters")
+
             let (verificationStatus, autoSelections) = parseAIVerificationResponse(aiResponse)
+
+            print("\n🔍 === PARSING RESULTS ===")
+            print("🔍 Final Verification Status: \(verificationStatus)")
+            print("🔍 Auto-selections from AI: \(autoSelections)")
 
             await MainActor.run {
                 self.aiVerificationResult = aiResponse
@@ -475,6 +493,7 @@ struct ConfirmBetOutcomeView: View {
             }
 
         } catch {
+            print("❌ AI Verification Error: \(error)")
             await MainActor.run {
                 let errorMsg = "AI Verification Error: \(error.localizedDescription)"
                 self.aiVerificationResult = errorMsg
@@ -482,19 +501,28 @@ struct ConfirmBetOutcomeView: View {
                 self.isAIVerifying = false
             }
         }
+        
+        print("🔍 === AI VERIFICATION COMPLETE ===\n")
     }
     
     private func parseAIVerificationResponse(_ response: String) -> ([String: AIVerificationStatus], [String]) {
+        print("\n🔍 === PARSING AI RESPONSE ===")
+        
         var verificationStatus: [String: AIVerificationStatus] = [:]
         var autoSelections: [String] = []
         
         let lines = response.components(separatedBy: .newlines)
         var inVerificationSection = false
         
-        for line in lines {
+        print("🔍 Total lines in response: \(lines.count)")
+        
+        for (lineIndex, line) in lines.enumerated() {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
+            print("🔍 Line \(lineIndex): '\(trimmedLine)'")
+            
             if trimmedLine.uppercased().contains("OPTION VERIFICATION") {
+                print("🟢 Found OPTION VERIFICATION section at line \(lineIndex)")
                 inVerificationSection = true
                 continue
             }
@@ -503,23 +531,32 @@ struct ConfirmBetOutcomeView: View {
                 if trimmedLine.uppercased().contains("EXPLANATION:") ||
                    trimmedLine.uppercased().contains("CONFIDENCE:") ||
                    trimmedLine.uppercased().contains("DATE VERIFICATION:") {
+                    print("🟡 Exiting verification section at line \(lineIndex) due to: \(trimmedLine)")
                     break
                 }
                 
                 // Parse option verification lines
                 for (index, option) in betOptions.enumerated() {
                     let optionPattern = "Option \\(index + 1):"
+                    
+                    print("🔍 Checking line for option \(index + 1) (\(option)): '\(trimmedLine)'")
+                    print("🔍 Looking for pattern: \(optionPattern)")
+                    
                     if trimmedLine.range(of: optionPattern, options: .regularExpression) != nil {
+                        print("🟢 Found match for Option \(index + 1)")
+                        
                         if trimmedLine.uppercased().contains("CORRECT") {
                             verificationStatus[option] = .correct
                             autoSelections.append(option)
-                            print("🔍 AI marked as CORRECT: \(option)")
+                            print("✅ AI marked as CORRECT: \(option)")
                         } else if trimmedLine.uppercased().contains("INCORRECT") {
                             verificationStatus[option] = .incorrect
-                            print("🔍 AI marked as INCORRECT: \(option)")
+                            print("❌ AI marked as INCORRECT: \(option)")
                         } else if trimmedLine.uppercased().contains("UNCERTAIN") {
                             verificationStatus[option] = .uncertain
-                            print("🔍 AI marked as UNCERTAIN: \(option)")
+                            print("🟡 AI marked as UNCERTAIN: \(option)")
+                        } else {
+                            print("⚠️ No classification found in line: '\(trimmedLine)'")
                         }
                         break
                     }
@@ -527,21 +564,53 @@ struct ConfirmBetOutcomeView: View {
             }
         }
         
+        print("\n🔍 === AFTER STRUCTURED PARSING ===")
+        print("🔍 Verification Status: \(verificationStatus)")
+        print("🔍 Auto-selections: \(autoSelections)")
+        
         // Fallback parsing if structured format wasn't found
         if verificationStatus.isEmpty {
-            for option in betOptions {
+            print("\n🔍 === ATTEMPTING FALLBACK PARSING ===")
+            
+            for (index, option) in betOptions.enumerated() {
                 let optionLower = option.lowercased()
                 let responseLower = response.lowercased()
                 
+                print("🔍 Fallback check for option \(index + 1): '\(option)'")
+                print("🔍 Option lowercase: '\(optionLower)'")
+                
+                // Check if the option appears in the response
                 if responseLower.contains(optionLower) {
-                    if responseLower.contains("correct") && responseLower.contains(optionLower) {
+                    print("🟢 Option found in response")
+                    
+                    // Look for classification words near the option
+                    let optionRange = responseLower.range(of: optionLower)!
+                    let contextStart = max(optionRange.lowerBound.utf16Offset(in: responseLower) - 100, 0)
+                    let contextEnd = min(optionRange.upperBound.utf16Offset(in: responseLower) + 100, responseLower.count)
+                    
+                    let startIndex = responseLower.index(responseLower.startIndex, offsetBy: contextStart)
+                    let endIndex = responseLower.index(responseLower.startIndex, offsetBy: contextEnd)
+                    let context = String(responseLower[startIndex..<endIndex])
+                    
+                    print("🔍 Context around option: '\(context)'")
+                    
+                    if context.contains("correct") {
                         verificationStatus[option] = .correct
                         autoSelections.append(option)
-                    } else if responseLower.contains("incorrect") && responseLower.contains(optionLower) {
+                        print("✅ Fallback: AI marked as CORRECT: \(option)")
+                    } else if context.contains("incorrect") {
                         verificationStatus[option] = .incorrect
+                        print("❌ Fallback: AI marked as INCORRECT: \(option)")
+                    } else if context.contains("uncertain") {
+                        verificationStatus[option] = .uncertain
+                        print("🟡 Fallback: AI marked as UNCERTAIN: \(option)")
                     } else {
                         verificationStatus[option] = .uncertain
+                        print("⚠️ Fallback: No clear classification, defaulting to UNCERTAIN: \(option)")
                     }
+                } else {
+                    print("❌ Option not found in response, marking as UNCERTAIN: \(option)")
+                    verificationStatus[option] = .uncertain
                 }
             }
         }
@@ -549,12 +618,26 @@ struct ConfirmBetOutcomeView: View {
         // Set any unverified options to notVerified
         for option in betOptions {
             if verificationStatus[option] == nil {
+                print("⚠️ Option not processed, setting to notVerified: \(option)")
                 verificationStatus[option] = .notVerified
             }
         }
         
-        print("🔍 AI Verification Status: \(verificationStatus)")
-        print("🔍 AI Auto-selections: \(autoSelections)")
+        print("\n🔍 === FINAL PARSING RESULTS ===")
+        print("🔍 Final Verification Status: \(verificationStatus)")
+        print("🔍 Final Auto-selections: \(autoSelections)")
+        
+        // Additional debug: Check if we have any correct options
+        let correctCount = verificationStatus.values.filter { $0 == .correct }.count
+        let incorrectCount = verificationStatus.values.filter { $0 == .incorrect }.count
+        let uncertainCount = verificationStatus.values.filter { $0 == .uncertain }.count
+        let notVerifiedCount = verificationStatus.values.filter { $0 == .notVerified }.count
+        
+        print("🔍 Classification Summary:")
+        print("  - Correct: \(correctCount)")
+        print("  - Incorrect: \(incorrectCount)")
+        print("  - Uncertain: \(uncertainCount)")
+        print("  - Not Verified: \(notVerifiedCount)")
         
         return (verificationStatus, autoSelections)
     }
