@@ -304,19 +304,21 @@ struct NormalBetView: View {
                         EmptyView()
                     }
                     
-                    // Fixed Next Button - Full area clickable
-                    Button("Next") {
+                    Button(action: {
                         if canProceed {
                             isNextActive = true
                         }
+                    }) {
+                        Text("Next")
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(canProceed ? Color.green : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                            .padding(.horizontal)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(canProceed ? Color.green : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .padding(.horizontal)
                     .disabled(!canProceed)
+
                     
                     // Validation message
                     if !canProceed {
@@ -625,19 +627,21 @@ struct BetOptionsView: View {
                     EmptyView()
                 }
                 
-                // Fixed Next Button - Full area clickable
-                Button("Next") {
+                Button(action: {
                     if canProceed {
                         isNextActive = true
                     }
+                }) {
+                    Text("Next")
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(canProceed ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(canProceed ? Color.green : Color.gray)
-                .foregroundColor(.white)
-                .cornerRadius(10)
                 .padding(.horizontal)
                 .disabled(!canProceed)
+
                 
                 // Validation message
                 if !canProceed {
@@ -1241,24 +1245,27 @@ struct FinalizeBetView: View {
                             .foregroundColor(.red)
                             .padding(.horizontal)
                     }
-
-                    // Fixed Create Bet Button - Full area clickable
+                   
                     Button(action: submitBet) {
-                        if isSubmitting {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("Create Bet")
-                                .font(.system(size: 18, weight: .semibold))
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(canProceed ? Color.green : Color.gray)
+                                .frame(height: 50)
+
+                            if isSubmitting {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Text("Create Bet")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(canProceed ? Color.green : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
                     .padding(.horizontal)
                     .disabled(!canProceed || isSubmitting)
+
                     
                     // Validation message
                     if !canProceed {
