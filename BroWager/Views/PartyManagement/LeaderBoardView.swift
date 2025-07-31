@@ -26,6 +26,14 @@ struct LeaderBoardView: View {
         case global = "Global"
     }
     
+    // Future enhancement: Bet type categorization
+    enum BetType: String, CaseIterable {
+        case all = "All"
+        case sports = "Sports"
+        case custom = "Custom"
+        case challenge = "Challenge"
+    }
+    
     struct LeaderboardEntry: Identifiable, Codable {
         let id = UUID()
         let user_id: String
@@ -33,13 +41,15 @@ struct LeaderBoardView: View {
         let wins: Int
         let rank: Int
         let isCurrentUser: Bool
+        let betCount: Int // Track number of bets made
         
-        init(user_id: String, username: String, wins: Int, rank: Int = 0, isCurrentUser: Bool = false) {
+        init(user_id: String, username: String, wins: Int, rank: Int = 0, isCurrentUser: Bool = false, betCount: Int = 0) {
             self.user_id = user_id
             self.username = username
             self.wins = wins
             self.rank = rank
             self.isCurrentUser = isCurrentUser
+            self.betCount = betCount
         }
     }
     
@@ -64,7 +74,7 @@ struct LeaderBoardView: View {
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         
-                        Text("See who's leading the competition")
+                        Text(getSubtitleText())
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                     }
@@ -136,9 +146,7 @@ struct LeaderBoardView: View {
                             .font(.system(size: 20, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                         
-                        Text(selectedScope == .friends ?
-                             "Add friends and start betting to see rankings" :
-                             "Place your first bet to join the competition")
+                        Text(getEmptyStateText())
                             .font(.system(size: 16))
                             .foregroundColor(.white.opacity(0.5))
                             .multilineTextAlignment(.center)
@@ -170,6 +178,24 @@ struct LeaderBoardView: View {
                     await fetchLeaderboardData()
                 }
             }
+        }
+    }
+    
+    private func getSubtitleText() -> String {
+        switch selectedScope {
+        case .friends:
+            return "Friends with 2+ bets compete"
+        case .global:
+            return "Global rankings (3+ bets required)"
+        }
+    }
+    
+    private func getEmptyStateText() -> String {
+        switch selectedScope {
+        case .friends:
+            return "Add friends and make at least 2 bets each to see rankings"
+        case .global:
+            return "Make at least 3 bets to join the global competition"
         }
     }
     
@@ -209,10 +235,10 @@ struct LeaderBoardView: View {
             var leaderboardEntries: [LeaderboardEntry] = []
             
             if selectedScope == .friends {
-                // Fetch friends leaderboard
+                // Fetch friends leaderboard (minimum 2 bets required)
                 leaderboardEntries = try await fetchFriendsLeaderboard()
             } else {
-                // Fetch global leaderboard
+                // Fetch global leaderboard (minimum 3 bets required)
                 leaderboardEntries = try await fetchGlobalLeaderboard()
             }
             
@@ -231,6 +257,55 @@ struct LeaderBoardView: View {
                 self.isLoading = false
             }
         }
+    }
+    
+    private func fetchUserBetCounts(for userIds: [String]) async throws -> [String: Int] {
+        guard !userIds.isEmpty else { return [:] }
+        
+        // Convert String userIds to UUID format for querying
+        let uuidUserIds = userIds.compactMap { UUID(uuidString: $0) }
+        
+        // Fetch bet counts from partybets table
+        let partyBetsResponse = try await supabaseClient
+            .from("partybets")
+            .select("user_id")
+            .in("user_id", values: uuidUserIds)
+            .execute()
+        
+        // Also fetch from User Bets table (note: user_id is text type here)
+        let userBetsResponse = try await supabaseClient
+            .from("User Bets")
+            .select("user_id")
+            .in("user_id", values: userIds)
+            .execute()
+        
+        struct PartyBetResult: Codable {
+            let user_id: UUID
+        }
+        
+        struct UserBetResult: Codable {
+            let user_id: String
+        }
+        
+        let partyBets = try JSONDecoder().decode([PartyBetResult].self, from: partyBetsResponse.data)
+        let userBets = try JSONDecoder().decode([UserBetResult].self, from: userBetsResponse.data)
+        
+        // Count bets for each user
+        var betCounts: [String: Int] = [:]
+        
+        // Count bets from partybets table
+        for bet in partyBets {
+            let userIdString = bet.user_id.uuidString
+            betCounts[userIdString, default: 0] += 1
+        }
+        
+        // Count bets from User Bets table
+        for bet in userBets {
+            betCounts[bet.user_id, default: 0] += 1
+        }
+        
+        print("🔍 Bet counts calculated: \(betCounts)")
+        return betCounts
     }
     
     private func fetchFriendsLeaderboard() async throws -> [LeaderboardEntry] {
@@ -295,11 +370,27 @@ struct LeaderBoardView: View {
             return []
         }
         
-        // Fetch user data for friends and current user
+        // Fetch bet counts for all users
+        let betCounts = try await fetchUserBetCounts(for: allUserIds)
+        print("🔍 Friends bet counts: \(betCounts)")
+        
+        // Filter users with minimum 2 bets
+        let qualifiedUserIds = allUserIds.filter { userId in
+            let betCount = betCounts[userId] ?? 0
+            return betCount >= 2
+        }
+        
+        print("🔍 Qualified friends (2+ bets): \(qualifiedUserIds)")
+        
+        guard !qualifiedUserIds.isEmpty else {
+            return []
+        }
+        
+        // Fetch user data for qualified users
         let usersResponse = try await supabaseClient
             .from("Login Information")
             .select("user_id, wins")
-            .in("user_id", values: allUserIds)
+            .in("user_id", values: qualifiedUserIds)
             .execute()
         
         print("🔍 Friends Login Information response: \(String(data: usersResponse.data, encoding: .utf8) ?? "nil")")
@@ -317,7 +408,7 @@ struct LeaderBoardView: View {
         let usernamesResponse = try await supabaseClient
             .from("Username")
             .select("user_id, username")
-            .in("user_id", values: allUserIds)
+            .in("user_id", values: qualifiedUserIds)
             .execute()
         
         print("🔍 Friends Username response: \(String(data: usernamesResponse.data, encoding: .utf8) ?? "nil")")
@@ -338,14 +429,16 @@ struct LeaderBoardView: View {
             let username = userIdToUsername[userWins.user_id] ?? "Unknown User"
             let wins = userWins.wins ?? 0
             let isCurrentUser = userWins.user_id == currentUserId
+            let betCount = betCounts[userWins.user_id] ?? 0
             
-            print("🔍 Friends entry: \(username) - \(wins) wins, isCurrentUser: \(isCurrentUser)")
+            print("🔍 Friends entry: \(username) - \(wins) wins, \(betCount) bets, isCurrentUser: \(isCurrentUser)")
             
             entries.append(LeaderboardEntry(
                 user_id: userWins.user_id,
                 username: username,
                 wins: wins,
-                isCurrentUser: isCurrentUser
+                isCurrentUser: isCurrentUser,
+                betCount: betCount
             ))
         }
         
@@ -356,7 +449,7 @@ struct LeaderBoardView: View {
     private func fetchGlobalLeaderboard() async throws -> [LeaderboardEntry] {
         print("🔍 Fetching global leaderboard")
         
-        // Fetch all users (no filtering by wins at database level)
+        // Fetch all users
         let usersResponse = try await supabaseClient
             .from("Login Information")
             .select("user_id, wins")
@@ -374,11 +467,30 @@ struct LeaderBoardView: View {
         
         print("🔍 Found \(userIds.count) total users")
         
-        // Fetch usernames for all users
+        // Fetch bet counts for all users
+        let betCounts = try await fetchUserBetCounts(for: userIds)
+        print("🔍 Global bet counts: \(betCounts)")
+        
+        // Filter users with minimum 3 bets
+        let qualifiedUserIds = userIds.filter { userId in
+            let betCount = betCounts[userId] ?? 0
+            return betCount >= 3
+        }
+        
+        print("🔍 Qualified global users (3+ bets): \(qualifiedUserIds)")
+        
+        guard !qualifiedUserIds.isEmpty else {
+            return []
+        }
+        
+        // Filter user wins results to only include qualified users
+        let qualifiedUserWinsResults = userWinsResults.filter { qualifiedUserIds.contains($0.user_id) }
+        
+        // Fetch usernames for qualified users
         let usernamesResponse = try await supabaseClient
             .from("Username")
             .select("user_id, username")
-            .in("user_id", values: userIds)
+            .in("user_id", values: qualifiedUserIds)
             .execute()
         
         print("🔍 Global Username response: \(String(data: usernamesResponse.data, encoding: .utf8) ?? "nil")")
@@ -393,20 +505,22 @@ struct LeaderBoardView: View {
         
         print("🔍 Global username mapping: \(userIdToUsername)")
         
-        // Combine data - show all users, regardless of wins
+        // Combine data - only qualified users
         var entries: [LeaderboardEntry] = []
-        for userWins in userWinsResults {
+        for userWins in qualifiedUserWinsResults {
             let username = userIdToUsername[userWins.user_id] ?? "Unknown User"
             let wins = userWins.wins ?? 0
             let isCurrentUser = userWins.user_id == currentUserId
+            let betCount = betCounts[userWins.user_id] ?? 0
             
-            print("🔍 Global entry: \(username) - \(wins) wins, isCurrentUser: \(isCurrentUser)")
+            print("🔍 Global entry: \(username) - \(wins) wins, \(betCount) bets, isCurrentUser: \(isCurrentUser)")
             
             entries.append(LeaderboardEntry(
                 user_id: userWins.user_id,
                 username: username,
                 wins: wins,
-                isCurrentUser: isCurrentUser
+                isCurrentUser: isCurrentUser,
+                betCount: betCount
             ))
         }
         
@@ -421,7 +535,12 @@ struct LeaderBoardView: View {
                 return entry1.wins > entry2.wins
             }
             
-            // If wins are tied, sort alphabetically by username
+            // If wins are tied, sort by bet count (descending) - more active users ranked higher
+            if entry1.betCount != entry2.betCount {
+                return entry1.betCount > entry2.betCount
+            }
+            
+            // If wins and bet counts are tied, sort alphabetically by username
             if entry1.username != entry2.username {
                 return entry1.username < entry2.username
             }
@@ -451,11 +570,17 @@ struct LeaderboardRow: View {
                 }
             }
             
-            // Username
-            Text(entry.username)
-                .font(.system(size: 18, weight: entry.isCurrentUser ? .bold : .semibold))
-                .foregroundColor(entry.isCurrentUser ? .yellow : .white)
-                .lineLimit(1)
+            // Username with bet count indicator
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.username)
+                    .font(.system(size: 18, weight: entry.isCurrentUser ? .bold : .semibold))
+                    .foregroundColor(entry.isCurrentUser ? .yellow : .white)
+                    .lineLimit(1)
+                
+                Text("\(entry.betCount) bets")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+            }
             
             Spacer()
             
