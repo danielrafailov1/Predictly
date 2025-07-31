@@ -22,6 +22,7 @@ struct NormalBetView: View {
     @State private var selectedDate = Date()
     @State private var isNextActive = false
     @State private var optionCount = 4
+    @State private var maxSelections = 1
     
     // Date picker states
     @State private var selectedMonth = Calendar.current.component(.month, from: Date())
@@ -151,7 +152,7 @@ struct NormalBetView: View {
                     
                     // TimerSetView-style Date Picker Section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Choose a date for your bet")
+                        Text("Select time of match")
                             .foregroundColor(.white)
                             .font(.title2)
                             .padding(.horizontal)
@@ -177,6 +178,12 @@ struct NormalBetView: View {
                         .onChange(of: selectedMonth) { _ in updateSelectedDate() }
                         .onChange(of: selectedDay) { _ in updateSelectedDate() }
                         .onChange(of: selectedYear) { _ in updateSelectedDate() }
+                        .onChange(of: optionCount) { _ in
+                            // Ensure maxSelections doesn't exceed optionCount - 1
+                            if maxSelections >= optionCount {
+                                maxSelections = max(1, optionCount - 1)
+                            }
+                        }
                         
                         // Display selected date
                         HStack {
@@ -235,6 +242,52 @@ struct NormalBetView: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     
+                    // Maximum Selections Section
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("Max selections per user")
+                                .foregroundColor(.white)
+                                .font(.system(size: 16, weight: .medium))
+                            
+                            Spacer()
+                            
+                            // Counter/Ticker on the right
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    if maxSelections > 1 {
+                                        maxSelections -= 1
+                                    }
+                                }) {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundColor(maxSelections > 1 ? .blue : .gray)
+                                        .font(.title2)
+                                }
+                                .disabled(maxSelections <= 1)
+                                
+                                Text("\(maxSelections)")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .frame(minWidth: 30)
+                                
+                                Button(action: {
+                                    if maxSelections < (optionCount - 1) {
+                                        maxSelections += 1
+                                    }
+                                }) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(maxSelections < (optionCount - 1) ? .blue : .gray)
+                                        .font(.title2)
+                                }
+                                .disabled(maxSelections >= (optionCount - 1))
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                    
                     NavigationLink(
                         destination: BetOptionsView(
                             navPath: $navPath,
@@ -243,6 +296,7 @@ struct NormalBetView: View {
                             email: email,
                             userId: userId,
                             optionCount: optionCount,
+                            maxSelections: maxSelections,
                             selectedCategory: selectedCategory
                         ),
                         isActive: $isNextActive
@@ -250,18 +304,21 @@ struct NormalBetView: View {
                         EmptyView()
                     }
                     
-                    Button("Next") {
+                    Button(action: {
                         if canProceed {
                             isNextActive = true
                         }
+                    }) {
+                        Text("Next")
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(canProceed ? Color.green : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                            .padding(.horizontal)
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(canProceed ? Color.green : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .padding(.horizontal)
                     .disabled(!canProceed)
+
                     
                     // Validation message
                     if !canProceed {
@@ -444,6 +501,7 @@ struct BetOptionsView: View {
     let email: String
     let userId: UUID?
     let optionCount: Int
+    let maxSelections: Int
     let selectedCategory: BetCategoryView.BetCategory?
 
     @State private var betOptions: [String] = []
@@ -561,6 +619,7 @@ struct BetOptionsView: View {
                         betOptions: betOptions,
                         betTerms: betTerms,
                         betType: "normal",
+                        maxSelections: maxSelections,
                         userId: userId
                     ),
                     isActive: $isNextActive
@@ -568,18 +627,21 @@ struct BetOptionsView: View {
                     EmptyView()
                 }
                 
-                Button("Next") {
+                Button(action: {
                     if canProceed {
                         isNextActive = true
                     }
+                }) {
+                    Text("Next")
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(canProceed ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(canProceed ? Color.green : Color.gray)
-                .foregroundColor(.white)
-                .cornerRadius(10)
                 .padding(.horizontal)
                 .disabled(!canProceed)
+
                 
                 // Validation message
                 if !canProceed {
@@ -616,37 +678,51 @@ struct BetOptionsView: View {
                 
                 if isBinaryBet {
                     prompt = """
-                    Based on this \(categoryContext) bet: "\(betPrompt)", generate exactly 2 simple, direct answer options.
+                    Analyze this betting question: "\(betPrompt)"
                     
-                    This appears to be a simple either/or question in the \(selectedCategory?.rawValue.lowercased() ?? "general") category. 
-                    Provide only the two most obvious choices that are relevant to \(categoryContext).
+                    This is a binary (yes/no or either/or) question in the \(selectedCategory?.rawValue.lowercased() ?? "general") category.
                     
-                    For example:
-                    - If it's "Who will win X vs Y", return: "Team X" and "Team Y"
-                    - If it's "Will X happen", return: "Yes" and "No"
+                    Generate exactly 2 clear, specific options that directly answer this question:
                     
-                    Keep options short (1-4 words each) and directly related to \(categoryContext).
-                    Return only the options, one per line, no numbering.
+                    Rules:
+                    - Extract the exact entities/teams/people mentioned in the question
+                    - If it's "Who will win X vs Y", return exactly "X" and "Y" (use the actual names)
+                    - If it's "Will [something] happen", return "Yes" and "No"
+                    - If it's "Which is better A or B", return "A" and "B" (use actual names)
+                    - Be precise and use the exact terms from the question
+                    - Keep each option under 8 words
+                    
+                    Return only the 2 options, one per line, no numbering or extra text.
                     """
                 } else {
                     prompt = """
-                    Based on this \(categoryContext) bet: "\(betPrompt)", generate exactly \(targetCount) realistic and specific options.
+                    Analyze this betting question: "\(betPrompt)"
                     
-                    Create measurable outcomes that can be definitively determined as true or false.
-                    Each option should be one clear sentence and must be relevant to \(categoryContext).
-                    Keep options concise but specific enough to be interesting for a \(selectedCategory?.rawValue.lowercased() ?? "general") bet.
+                    Generate exactly \(targetCount) realistic, specific options that directly answer this question about \(categoryContext).
                     
-                    The bet is scheduled for \(formattedDate), so make sure options are appropriate for that timeframe.
+                    Requirements:
+                    - Each option must be a plausible answer to the exact question asked
+                    - Be specific and measurable (avoid vague terms like "other" or "something else")
+                    - If the question mentions specific entities, include them in relevant options
+                    - Options should be mutually exclusive (only one can be correct)
+                    - Make them realistic for the date: \(formattedDate)
+                    - Keep each option concise (under 15 words)
+                    - Ensure all \(targetCount) options are filled
                     
-                    Return only the options, one per line, no numbering or extra text.
+                    For example:
+                    - If asked "What will the weather be like?": "Sunny", "Rainy", "Cloudy", "Stormy"
+                    - If asked "Who will score first?": Use actual player names if mentioned
+                    - If asked "What time will we arrive?": "Before 2 PM", "2-4 PM", "4-6 PM", "After 6 PM"
+                    
+                    Return exactly \(targetCount) options, one per line, no numbering or extra text.
                     """
                 }
 
                 let responseText = try await AIServices.shared.sendPrompt(
                     prompt,
                     model: "gemini-2.5-flash-lite",
-                    temperature: 0.6,
-                    maxTokens: 200
+                    temperature: 0.3,
+                    maxTokens: 300
                 )
 
                 let cleanedLines = responseText
@@ -654,24 +730,35 @@ struct BetOptionsView: View {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
                     .map {
-                        $0.replacingOccurrences(of: #"^\s*[\d\-\•\*]+\.?\s*"#, with: "", options: .regularExpression)
+                        // Remove numbering, bullets, and other prefixes
+                        $0.replacingOccurrences(of: #"^\s*[\d\-\•\*\)\.\:]+\.?\s*"#, with: "", options: .regularExpression)
                     }
-                    .filter { $0.count > 2 && $0.count < 100 }
+                    .filter { $0.count > 1 && $0.count < 150 }
 
-                let generatedOptions = Array(cleanedLines.prefix(targetCount))
+                var generatedOptions = Array(cleanedLines.prefix(targetCount))
                 
-                // Update the existing betOptions array with generated content
+                // Ensure we have the exact number of options needed
+                while generatedOptions.count < targetCount {
+                    let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount - generatedOptions.count)
+                    generatedOptions.append(contentsOf: fallbackOptions)
+                }
+                
+                // Take exactly the number we need
+                generatedOptions = Array(generatedOptions.prefix(targetCount))
+                
+                // Clear existing options and fill with generated ones
+                betOptions = Array(repeating: "", count: optionCount)
                 for (index, option) in generatedOptions.enumerated() {
                     if index < betOptions.count {
                         betOptions[index] = option
                     }
                 }
 
-                // Fill remaining slots with fallback if needed
-                if generatedOptions.isEmpty {
-                    let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount)
-                    for (index, option) in fallbackOptions.enumerated() {
-                        if index < betOptions.count {
+                // If we still don't have enough, use fallback
+                if generatedOptions.count < targetCount {
+                    let additionalFallback = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount)
+                    for (index, option) in additionalFallback.enumerated() {
+                        if index < betOptions.count && betOptions[index].isEmpty {
                             betOptions[index] = option
                         }
                     }
@@ -680,6 +767,7 @@ struct BetOptionsView: View {
             } catch {
                 print("Failed to generate bet options: \(error)")
                 let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: detectBinaryBet(betPrompt), count: optionCount)
+                betOptions = Array(repeating: "", count: optionCount)
                 for (index, option) in fallbackOptions.enumerated() {
                     if index < betOptions.count {
                         betOptions[index] = option
@@ -693,14 +781,17 @@ struct BetOptionsView: View {
         let lowercased = prompt.lowercased()
         
         let binaryKeywords = [
-            "who will win", "vs", " v ", "or", "will there be", "will it", "yes or no",
-            "true or false", "happen or not", "over or under"
+            "who will win", "vs", " v ", " or ", "will there be", "will it", "yes or no",
+            "true or false", "happen or not", "over or under", "better", "worse",
+            "will they", "will he", "will she", "does", "is it", "can they", "should"
         ]
         
         let versusPatterns = [
-            " vs? ",
+            " vs?\\.? ",
             " versus ",
-            "\\b\\w+ or \\w+\\b"
+            "\\b\\w+ or \\w+\\b",
+            " vs$ ",
+            "\\bversus\\b"
         ]
         
         for keyword in binaryKeywords {
@@ -722,25 +813,36 @@ struct BetOptionsView: View {
         if isBinary {
             let lowercased = prompt.lowercased()
             
-            if lowercased.contains("who will win") {
-                if let vsRange = lowercased.range(of: " vs ") ?? lowercased.range(of: " v ") {
-                    let afterVs = String(lowercased[vsRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let beforeVs = String(lowercased[..<vsRange.lowerBound])
-                    
-                    if let lastWord = beforeVs.components(separatedBy: " ").last,
-                       let firstWord = afterVs.components(separatedBy: " ").first {
-                        return [lastWord.capitalized, firstWord.capitalized]
-                    }
+            // Try to extract specific entities from vs/versus patterns
+            if let vsRange = lowercased.range(of: " vs ") ?? lowercased.range(of: " versus ") ?? lowercased.range(of: " v ") {
+                let beforeVs = String(lowercased[..<vsRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let afterVs = String(lowercased[vsRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if let lastWord = beforeVs.components(separatedBy: " ").last?.capitalized,
+                   let firstWord = afterVs.components(separatedBy: " ").first?.capitalized,
+                   !lastWord.isEmpty && !firstWord.isEmpty {
+                    return [lastWord, firstWord]
                 }
             }
             
+            // Check for "will" questions
             if lowercased.contains("will") {
                 return ["Yes", "No"]
             }
             
-            return ["Option A", "Option B"]
+            // Check for choice questions
+            if lowercased.contains(" or ") {
+                let parts = lowercased.components(separatedBy: " or ")
+                if parts.count >= 2 {
+                    let option1 = parts[0].components(separatedBy: " ").last?.capitalized ?? "Option A"
+                    let option2 = parts[1].components(separatedBy: " ").first?.capitalized ?? "Option B"
+                    return [option1, option2]
+                }
+            }
+            
+            return ["Yes", "No"]
         } else {
-            // Category-specific fallback options
+            // Non-binary bet fallback options
             guard let category = selectedCategory else {
                 let baseOptions = [
                     "Most likely outcome",
@@ -834,7 +936,8 @@ struct BetOptionsView: View {
     func generateTerms(date: Date) {
         Task {
             do {
-                let betDescription = betOptions.joined(separator: ", ")
+                let validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                let betDescription = validOptions.joined(separator: ", ")
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateStyle = .full
                 let formattedDate = dateFormatter.string(from: date)
@@ -1001,6 +1104,7 @@ struct FinalizeBetView: View {
     let betOptions: [String]
     let betTerms: String
     let betType: String
+    let maxSelections: Int
     let userId: UUID?
 
     @State private var partyName: String = ""
@@ -1082,6 +1186,18 @@ struct FinalizeBetView: View {
                             .background(Color.white.opacity(0.1))
                             .cornerRadius(6)
                         }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Max Selections per User:")
+                                .foregroundColor(.white.opacity(0.7))
+                                .font(.caption)
+                            Text("\(maxSelections) out of \(betOptions.count) options")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(8)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(6)
+                        }
                     }
                     .padding(.horizontal)
                     
@@ -1129,21 +1245,27 @@ struct FinalizeBetView: View {
                             .foregroundColor(.red)
                             .padding(.horizontal)
                     }
-
+                   
                     Button(action: submitBet) {
-                        if isSubmitting {
-                            ProgressView().frame(maxWidth: .infinity)
-                        } else {
-                            Text("Create Bet")
-                                .frame(maxWidth: .infinity)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(canProceed ? Color.green : Color.gray)
+                                .frame(height: 50)
+
+                            if isSubmitting {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Text("Create Bet")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding()
-                    .background(canProceed ? Color.green : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
                     .padding(.horizontal)
                     .disabled(!canProceed || isSubmitting)
+
                     
                     // Validation message
                     if !canProceed {
