@@ -152,7 +152,7 @@ struct NormalBetView: View {
                     
                     // TimerSetView-style Date Picker Section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Choose a date for your bet")
+                        Text("Select time of match")
                             .foregroundColor(.white)
                             .font(.title2)
                             .padding(.horizontal)
