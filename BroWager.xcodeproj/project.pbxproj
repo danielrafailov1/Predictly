@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4B1F1B2F2E3AE34D00197463 /* BetCategoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1F1B2E2E3AE34900197463 /* BetCategoryView.swift */; };
+		4B1F1B352E3B272400197463 /* CreditsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1F1B342E3B271800197463 /* CreditsView.swift */; };
 		4B2D15792DFCB3B50068E5E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4B2D15772DFCB3B50068E5E4 /* Assets.xcassets */; };
 		4B2D157C2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2D157A2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift */; };
 		4B2D15812DFCB3BD0068E5E4 /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2D157E2DFCB3BD0068E5E4 /* ProfileManager.swift */; };
@@ -80,6 +81,7 @@
 
 /* Begin PBXFileReference section */
 		4B1F1B2E2E3AE34900197463 /* BetCategoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetCategoryView.swift; sourceTree = "<group>"; };
+		4B1F1B342E3B271800197463 /* CreditsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreditsView.swift; sourceTree = "<group>"; };
 		4B2D15772DFCB3B50068E5E4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4B2D157A2DFCB3B90068E5E4 /* SupabaseClient+Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "SupabaseClient+Extensions.swift"; sourceTree = "<group>"; };
 		4B2D157E2DFCB3BD0068E5E4 /* ProfileManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ProfileManager.swift; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 		4B2D15922DFCB3CB0068E5E4 /* Credentials */ = {
 			isa = PBXGroup;
 			children = (
+				4B1F1B342E3B271800197463 /* CreditsView.swift */,
 				4BDD178B2E01F3F400CD117D /* LoginSignupView.swift */,
 				4B2D15902DFCB3CB0068E5E4 /* LoggedInView.swift */,
 				4B2D15912DFCB3CB0068E5E4 /* ProfileView.swift */,
@@ -525,6 +528,7 @@
 				4B2D15AA2DFCB3CB0068E5E4 /* BaseballView.swift in Sources */,
 				4B786A1F2E3091A2004E5105 /* TimerSetView.swift in Sources */,
 				4B2D15AC2DFCB3CB0068E5E4 /* FootballView.swift in Sources */,
+				4B1F1B352E3B272400197463 /* CreditsView.swift in Sources */,
 				4BF3C8922E08C73100872BEC /* LoggedInPath.swift in Sources */,
 				4B6AE1082E05BAF400656DF3 /* AddFriendView.swift in Sources */,
 				4B2D15A62DFCB3CB0068E5E4 /* CreatePartyView.swift in Sources */,

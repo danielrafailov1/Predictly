@@ -26,6 +26,7 @@ struct ProfileView: View {
     @State private var currentEmail: String
     @State private var updateMessage: String?
     @State private var isErrorUpdate: Bool = false
+    @State private var showingCredits = false
     
     // New states for inline password editing
     @State private var isEditingPassword = false
@@ -115,6 +116,33 @@ struct ProfileView: View {
                         Text(message)
                             .foregroundColor(isErrorUpdate ? .red : .green)
                             .padding()
+                    }
+                    
+                    Button(action: {
+                        showingCredits = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.3.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.orange)
+                            
+                            Text("Credits")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        .padding(16)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal, 24)
+                    .sheet(isPresented: $showingCredits) {
+                        CreditsView()
                     }
                     
                     logoutButton
