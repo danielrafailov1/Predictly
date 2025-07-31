@@ -7,6 +7,12 @@
 
     <key>SUPABASE_URL</key>
     <string>https://wwqbjakkuprsyvwxlgch.supabase.co</string>
+    
+    <key>GOOGLE_CSE_ENGINE_ID</key>
+    <string>7549fdace758542a0</string>
+
+    <key>GOOGLE_CSE_API_KEY</key>
+    <string>AIzaSyAAmgQw_YbvXDGFJmbe0xPkSliEz3XMrj8</string>
 
     <key>SUPABASE_KEY</key>
     <string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cWJqYWtrdXByc3l2d3hsZ2NoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczMzMxNDUsImV4cCI6MjA2MjkwOTE0NX0.9BTfCnpDCIzQ8Zve69JpJ6_B_AeGier_uuEQgNBlqMM</string>
