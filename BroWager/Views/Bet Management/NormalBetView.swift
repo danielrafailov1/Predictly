@@ -25,6 +25,13 @@ struct NormalBetView: View {
     @State private var optionCount = 4
     @State private var maxSelections = 1
     
+    // Refresh cooldown states - using AppStorage for persistence
+    @AppStorage("aiRefreshCount") private var refreshCount = 0
+    @AppStorage("lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
+    @State private var isRefreshDisabled = false
+    @State private var cooldownTimer: Timer?
+    @State private var timeRemaining: Int = 0
+    
     // Date picker states
     @State private var selectedMonth = Calendar.current.component(.month, from: Date())
     @State private var selectedDay = Calendar.current.component(.day, from: Date())
@@ -32,6 +39,7 @@ struct NormalBetView: View {
     
     private let months = Array(1...12)
     private let currentYear = Calendar.current.component(.year, from: Date())
+    private let maxRefreshesPerMinute = 3
     
     private var years: [Int] {
         Array(currentYear...(currentYear + 5))
@@ -100,18 +108,40 @@ struct NormalBetView: View {
                             
                             Button(action: {
                                 Task {
-                                    await refreshAISuggestions()
+                                    await handleRefreshTap()
                                 }
                             }) {
                                 Image(systemName: "arrow.clockwise")
-                                    .foregroundColor(.white)
+                                    .foregroundColor(isRefreshDisabled ? .gray : .white)
                                     .font(.title2)
                                     .padding(8)
-                                    .background(Color.blue.opacity(0.7))
+                                    .background((isRefreshDisabled ? Color.gray : Color.blue).opacity(0.7))
                                     .clipShape(Circle())
                             }
+                            .disabled(isRefreshDisabled)
                         }
                         .padding(.horizontal)
+                        
+                        // Cooldown message with live timer
+                        if isRefreshDisabled && timeRemaining > 0 {
+                            HStack {
+                                Spacer()
+                                Text("Cooldown: \(timeRemaining)s remaining")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                                    .padding(.horizontal)
+                                Spacer()
+                            }
+                        } else if refreshCount > 0 && !isRefreshDisabled {
+                            HStack {
+                                Spacer()
+                                Text("\(maxRefreshesPerMinute - refreshCount) refreshes remaining this minute")
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .font(.caption)
+                                    .padding(.horizontal)
+                                Spacer()
+                            }
+                        }
                     }
                     
                     // Scrollable Suggestion Buttons
@@ -349,7 +379,13 @@ struct NormalBetView: View {
                     
                     Spacer()
                 }
-                .onAppear(perform: loadAISuggestions)
+                .onAppear {
+                    loadAISuggestions()
+                    checkCooldownStatus()
+                }
+                .onDisappear {
+                    cooldownTimer?.invalidate()
+                }
             }
         }
     }
@@ -383,6 +419,91 @@ struct NormalBetView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .full
         return formatter.string(from: selectedDate)
+    }
+    
+    private func getCurrentTimestamp() -> Double {
+        return Date().timeIntervalSince1970
+    }
+    
+    private func checkCooldownStatus() {
+        let currentTime = getCurrentTimestamp()
+        let timeSinceLastRefresh = currentTime - lastRefreshTimestamp
+        
+        // Reset if more than 60 seconds have passed
+        if timeSinceLastRefresh >= 60 {
+            refreshCount = 0
+            isRefreshDisabled = false
+            timeRemaining = 0
+            cooldownTimer?.invalidate()
+            return
+        }
+        
+        // Check if we're in cooldown
+        if refreshCount >= maxRefreshesPerMinute {
+            isRefreshDisabled = true
+            timeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+            startLiveTimer()
+        } else {
+            isRefreshDisabled = false
+            timeRemaining = 0
+        }
+    }
+    
+    private func startLiveTimer() {
+        cooldownTimer?.invalidate()
+        
+        cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                let currentTime = getCurrentTimestamp()
+                let timeSinceLastRefresh = currentTime - lastRefreshTimestamp
+                
+                if timeSinceLastRefresh >= 60 {
+                    // Cooldown period has ended
+                    refreshCount = 0
+                    isRefreshDisabled = false
+                    timeRemaining = 0
+                    cooldownTimer?.invalidate()
+                } else {
+                    // Update remaining time
+                    timeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+                    if timeRemaining == 0 {
+                        refreshCount = 0
+                        isRefreshDisabled = false
+                        cooldownTimer?.invalidate()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func handleRefreshTap() async {
+        let currentTime = getCurrentTimestamp()
+        let timeSinceLastRefresh = currentTime - lastRefreshTimestamp
+        
+        // Reset counter if more than 60 seconds have passed
+        if timeSinceLastRefresh >= 60 {
+            refreshCount = 0
+        }
+        
+        // Check if we've exceeded the limit
+        if refreshCount >= maxRefreshesPerMinute {
+            isRefreshDisabled = true
+            timeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+            startLiveTimer()
+            return
+        }
+        
+        // Increment counter and refresh
+        refreshCount += 1
+        lastRefreshTimestamp = currentTime
+        await refreshAISuggestions()
+        
+        // Start cooldown if we've hit the limit
+        if refreshCount >= maxRefreshesPerMinute {
+            isRefreshDisabled = true
+            timeRemaining = 60
+            startLiveTimer()
+        }
     }
 
     @MainActor
@@ -474,7 +595,6 @@ struct NormalBetView: View {
         }
     }
 }
-
 // New DatePickerView component similar to TimerSetView
 struct DatePickerView: View {
     private let pickerViewTitlePadding: CGFloat = 4.0
