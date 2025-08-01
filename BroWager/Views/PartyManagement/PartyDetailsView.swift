@@ -58,6 +58,10 @@ struct PartyDetailsView: View {
     @State private var showBetWarning = false
     @State private var playersWithoutBets: [String] = []
     
+    // Action sheet states
+    @State private var showActionSheet = false
+    @State private var showInviteActionSheet = false
+    
     // Computed property to check if current user is host
     private var isHost: Bool {
         return currentUserId == hostUserId
@@ -107,83 +111,45 @@ struct PartyDetailsView: View {
                 VStack(spacing: 0) {
                     headerView
                     ScrollView {
-                        VStack(spacing: 32) {
-                            hostCard
-                            partyCodeCard
-                            betTypeCard
-                            buyInAndPotCard
-                            membersCard // Updated with bet status
+                        VStack(spacing: 24) {
+                            // Party Info Section
                             VStack(spacing: 16) {
-                                VStack(spacing: 18) {
-                                    Button(action: { showInviteFriends = true }) {
-                                        HStack {
-                                            Image(systemName: "person.crop.circle.badge.plus")
-                                            Text("Invite Friends")
-                                        }
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .padding(.vertical, 12)
-                                        .frame(maxWidth: .infinity)
-                                        .background(Color.blue.opacity(0.85))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(12)
-                                    }
-                                    Button(action: { showPartyChat = true }) {
-                                        HStack {
-                                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                            Text("Party Chat")
-                                        }
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .padding(.vertical, 12)
-                                        .frame(maxWidth: .infinity)
-                                        .background(Color.green.opacity(0.85))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(12)
-                                    }
-                                    Button(action: { showBetTypeTutorial = true }) {
-                                        HStack {
-                                            Image(systemName: "info.circle.fill")
-                                            Text("Bet Type Info")
-                                        }
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .padding(.vertical, 12)
-                                        .frame(maxWidth: .infinity)
-                                        .background(Color.yellow.opacity(0.85))
-                                        .foregroundColor(.black)
-                                        .cornerRadius(12)
-                                    }
-                                }
-                                .padding(.horizontal, 24)
-                                .padding(.top, 12)
+                                hostCard
+                                partyCodeCard
+                                betTypeCard
+                                buyInAndPotCard
+                                membersCard
                             }
                             
-                            // Normal bet flow buttons
-                            if betType.lowercased() == "normal" {
-                                VStack(spacing: 16) {
-                                    // Make Bet / Edit Bet button - Only show when game is waiting
-                                    if gameStatus == "waiting" {
-                                        makeBetButton
-                                    }
-                                    
-                                    // Host-only game control buttons
-                                    if isHost {
-                                        hostControlButtons
-                                    }
-                                    
-                                    // Game Results button - Show for ALL users when game is ended
-                                    if gameStatus == "ended" {
-                                        gameResultsButton
-                                    }
-                                }
-                                .padding(.top, 18)
-                            } else {
-                                // Original Make a Bet button for non-normal bet types - Only show if game not ended
-                                if gameStatus != "ended" {
-                                    makeBetButton
-                                        .padding(.top, 18)
-                                }
-                            }
+                            // Quick Actions Section
+                            quickActionsSection
+                            
+                            // Main Actions Section
+                            mainActionsSection
                         }
+                        .padding(.bottom, 100) // Add padding for floating action button
                     }
+                }
+            }
+            
+            // Floating Action Button
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        showActionSheet = true
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 56, height: 56)
+                            .background(Color.blue.opacity(0.9))
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 32)
                 }
             }
         }
@@ -302,6 +268,86 @@ struct PartyDetailsView: View {
         } message: {
             Text("The following players haven't placed their bets yet:\n\n\(playersWithoutBets.joined(separator: ", "))\n\nAre you sure you want to start the game?")
         }
+        .confirmationDialog("More Options", isPresented: $showActionSheet, titleVisibility: .visible) {
+            Button("Party Chat") {
+                showPartyChat = true
+            }
+            Button("Bet Type Info") {
+                showBetTypeTutorial = true
+            }
+            Button("Invite Players") {
+                showInviteActionSheet = true
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        .confirmationDialog("Invite Players", isPresented: $showInviteActionSheet, titleVisibility: .visible) {
+            Button("Invite Friends") {
+                showInviteFriends = true
+            }
+            Button("Invite Others") {
+                showInviteOthers = true
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+    }
+    
+    // MARK: - View Sections
+    
+    private var quickActionsSection: some View {
+        HStack(spacing: 16) {
+            QuickActionButton(
+                icon: "bubble.left.and.bubble.right.fill",
+                title: "Chat",
+                color: .green
+            ) {
+                showPartyChat = true
+            }
+            
+            QuickActionButton(
+                icon: "person.crop.circle.badge.plus",
+                title: "Invite",
+                color: .blue
+            ) {
+                showInviteActionSheet = true
+            }
+            
+            QuickActionButton(
+                icon: "info.circle.fill",
+                title: "Info",
+                color: .orange
+            ) {
+                showBetTypeTutorial = true
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+    
+    private var mainActionsSection: some View {
+        VStack(spacing: 16) {
+            // Normal bet flow buttons
+            if betType.lowercased() == "normal" {
+                // Make Bet / Edit Bet button - Only show when game is waiting
+                if gameStatus == "waiting" {
+                    makeBetButton
+                }
+                
+                // Host-only game control buttons
+                if isHost {
+                    hostControlButtons
+                }
+                
+                // Game Results button - Show for ALL users when game is ended
+                if gameStatus == "ended" {
+                    gameResultsButton
+                }
+            } else {
+                // Original Make a Bet button for non-normal bet types - Only show if game not ended
+                if gameStatus != "ended" {
+                    makeBetButton
+                }
+            }
+        }
+        .padding(.horizontal, 24)
     }
     
     // Auto-update functions
@@ -415,14 +461,16 @@ struct PartyDetailsView: View {
         }) {
             HStack {
                 Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
                 Text(hasPlacedBet ? "Edit Bet" : "Make a Bet")
+                    .font(.system(size: 18, weight: .bold))
             }
-            .font(.system(size: 20, weight: .bold))
-            .padding(.vertical, 12)
-            .padding(.horizontal, 32)
-            .background(Color.orange.opacity(0.9))
             .foregroundColor(.white)
-            .cornerRadius(14)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.orange.opacity(0.9))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -459,14 +507,16 @@ struct PartyDetailsView: View {
         }) {
             HStack {
                 Image(systemName: "play.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
                 Text("Start Game")
+                    .font(.system(size: 18, weight: .bold))
             }
-            .font(.system(size: 18, weight: .semibold))
-            .padding(.vertical, 12)
-            .padding(.horizontal, 24)
-            .background(Color.green.opacity(0.9))
             .foregroundColor(.white)
-            .cornerRadius(12)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.green.opacity(0.9))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -476,14 +526,16 @@ struct PartyDetailsView: View {
         }) {
             HStack {
                 Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
                 Text("End Game")
+                    .font(.system(size: 18, weight: .bold))
             }
-            .font(.system(size: 18, weight: .semibold))
-            .padding(.vertical, 12)
-            .padding(.horizontal, 24)
-            .background(Color.red.opacity(0.9))
             .foregroundColor(.white)
-            .cornerRadius(12)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.red.opacity(0.9))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -493,14 +545,16 @@ struct PartyDetailsView: View {
         }) {
             HStack {
                 Image(systemName: "trophy.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
                 Text("Review Game Results")
+                    .font(.system(size: 18, weight: .bold))
             }
-            .font(.system(size: 20, weight: .bold))
-            .padding(.vertical, 12)
-            .padding(.horizontal, 32)
-            .background(Color.purple.opacity(0.9))
             .foregroundColor(.white)
-            .cornerRadius(14)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.purple.opacity(0.9))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -1085,6 +1139,32 @@ struct PartyDetailsView: View {
     }
 }
 
+// MARK: - Quick Action Button Component
+struct QuickActionButton: View {
+    let icon: String
+    let title: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
+                    .background(color.opacity(0.8))
+                    .clipShape(Circle())
+                
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 #Preview {
     PartyDetailsView(partyCode: "6FA0B4", email: "danielrafailov7@gmail.com")
         .environmentObject(SessionManager(supabaseClient: SupabaseClient(
@@ -1177,4 +1257,3 @@ struct BetTypeTutorialSheet: View {
         }
     }
 }
-

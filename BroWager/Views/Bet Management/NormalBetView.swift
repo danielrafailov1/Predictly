@@ -1160,7 +1160,7 @@ struct FinalizeBetView: View {
 
     @State private var partyName: String = ""
     @State private var privacy: String = "Public"
-    @State private var maxMembers: Int = 10
+    @State private var maxMembers: Int = 2
     @State private var terms: String = ""
     @State private var isSubmitting = false
     @State private var showPartyDetails = false
