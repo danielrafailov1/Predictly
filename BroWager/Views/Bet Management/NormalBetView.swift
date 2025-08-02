@@ -24,6 +24,7 @@ struct NormalBetView: View {
     @State private var isNextActive = false
     @State private var optionCount = 4
     @State private var maxSelections = 1
+    @State private var showDateInfo = false // New state for showing date info
     
     // Refresh cooldown states - using AppStorage for persistence
     @AppStorage("aiRefreshCount") private var refreshCount = 0
@@ -181,12 +182,20 @@ struct NormalBetView: View {
                     }
                     .padding(.horizontal)
                     
-                    // Date Toggle Section
+                    // Date Toggle Section with Info Button
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Set specific date for bet")
                                 .foregroundColor(.white)
                                 .font(.title2)
+                            
+                            Button(action: {
+                                showDateInfo = true
+                            }) {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.blue)
+                                    .font(.title3)
+                            }
                             
                             Spacer()
                             
@@ -387,6 +396,11 @@ struct NormalBetView: View {
                     cooldownTimer?.invalidate()
                 }
             }
+        }
+        .alert("Date Selection Info", isPresented: $showDateInfo) {
+            Button("Got it!", role: .cancel) { }
+        } message: {
+            Text("Only select a specific date if your bet involves an event that will happen in the future (like a sports game, movie release, or scheduled event). For general bets without time constraints, leave this option disabled.")
         }
     }
     
@@ -1160,28 +1174,37 @@ struct BetOptionsView: View {
                 }
                 
                 let prompt = """
-                Generate concise, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
+                Generate well-organized, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
                 involving these options: \(betDescription). 
                 
-                IMPORTANT: Each participant can select a maximum of \(maxSelections) option(s) out of \(betOptions.count) total options.
+                CRITICAL REQUIREMENT: Each participant can select a maximum of \(maxSelections) option(s) out of \(betOptions.count) total options.
+                This selection limit must be PROMINENTLY featured and clearly emphasized in the terms.
+                
+                Format the response with clear sections and use formatting like:
+                - **Bold text** for important rules
+                - CAPITAL LETTERS for critical information
+                - Bullet points for easy reading
+                - Clear section headers
+                
+                Structure the terms with these sections:
+                1. **SELECTION RULES** (Make this section very prominent with the max selection limit)
+                2. **BET DETAILS** (What the bet is about and timeline)
+                3. **DETERMINATION OF RESULTS** (How winners are decided)
+                4. **DISPUTE RESOLUTION** (What happens if there are disagreements)
+                5. **CONSEQUENCES & REWARDS** (What happens to winners/losers)
                 
                 This bet is specifically about \(categoryContext), so include relevant rules and considerations for this type of bet.
                 Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], 
-                and keep the response under 300 words. 
+                and keep the response under 400 words but well-formatted.
                 
-                Include:
-                - Clear statement that each user can select up to \(maxSelections) option(s) maximum
-                - Basic rules about how the bet will be determined for \(categoryContext)
-                - What happens if there are disputes specific to \(categoryName) bets
-                - Any special considerations for \(categoryContext)
-                - Simple consequences or rewards appropriate for friends betting on \(categoryName)
+                Make the selection limit rule impossible to miss by using multiple formatting techniques.
                 """
                 
                 let responseText = try await AIServices.shared.sendPrompt(
                     prompt,
                     model: "gemini-2.5-flash-lite",
                     temperature: 0.7,
-                    maxTokens: 600
+                    maxTokens: 800
                 )
                 
                 betTerms = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1189,7 +1212,7 @@ struct BetOptionsView: View {
             } catch {
                 print("Failed to generate bet terms: \(error)")
                 
-                // Category-specific fallback terms
+                // Category-specific fallback terms with improved formatting
                 let categorySpecificTerms = getCategoryFallbackTerms(date: date)
                 betTerms = categorySpecificTerms
             }
@@ -1207,16 +1230,29 @@ struct BetOptionsView: View {
         }
         
         let selectionRule = maxSelections == 1 ?
-            "Each participant must select exactly 1 option." :
-            "Each participant can select up to \(maxSelections) options out of \(betOptions.count) total options."
+            "**⚠️ IMPORTANT: Each participant must select EXACTLY 1 OPTION only.**" :
+            "**⚠️ CRITICAL RULE: Each participant can select UP TO \(maxSelections) OPTIONS out of \(betOptions.count) total options. NO MORE THAN \(maxSelections) SELECTIONS ALLOWED.**"
         
         guard let category = selectedCategory else {
             return """
-            \(selectionRule) Bet is valid with \(dateString). \
-            Results will be determined based on the agreed upon criteria. \
-            All participants must confirm their selections before the bet begins. \
-            In case of disputes, the majority vote of participants will determine the outcome. \
-            Have fun and bet responsibly!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • Bet is valid with \(dateString)
+            • All participants must confirm their selections before the bet begins
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results will be determined based on the agreed upon criteria
+            • Evidence must be clear and verifiable
+            
+            ## **DISPUTE RESOLUTION**
+            • In case of disputes, the majority vote of participants will determine the outcome
+            • All participants must agree to accept the group decision
+            
+            ## **CONSEQUENCES & REWARDS**
+            • Winner gets bragging rights and small prize from the group
+            • Have fun and bet responsibly!
             """
         }
         
@@ -1224,55 +1260,157 @@ struct BetOptionsView: View {
         switch category {
         case .sports:
             baseTerms = """
-            Sports bet valid with \(dateString). Results determined by official game/match outcomes. \
-            All participants must lock in predictions before the event starts. \
-            Disputes resolved using official statistics and scores. \
-            In case of game cancellation or postponement, bet extends to rescheduled date. \
-            Winner buys the group drinks or snacks!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • **Sports bet** valid with \(dateString)
+            • All participants must lock in predictions **BEFORE** the event starts
+            • Late entries will not be accepted
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results determined by **official game/match outcomes only**
+            • Official statistics and scores will be used as final authority
+            • No arguing with the refs or official results!
+            
+            ## **DISPUTE RESOLUTION**
+            • Disputes resolved using official statistics and verified sports sources
+            • In case of game cancellation or postponement, bet extends to rescheduled date
+            • Rain delays or technical issues don't void the bet
+            
+            ## **CONSEQUENCES & REWARDS**
+            • **Winner:** Gets bragging rights and group buys them drinks/snacks
+            • **Loser:** Treats the group to next game day snacks
+            • Keep it fun and friendly - it's just a game!
             """
         case .food:
             baseTerms = """
-            Food bet valid with \(dateString). Results determined by actual choices made or outcomes achieved. \
-            All participants must confirm their predictions before the meal/event. \
-            Taste tests and food challenges must be conducted fairly with all participants present. \
-            Disputes resolved by group consensus or neutral taste tester. \
-            Loser pays for the meal or treats everyone to dessert!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • **Food bet** valid with \(dateString)
+            • All participants must confirm predictions before the meal/event
+            • No changing minds once the order is placed!
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results determined by **actual choices made** or outcomes achieved
+            • Taste tests must be conducted fairly with all participants present
+            • Photo evidence may be required for verification
+            
+            ## **DISPUTE RESOLUTION**
+            • Disputes resolved by group consensus or neutral taste tester
+            • Restaurant staff can be consulted for verification if needed
+            • Keep it light-hearted - we're here to enjoy good food!
+            
+            ## **CONSEQUENCES & REWARDS**
+            • **Winner:** Gets to pick the next restaurant or meal choice
+            • **Loser:** Pays for the meal or treats everyone to dessert
+            • Bon appétit and may the best palate win!
             """
         case .lifeEvents:
             baseTerms = """
-            Life events bet valid with \(dateString). Results determined by actual life events as they occur. \
-            All participants must confirm predictions before any deadlines. \
-            Personal milestones must be verified through social media or mutual friends. \
-            Respect privacy - no pressure on participants to rush life decisions. \
-            Winner gets bragging rights and a celebration dinner from the group!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • **Life events bet** valid with \(dateString)
+            • All participants must confirm predictions before any relevant deadlines
+            • **RESPECT PRIVACY** - no pressure on anyone to rush life decisions
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results determined by **actual life events** as they naturally occur
+            • Verification through social media, mutual friends, or direct confirmation
+            • Personal milestones must be publicly shared or confirmed
+            
+            ## **DISPUTE RESOLUTION**
+            • Respect everyone's privacy and personal timeline
+            • No pushing people to make life decisions for betting purposes
+            • Group consensus on verification methods
+            
+            ## **CONSEQUENCES & REWARDS**
+            • **Winner:** Gets bragging rights and celebration dinner from the group
+            • **Celebration:** Group celebrates the actual life event regardless of bet outcome
+            • Life is about the journey, not just the bets!
             """
         case .politics:
             baseTerms = """
-            Political bet valid with \(dateString). Results determined by official election results or policy announcements. \
-            All participants must confirm predictions before voting/announcement deadlines. \
-            Disputes resolved using official government sources and verified news outlets. \
-            Keep discussions respectful regardless of political affiliations. \
-            Winner gets to choose the next group discussion topic!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • **Political bet** valid with \(dateString)
+            • All participants must confirm predictions before voting/announcement deadlines
+            • **KEEP DISCUSSIONS RESPECTFUL** regardless of political affiliations
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results determined by **official election results** or policy announcements
+            • Only verified, official government sources will be accepted
+            • Preliminary results don't count - wait for official certification
+            
+            ## **DISPUTE RESOLUTION**
+            • Disputes resolved using official government sources and verified news outlets
+            • Multiple reputable sources required for confirmation
+            • Respect different political viewpoints throughout the process
+            
+            ## **CONSEQUENCES & REWARDS**
+            • **Winner:** Gets to choose the next group discussion topic (keep it civil!)
+            • **Everyone:** Celebrates democracy in action regardless of outcomes
+            • Politics aside, we're all friends here!
             """
         case .entertainment:
             baseTerms = """
-            Entertainment bet valid with \(dateString). Results determined by official announcements, releases, or publicly verifiable outcomes. \
-            All participants must lock in predictions before the event/show/release begins. \
-            Outcomes may include award winners, plot reveals, streaming numbers, or viral success. \
-            Disputes resolved using reputable entertainment news sources or platform statistics. \
-            Winner picks the next movie night or chooses the group's next show to binge!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • **Entertainment bet** valid with \(dateString)
+            • All participants must lock in predictions before event/show/release begins
+            • No spoilers allowed - keep predictions secret until results!
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results determined by **official announcements, releases, or publicly verifiable outcomes**
+            • Award shows, box office numbers, streaming platform data, or verified social media
+            • Nielsen ratings, Billboard charts, or other industry-standard metrics
+            
+            ## **DISPUTE RESOLUTION**
+            • Disputes resolved using reputable entertainment news sources
+            • Platform statistics (Netflix, Spotify, etc.) will be considered official
+            • Multiple entertainment news sources required for major disputes
+            
+            ## **CONSEQUENCES & REWARDS**
+            • **Winner:** Picks the next movie night or group's binge-watching show
+            • **Loser:** Provides popcorn and drinks for the next entertainment session
+            • May the best entertainment taste win!
             """
         case .other:
             baseTerms = """
-            General bet valid with \(dateString). Results determined based on observable, verifiable outcomes. \
-            All participants must confirm their selections before any event/deadline. \
-            Evidence must be clear and agreed upon by all participants. \
-            In case of disputes, majority vote or neutral observer determines the outcome. \
-            Winner gets bragging rights and a small prize from the group!
+            ## **SELECTION RULES**
+            \(selectionRule)
+            
+            ## **BET DETAILS**
+            • **General bet** valid with \(dateString)
+            • All participants must confirm selections before any event/deadline
+            • Clear criteria must be established for what constitutes a "win"
+            
+            ## **DETERMINATION OF RESULTS**
+            • Results determined based on **observable, verifiable outcomes**
+            • Evidence must be clear and agreed upon by all participants
+            • Photo/video evidence may be required for verification
+            
+            ## **DISPUTE RESOLUTION**
+            • In case of disputes, majority vote or neutral observer determines outcome
+            • All participants must agree to the verification method beforehand
+            • Keep it fun and don't take it too seriously!
+            
+            ## **CONSEQUENCES & REWARDS**
+            • **Winner:** Gets bragging rights and small prize from the group
+            • **Everyone:** Has fun and enjoys the friendly competition
+            • Remember: it's all about the experience, not just winning!
             """
         }
         
-        return "\(selectionRule) \(baseTerms)"
+        return baseTerms
     }
 }
 
