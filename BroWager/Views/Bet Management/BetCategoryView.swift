@@ -19,6 +19,7 @@ struct BetCategoryView: View {
         case food = "Food"
         case lifeEvents = "Life Events"
         case politics = "Politics"
+        case entertainment = "Entertainment"
         case other = "Other"
         
         var icon: String {
@@ -31,6 +32,8 @@ struct BetCategoryView: View {
                 return "heart.fill"
             case .politics:
                 return "building.columns"
+            case .entertainment:
+                return "tv.fill"
             case .other:
                 return "questionmark.circle"
             }
@@ -46,6 +49,8 @@ struct BetCategoryView: View {
                 return .pink
             case .politics:
                 return .blue
+            case .entertainment:
+                return .yellow
             case .other:
                 return .purple
             }
@@ -61,6 +66,8 @@ struct BetCategoryView: View {
                 return "Personal milestones & events"
             case .politics:
                 return "Elections, policies, debates"
+            case .entertainment:
+                return "Movies, TV shows, concerts, events"
             case .other:
                 return "Everything else"
             }
@@ -77,6 +84,8 @@ struct BetCategoryView: View {
                 return "personal life events like birthdays, relationships, career milestones, personal achievements, family events"
             case .politics:
                 return "political events like elections, policy decisions, political debates, government actions, political predictions"
+            case .entertainment:
+                return "entertainment-related activities like movie reviews, TV show recommendations, concert tickets, event outcomes, entertainment predictions"
             case .other:
                 return "general everyday activities, random events, social situations, entertainment, technology, weather, or any other topics"
             }
@@ -93,51 +102,51 @@ struct BetCategoryView: View {
             )
             .ignoresSafeArea()
             
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Header
-                    VStack(spacing: 8) {
-                        Text("Choose bet category")
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Select the type of bet you want to create")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.top, 20)
-                    .padding(.horizontal)
+            
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Choose bet category")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
                     
-                    // Category Cards
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 16),
-                        GridItem(.flexible(), spacing: 16)
-                    ], spacing: 16) {
-                        ForEach(BetCategory.allCases, id: \.self) { category in
-                            CategoryCard(
-                                category: category,
-                                isSelected: selectedCategory == category
-                            ) {
-                                selectedCategory = category
-                                // Add haptic feedback
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                                impactFeedback.impactOccurred()
-                                
-                                // Navigate after a brief delay for visual feedback
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    isNavigating = true
-                                }
+                    Text("Select the type of bet you want to create")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 20)
+                .padding(.horizontal)
+                
+                // Category Cards
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 16),
+                    GridItem(.flexible(), spacing: 16)
+                ], spacing: 16) {
+                    ForEach(BetCategory.allCases, id: \.self) { category in
+                        CategoryCard(
+                            category: category,
+                            isSelected: selectedCategory == category
+                        ) {
+                            selectedCategory = category
+                            // Add haptic feedback
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                            impactFeedback.impactOccurred()
+                            
+                            // Navigate after a brief delay for visual feedback
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isNavigating = true
                             }
                         }
                     }
-                    .padding(.horizontal)
-                    
-                    Spacer(minLength: 20)
                 }
-                .padding(.bottom, 30)
+                .padding(.horizontal)
+                
+                Spacer(minLength: 20)
             }
+            .padding(.bottom, 30)
+            
         }
         .navigationDestination(isPresented: $isNavigating) {
             if let category = selectedCategory {

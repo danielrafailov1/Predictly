@@ -584,6 +584,14 @@ struct NormalBetView: View {
                 "Will the new policy be approved this quarter?",
                 "Which state will announce results first?"
             ]
+        case .entertainment:
+            return [
+                "Which movie will win Best Picture at the Oscars?",
+                "Who will release a surprise album next?",
+                "Which TV show will get renewed for another season?",
+                "Will the next big blockbuster be a hit or a flop?",
+                "Which celebrity couple will make headlines this week?"
+            ]
         case .other:
             return [
                 "What will be the weather like tomorrow?",
@@ -1098,6 +1106,19 @@ struct BetOptionsView: View {
                         "Delayed decision",
                         "Surprise outcome"
                     ]
+                case .entertainment:
+                    return [
+                        "Box office hit",
+                        "Surprise cameo",
+                        "New season drop",
+                        "Plot twist",
+                        "Award winner",
+                        "Fan favorite",
+                        "Streaming debut",
+                        "Cancelled show",
+                        "Chart-topping song",
+                        "Viral moment"
+                    ]
                 case .other:
                     return [
                         "Most likely outcome",
@@ -1233,6 +1254,14 @@ struct BetOptionsView: View {
             Keep discussions respectful regardless of political affiliations. \
             Winner gets to choose the next group discussion topic!
             """
+        case .entertainment:
+            baseTerms = """
+            Entertainment bet valid with \(dateString). Results determined by official announcements, releases, or publicly verifiable outcomes. \
+            All participants must lock in predictions before the event/show/release begins. \
+            Outcomes may include award winners, plot reveals, streaming numbers, or viral success. \
+            Disputes resolved using reputable entertainment news sources or platform statistics. \
+            Winner picks the next movie night or chooses the group's next show to binge!
+            """
         case .other:
             baseTerms = """
             General bet valid with \(dateString). Results determined based on observable, verifiable outcomes. \
@@ -1299,6 +1328,8 @@ extension AIServices {
             return "who will get engaged first, which friend will move cities, who will get promoted this year"
         case .politics:
             return "which candidate will win, what the voter turnout will be, which policy will pass first"
+        case .entertainment:
+            return "which movie will be released first, who will win an award, what the most popular song will be"
         case .other:
             return "what the weather will be like, which movie will top the box office, who will reply to texts fastest"
         }
