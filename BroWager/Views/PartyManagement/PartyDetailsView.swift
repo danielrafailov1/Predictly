@@ -109,7 +109,7 @@ struct PartyDetailsView: View {
                 .onAppear { print("PartyDetailsView: errorMessage = \(error)") }
             } else {
                 VStack(spacing: 0) {
-                    headerView
+                    customHeaderView
                     ScrollView {
                         VStack(spacing: 24) {
                             // Party Info Section
@@ -153,6 +153,7 @@ struct PartyDetailsView: View {
                 }
             }
         }
+        .navigationBarBackButtonHidden(true) // Hide the default back button
         .navigationDestination(isPresented: $showGameEventView) {
             if let game = selectedGame, let partyId = self.partyId, let userId = self.currentUserId, !partyBets.isEmpty {
                 GameEventHostView(navPath: .constant(NavigationPath()), game: game, partyId: partyId, userId: userId, betType: .predefined, refreshCount: .constant(0), maxRefreshes: 0, partyCode: partyCode, userEmail: email, fixedEvents: partyBets)
@@ -289,6 +290,79 @@ struct PartyDetailsView: View {
             }
             Button("Cancel", role: .cancel) { }
         }
+    }
+    
+    // MARK: - Custom Header with Back Button
+    
+    private var customHeaderView: some View {
+        HStack {
+            Button(action: {
+                navigateToMyParties()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("Back")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .foregroundColor(.white)
+            }
+            .padding(.leading, 16)
+            
+            Spacer()
+            
+            Text(partyName)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            
+            Spacer()
+            
+            // Invisible spacer to balance the back button
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("My Parties")
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .opacity(0)
+            .padding(.trailing, 16)
+        }
+        .padding(.top, 15)
+        .onAppear { print("PartyDetailsView: loaded, partyName = \(partyName), partyId = \(String(describing: partyId))") }
+    }
+    
+    // MARK: - Navigation Functions
+    
+    private func navigateToMyParties() {
+        // Try to pop to root using UIKit navigation controller
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let navigationController = findNavigationController(from: window.rootViewController) {
+            navigationController.popToRootViewController(animated: true)
+        } else {
+            // Fallback to dismiss if we can't find the navigation controller
+            dismiss()
+        }
+    }
+    
+    private func findNavigationController(from viewController: UIViewController?) -> UINavigationController? {
+        if let navigationController = viewController as? UINavigationController {
+            return navigationController
+        }
+        
+        if let tabBarController = viewController as? UITabBarController {
+            return findNavigationController(from: tabBarController.selectedViewController)
+        }
+        
+        for child in viewController?.children ?? [] {
+            if let navigationController = findNavigationController(from: child) {
+                return navigationController
+            }
+        }
+        
+        return nil
     }
     
     // MARK: - View Sections
@@ -559,14 +633,6 @@ struct PartyDetailsView: View {
     }
     
     // MARK: - View Components
-    
-    private var headerView: some View {
-        Text(partyName)
-            .font(.system(size: 32, weight: .bold, design: .rounded))
-            .foregroundColor(.white)
-            .padding(.top, 15)
-            .onAppear { print("PartyDetailsView: loaded, partyName = \(partyName), partyId = \(String(describing: partyId))") }
-    }
 
     private var hostCard: some View {
         partyInfoCard(
