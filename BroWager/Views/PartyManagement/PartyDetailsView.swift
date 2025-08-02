@@ -50,6 +50,7 @@ struct PartyDetailsView: View {
     @State private var showGameResultsView = false
     @State private var showStartGameConfirmation = false
     @State private var showEndGameConfirmation = false
+    @State private var maxSelections: Int = 1
     
     // NEW: Timer for auto-updating
     @State private var updateTimer: Timer?
@@ -212,6 +213,7 @@ struct PartyDetailsView: View {
                     betPrompt: betPrompt,
                     betOptions: partyBets,
                     betTerms: betTerms,
+                    maxSelections: maxSelections,  // Add this parameter
                     isEditing: hasPlacedBet
                 )
             } else {
@@ -1044,10 +1046,10 @@ struct PartyDetailsView: View {
             await MainActor.run { self.currentUserId = userId }
             
             print("DEBUG: Fetching party details for code: \(partyCode)")
-            // Updated to include game_status in the select query
+            // Updated to include max_selections in the select query
             let partyResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, created_by, party_name, bet_type, max_members, status, bet, terms, game_status")
+                .select("id, created_by, party_name, bet_type, max_members, status, bet, terms, game_status, max_selections")
                 .eq("party_code", value: partyCode)
                 .execute()
             
@@ -1064,7 +1066,8 @@ struct PartyDetailsView: View {
                 let status: String?
                 let bet: String?
                 let terms: String?
-                let game_status: String?  // Added this field
+                let game_status: String?
+                let max_selections: Int?  // Added this field
             }
             
             let partyArray = try decoder.decode([PartyResult].self, from: partyResponse.data)
@@ -1098,7 +1101,8 @@ struct PartyDetailsView: View {
                 self.status = partyResult.status ?? "open"
                 self.betPrompt = partyResult.bet ?? ""
                 self.betTerms = partyResult.terms ?? ""
-                self.gameStatus = partyResult.game_status ?? "waiting"  // Use the fetched game_status
+                self.gameStatus = partyResult.game_status ?? "waiting"
+                self.maxSelections = partyResult.max_selections ?? 1  // Set maxSelections with default of 1
             }
             
             // Get party members from Party Members table

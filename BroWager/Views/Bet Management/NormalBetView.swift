@@ -646,6 +646,11 @@ struct BetOptionsView: View {
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
     @State private var isNextActive = false
+    @State private var isGeneratingOptions = false
+    
+    private var filledOptionsCount: Int {
+        betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+    }
     
     // Validation computed property
     private var canProceed: Bool {
@@ -698,19 +703,35 @@ struct BetOptionsView: View {
                 .padding(.horizontal)
 
                 HStack {
-                    Text("Options (\(optionCount) required)")
-                        .foregroundColor(.white)
-                        .font(.headline)
+                    Text("Options (")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        +
+                        Text("\(filledOptionsCount)")
+                            .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
+                            .font(.headline)
+                        +
+                        Text(" filled / \(optionCount) required)")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        
                     Spacer()
                     Button {
                         Task {
                             await generateOptions(betPrompt: betPrompt, date: selectedDate)
                         }
                     } label: {
-                        Image(systemName: "sparkles")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 20))
+                        if isGeneratingOptions {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "sparkles")
+                                .foregroundColor(.yellow)
+                                .font(.system(size: 20))
+                        }
                     }
+                    .disabled(isGeneratingOptions)
                 }
                 .padding(.horizontal)
 
@@ -808,11 +829,16 @@ struct BetOptionsView: View {
             // Initialize with the specified number of empty options
             if betOptions.isEmpty {
                 betOptions = Array(repeating: "", count: optionCount)
+                // Auto-generate options when the view appears
+                Task {
+                    await generateOptions(betPrompt: betPrompt, date: selectedDate)
+                }
             }
         }
     }
 
     func generateOptions(betPrompt: String, date: Date?) {
+        isGeneratingOptions = true
         Task {
             do {
                 let isBinaryBet = detectBinaryBet(betPrompt)
@@ -931,6 +957,8 @@ struct BetOptionsView: View {
                     }
                 }
             }
+            
+            isGeneratingOptions = false
         }
     }
 
@@ -1114,11 +1142,14 @@ struct BetOptionsView: View {
                 Generate concise, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
                 involving these options: \(betDescription). 
                 
+                IMPORTANT: Each participant can select a maximum of \(maxSelections) option(s) out of \(betOptions.count) total options.
+                
                 This bet is specifically about \(categoryContext), so include relevant rules and considerations for this type of bet.
                 Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], 
                 and keep the response under 300 words. 
                 
                 Include:
+                - Clear statement that each user can select up to \(maxSelections) option(s) maximum
                 - Basic rules about how the bet will be determined for \(categoryContext)
                 - What happens if there are disputes specific to \(categoryName) bets
                 - Any special considerations for \(categoryContext)
@@ -1154,9 +1185,13 @@ struct BetOptionsView: View {
             dateString = "no specific deadline"
         }
         
+        let selectionRule = maxSelections == 1 ?
+            "Each participant must select exactly 1 option." :
+            "Each participant can select up to \(maxSelections) options out of \(betOptions.count) total options."
+        
         guard let category = selectedCategory else {
             return """
-            Bet is valid with \(dateString). \
+            \(selectionRule) Bet is valid with \(dateString). \
             Results will be determined based on the agreed upon criteria. \
             All participants must confirm their selections before the bet begins. \
             In case of disputes, the majority vote of participants will determine the outcome. \
@@ -1164,9 +1199,10 @@ struct BetOptionsView: View {
             """
         }
         
+        let baseTerms: String
         switch category {
         case .sports:
-            return """
+            baseTerms = """
             Sports bet valid with \(dateString). Results determined by official game/match outcomes. \
             All participants must lock in predictions before the event starts. \
             Disputes resolved using official statistics and scores. \
@@ -1174,7 +1210,7 @@ struct BetOptionsView: View {
             Winner buys the group drinks or snacks!
             """
         case .food:
-            return """
+            baseTerms = """
             Food bet valid with \(dateString). Results determined by actual choices made or outcomes achieved. \
             All participants must confirm their predictions before the meal/event. \
             Taste tests and food challenges must be conducted fairly with all participants present. \
@@ -1182,7 +1218,7 @@ struct BetOptionsView: View {
             Loser pays for the meal or treats everyone to dessert!
             """
         case .lifeEvents:
-            return """
+            baseTerms = """
             Life events bet valid with \(dateString). Results determined by actual life events as they occur. \
             All participants must confirm predictions before any deadlines. \
             Personal milestones must be verified through social media or mutual friends. \
@@ -1190,7 +1226,7 @@ struct BetOptionsView: View {
             Winner gets bragging rights and a celebration dinner from the group!
             """
         case .politics:
-            return """
+            baseTerms = """
             Political bet valid with \(dateString). Results determined by official election results or policy announcements. \
             All participants must confirm predictions before voting/announcement deadlines. \
             Disputes resolved using official government sources and verified news outlets. \
@@ -1198,7 +1234,7 @@ struct BetOptionsView: View {
             Winner gets to choose the next group discussion topic!
             """
         case .other:
-            return """
+            baseTerms = """
             General bet valid with \(dateString). Results determined based on observable, verifiable outcomes. \
             All participants must confirm their selections before any event/deadline. \
             Evidence must be clear and agreed upon by all participants. \
@@ -1206,6 +1242,8 @@ struct BetOptionsView: View {
             Winner gets bragging rights and a small prize from the group!
             """
         }
+        
+        return "\(selectionRule) \(baseTerms)"
     }
 }
 
