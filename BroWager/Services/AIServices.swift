@@ -85,6 +85,7 @@ enum AIServiceError: Error, LocalizedError {
     case contentBlocked
     case noAPIKey
     case missingResponse
+    case allKeysExhausted
     
     var errorDescription: String? {
         switch self {
@@ -108,7 +109,10 @@ enum AIServiceError: Error, LocalizedError {
             return "No API key provided"
         case .missingResponse:
             return "Missing response from Gemini API"
+        case .allKeysExhausted:
+            return "All API keys are exhausted or blocked"
         }
+        
     }
 }
 
@@ -120,7 +124,6 @@ public class AIServices {
     
     private let session: URLSession
     private let baseURL: String
-    private let apiKey: String
     private let defaultModel: String
     
     // MARK: - Initialization
@@ -132,7 +135,6 @@ public class AIServices {
         self.session = URLSession(configuration: config)
         
         // Load Gemini API key from Info.plist or environment
-        self.apiKey = Bundle.main.object(forInfoDictionaryKey: "GEMINI_API_KEY") as? String ?? ""
         
         // Gemini API base URL and model
         self.baseURL = "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -141,29 +143,6 @@ public class AIServices {
     
     // MARK: - Gemini API Methods
     
-    /// Send a simple text prompt to Gemini
-    func sendPrompt(_ prompt: String,
-                   model: String? = nil,
-                   temperature: Double? = nil,
-                   maxTokens: Int? = nil,
-                   completion: @escaping (Result<String, AIServiceError>) -> Void) {
-        
-        let content = GeminiContent(
-            parts: [GeminiPart(text: prompt)],
-            role: nil
-        )
-        
-        sendContents([content], model: model, temperature: temperature, maxTokens: maxTokens) { result in
-            switch result {
-            case .success(let response):
-                let text = response.candidates?.first?.content.parts.first?.text ?? ""
-                completion(.success(text))
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
-    }
-    
     /// Send conversation contents to Gemini
     func sendContents(_ contents: [GeminiContent],
                      model: String? = nil,
@@ -171,8 +150,8 @@ public class AIServices {
                      maxTokens: Int? = nil,
                      completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
-        guard !apiKey.isEmpty else {
-            completion(.failure(.noAPIKey))
+        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+            completion(.failure(.allKeysExhausted))
             return
         }
         
@@ -234,6 +213,11 @@ public class AIServices {
         temperature: Double,
         maxTokens: Int
     ) async throws -> String {
+        // Add this line to get the API key
+        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+            throw AIServiceError.allKeysExhausted
+        }
+        
         let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
         guard let url = URL(string: endpoint) else {
             throw AIServiceError.invalidURL
@@ -309,6 +293,12 @@ public class AIServices {
                                model: String,
                                completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
+        // Add this guard to get the API key
+        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+            completion(.failure(.allKeysExhausted))
+            return
+        }
+        
         let urlString = "\(baseURL)\(model):generateContent?key=\(apiKey)"
         
         guard let url = URL(string: urlString) else {
@@ -358,14 +348,26 @@ public class AIServices {
         // Handle HTTP status codes
         switch httpResponse.statusCode {
         case 200...299:
+            // Success - increment usage for the current key
+            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
+                APIKeyManager.shared.incrementUsage(for: currentKey)
+            }
             break
         case 400:
             completion(.failure(.apiError("Bad Request - Check your request format")))
             return
         case 401, 403:
+            // Block current key and retry
+            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
+                APIKeyManager.shared.blockKey(currentKey, reason: "Auth error (\(httpResponse.statusCode))")
+            }
             completion(.failure(.unauthorized))
             return
         case 429:
+            // Block current key due to rate limiting
+            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
+                APIKeyManager.shared.blockKey(currentKey, reason: "Rate limited (429)")
+            }
             completion(.failure(.rateLimited))
             return
         default:

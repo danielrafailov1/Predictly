@@ -23,6 +23,10 @@ struct GameResultsView: View {
     @State private var hasUpdatedWins = false // Track if wins have been updated
     @State private var highestScore = 0 // Track the highest score achieved
     
+    // New state for user selection detail modal
+    @State private var selectedUser: UserResult?
+    @State private var showingUserDetail = false
+    
     struct UserResult: Codable, Identifiable {
         let id = UUID()
         let user_id: String
@@ -189,7 +193,13 @@ struct GameResultsView: View {
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 12) {
                                             ForEach(winners) { winner in
-                                                WinnerCard(userResult: winner)
+                                                WinnerCard(
+                                                    userResult: winner,
+                                                    onTap: {
+                                                        selectedUser = winner
+                                                        showingUserDetail = true
+                                                    }
+                                                )
                                             }
                                         }
                                         .padding(.horizontal, 24)
@@ -214,7 +224,13 @@ struct GameResultsView: View {
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 12) {
                                             ForEach(losers.sorted { $0.score > $1.score }) { loser in
-                                                LoserCard(userResult: loser)
+                                                LoserCard(
+                                                    userResult: loser,
+                                                    onTap: {
+                                                        selectedUser = loser
+                                                        showingUserDetail = true
+                                                    }
+                                                )
                                             }
                                         }
                                         .padding(.horizontal, 24)
@@ -245,7 +261,15 @@ struct GameResultsView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-
+            .sheet(isPresented: $showingUserDetail) {
+                if let user = selectedUser {
+                    UserSelectionDetailView(
+                        userResult: user,
+                        winningOptions: winningOptions,
+                        betPrompt: betPrompt
+                    )
+                }
+            }
         }
         .onAppear {
             Task {
@@ -580,8 +604,169 @@ struct GameResultsView: View {
     }
 }
 
+// MARK: - User Selection Detail View
+struct UserSelectionDetailView: View {
+    let userResult: GameResultsView.UserResult
+    let winningOptions: [String]
+    let betPrompt: String
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color(red: 0.15, green: 0.15, blue: 0.25)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // User Header
+                        VStack(spacing: 12) {
+                            // User icon based on winner/loser status
+                            Image(systemName: userResult.is_winner || userResult.score > 0 ? "person.circle.fill" : "person.circle")
+                                .font(.system(size: 60))
+                                .foregroundColor(userResult.is_winner ? .green : .orange)
+                            
+                            Text(userResult.username)
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            // Score badge
+                            HStack {
+                                Image(systemName: "star.fill")
+                                    .foregroundColor(.yellow)
+                                Text("Score: \(userResult.score)/\(winningOptions.count)")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.yellow.opacity(0.2))
+                            .cornerRadius(20)
+                        }
+                        .padding(.top, 20)
+                        
+                        // Bet Question
+                        if !betPrompt.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Question:")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                                
+                                Text(betPrompt)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .padding()
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(12)
+                            }
+                            .padding(.horizontal, 24)
+                        }
+                        
+                        // User's Selections
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("\(userResult.username)'s Selections:")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                            
+                            ForEach(userResult.bet_selection, id: \.self) { selection in
+                                let isCorrect = winningOptions.contains { winningOption in
+                                    selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ==
+                                    winningOption.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                                }
+                                
+                                HStack {
+                                    Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(isCorrect ? .green : .red)
+                                        .font(.system(size: 20))
+                                    
+                                    Text(selection)
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.white)
+                                    
+                                    Spacer()
+                                    
+                                    if isCorrect {
+                                        Text("✓ Correct")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(.green)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.green.opacity(0.2))
+                                            .cornerRadius(8)
+                                    }
+                                }
+                                .padding()
+                                .background(isCorrect ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(isCorrect ? Color.green : Color.red, lineWidth: 1)
+                                )
+                                .padding(.horizontal, 24)
+                            }
+                        }
+                        
+                        // Correct Answers Section
+                        if !winningOptions.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Correct Answers:")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                
+                                ForEach(winningOptions, id: \.self) { option in
+                                    HStack {
+                                        Image(systemName: "star.fill")
+                                            .foregroundColor(.yellow)
+                                            .font(.system(size: 16))
+                                        
+                                        Text(option)
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.white)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding()
+                                    .background(Color.yellow.opacity(0.2))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.yellow, lineWidth: 1)
+                                    )
+                                    .padding(.horizontal, 24)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 30)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+        }
+    }
+}
+
 struct WinnerCard: View {
     let userResult: GameResultsView.UserResult
+    let onTap: () -> Void
     
     var body: some View {
         VStack(spacing: 8) {
@@ -599,19 +784,23 @@ struct WinnerCard: View {
                 .background(Color.yellow.opacity(0.2))
                 .cornerRadius(10)
             
-            // Username
-            Text(userResult.username)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+            // Username - tappable
+            Button(action: onTap) {
+                Text(userResult.username)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+            }
+            .buttonStyle(PlainButtonStyle())
             
-            // Their bet selection
+            // Their bet selection preview
             VStack(spacing: 4) {
                 Text("Selected:")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 
-                ForEach(userResult.bet_selection, id: \.self) { selection in
+                // Show only first 2 selections with "..." if more
+                ForEach(Array(userResult.bet_selection.prefix(2)), id: \.self) { selection in
                     Text(selection)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white)
@@ -619,7 +808,19 @@ struct WinnerCard: View {
                         .padding(.vertical, 2)
                         .background(Color.green.opacity(0.3))
                         .cornerRadius(6)
+                        .lineLimit(1)
                 }
+                
+                if userResult.bet_selection.count > 2 {
+                    Text("...")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                
+                Text("Tap to view all")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .italic()
             }
         }
         .padding(12)
@@ -630,11 +831,15 @@ struct WinnerCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.green, lineWidth: 2)
         )
+        .onTapGesture {
+            onTap()
+        }
     }
 }
 
 struct LoserCard: View {
     let userResult: GameResultsView.UserResult
+    let onTap: () -> Void
     
     var body: some View {
         VStack(spacing: 8) {
@@ -652,19 +857,23 @@ struct LoserCard: View {
                 .background(Color.orange.opacity(0.2))
                 .cornerRadius(10)
             
-            // Username
-            Text(userResult.username)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+            // Username - tappable
+            Button(action: onTap) {
+                Text(userResult.username)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+            }
+            .buttonStyle(PlainButtonStyle())
             
-            // Their bet selection
+            // Their bet selection preview
             VStack(spacing: 4) {
                 Text("Selected:")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 
-                ForEach(userResult.bet_selection, id: \.self) { selection in
+                // Show only first 2 selections with "..." if more
+                ForEach(Array(userResult.bet_selection.prefix(2)), id: \.self) { selection in
                     Text(selection)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white)
@@ -672,7 +881,19 @@ struct LoserCard: View {
                         .padding(.vertical, 2)
                         .background(Color.red.opacity(0.3))
                         .cornerRadius(6)
+                        .lineLimit(1)
                 }
+                
+                if userResult.bet_selection.count > 2 {
+                    Text("...")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                
+                Text("Tap to view all")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .italic()
             }
         }
         .padding(12)
@@ -683,6 +904,9 @@ struct LoserCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.red, lineWidth: 2)
         )
+        .onTapGesture {
+            onTap()
+        }
     }
 }
 
