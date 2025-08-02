@@ -38,6 +38,8 @@ struct NormalBetView: View {
     @State private var selectedMonth = Calendar.current.component(.month, from: Date())
     @State private var selectedDay = Calendar.current.component(.day, from: Date())
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    @State private var isProcessingDate = false
+    @State private var detectedDateText: String = ""
     
     
     private let months = Array(1...12)
@@ -205,6 +207,11 @@ struct NormalBetView: View {
                             .cornerRadius(10)
                             .foregroundColor(.white)
                             .font(.system(size: 18))
+                            .onChange(of: betPrompt) { newValue in
+                                Task {
+                                    await detectAndProcessDate(from: newValue)
+                                }
+                            }
                     }
                     .padding(.horizontal)
                     
@@ -214,6 +221,12 @@ struct NormalBetView: View {
                             Text("Set specific date for bet")
                                 .foregroundColor(.white)
                                 .font(.title2)
+                            
+                            if isProcessingDate {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                                    .scaleEffect(0.7)
+                            }
                             
                             Button(action: {
                                 showDateInfo = true
@@ -426,7 +439,7 @@ struct NormalBetView: View {
         .alert("Date Selection Info", isPresented: $showDateInfo) {
             Button("Got it!", role: .cancel) { }
         } message: {
-            Text("Only select a specific date if your bet involves an event that will happen in the future (like a sports game, movie release, or scheduled event). For general bets without time constraints, leave this option disabled.")
+            Text("You can either manually select a date or simply type natural phrases like 'tonight', 'tomorrow night', 'Sunday morning', or 'next Friday at 7pm' in your bet question - the app will automatically detect and set the date for you!")
         }
     }
     
@@ -545,7 +558,120 @@ struct NormalBetView: View {
             startLiveTimer()
         }
     }
+    
+    @MainActor
+    func detectAndProcessDate(from text: String) async {
+        // Don't process if already processing or text is too short
+        guard !isProcessingDate && text.count > 3 else { return }
+        
+        let dateKeywords = [
+            "tonight", "tomorrow", "today", "sunday", "monday", "tuesday", "wednesday",
+            "thursday", "friday", "saturday", "this weekend", "next week", "next weekend",
+            "morning", "afternoon", "evening", "night", "pm", "am"
+        ]
+        
+        let lowercasedText = text.lowercased()
+        let containsDateKeyword = dateKeywords.contains { lowercasedText.contains($0) }
+        
+        guard containsDateKeyword else { return }
+        
+        isProcessingDate = true
+        
+        do {
+            let parsedDate = try await parseNaturalLanguageDate(from: text)
+            if let date = parsedDate {
+                selectedDate = date
+                isDateEnabled = true
+                updateDateComponentsFromDate(date)
+                detectedDateText = "Auto-detected: \(formatDetectedDate(date))"
+            }
+        } catch {
+            print("Failed to parse natural language date: \(error)")
+        }
+        
+        isProcessingDate = false
+    }
 
+    @MainActor
+    func parseNaturalLanguageDate(from text: String) async throws -> Date? {
+        let prompt = """
+        Extract and parse any date/time information from this text: "\(text)"
+        
+        Current date and time: \(Date())
+        
+        Look for phrases like:
+        - "tonight" (today at 8 PM)
+        - "tomorrow night" (tomorrow at 8 PM)  
+        - "Sunday morning" (next Sunday at 10 AM)
+        - "this weekend" (next Saturday at 7 PM)
+        - "next week" (next Monday at 7 PM)
+        - Specific times like "7pm", "3:30 PM"
+        - Day names like "Monday", "Friday"
+        
+        Rules:
+        - If only day is mentioned (like "Sunday"), assume 7 PM
+        - If "morning" is mentioned, use 10 AM
+        - If "afternoon" is mentioned, use 2 PM  
+        - If "evening" or "night" is mentioned, use 8 PM
+        - If "tonight" is mentioned, use today at 8 PM
+        - If "tomorrow" is mentioned, use tomorrow (with appropriate time)
+        - Always use the next occurrence of the mentioned day
+        
+        Return ONLY the date in ISO format (YYYY-MM-DD HH:MM:SS) or "NONE" if no date found.
+        Do not include any other text or explanation.
+        """
+        
+        let response = try await AIServices.shared.sendPrompt(
+            prompt,
+            model: "gemini-2.5-flash-lite",
+            temperature: 0.1,
+            maxTokens: 100
+        )
+        
+        let cleanResponse = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if cleanResponse.uppercased() == "NONE" {
+            return nil
+        }
+        
+        // Try to parse the ISO date
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        
+        if let date = formatter.date(from: cleanResponse) {
+            return date
+        }
+        
+        // Fallback: try without seconds
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        if let date = formatter.date(from: cleanResponse) {
+            return date
+        }
+        
+        // Fallback: try date only (add default time)
+        formatter.dateFormat = "yyyy-MM-dd"
+        if let date = formatter.date(from: cleanResponse) {
+            let calendar = Calendar.current
+            return calendar.date(bySettingHour: 19, minute: 0, second: 0, of: date) // 7 PM default
+        }
+        
+        return nil
+    }
+
+    private func updateDateComponentsFromDate(_ date: Date) {
+        let calendar = Calendar.current
+        selectedMonth = calendar.component(.month, from: date)
+        selectedDay = calendar.component(.day, from: date)
+        selectedYear = calendar.component(.year, from: date)
+    }
+
+    private func formatDetectedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
     @MainActor
     func optimizeBetQuestion() async {
         guard !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }

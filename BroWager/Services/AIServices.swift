@@ -501,4 +501,56 @@ public class AIServices {
         """
         return try await sendPrompt(prompt, model: defaultModel, temperature: 0.7, maxTokens: 2048)
     }
+    
+    @available(iOS 15.0, *)
+    func parseNaturalLanguageDate(text: String, referenceDate: Date = Date()) async throws -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let referenceDateString = formatter.string(from: referenceDate)
+        
+        let prompt = """
+        Current date and time: \(referenceDateString)
+        
+        Parse any date/time information from this text: "\(text)"
+        
+        Common patterns to recognize:
+        - "tonight" → today at 8:00 PM
+        - "tomorrow" → tomorrow at 7:00 PM  
+        - "tomorrow night" → tomorrow at 8:00 PM
+        - "tomorrow morning" → tomorrow at 10:00 AM
+        - "Sunday", "Monday", etc → next occurrence at 7:00 PM
+        - "Sunday morning" → next Sunday at 10:00 AM
+        - "this weekend" → next Saturday at 7:00 PM
+        - "next week" → next Monday at 7:00 PM
+        - Times like "7pm", "3:30 PM", "8:00" → combine with detected day
+        
+        Default times when not specified:
+        - morning: 10:00 AM
+        - afternoon: 2:00 PM  
+        - evening/night: 8:00 PM
+        - no time specified: 7:00 PM
+        
+        Return the parsed date in format: YYYY-MM-DD HH:MM:SS
+        If no date/time found, return exactly: NONE
+        
+        Examples:
+        - "Who will win the game tonight?" → \(formatter.string(from: Calendar.current.date(bySettingHour: 20, minute: 0, second: 0, of: referenceDate) ?? referenceDate))
+        - "Tomorrow morning meeting" → \(formatter.string(from: Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: referenceDate) ?? referenceDate) ?? referenceDate))
+        """
+        
+        let response = try await sendPrompt(
+            prompt,
+            model: "gemini-2.5-flash-lite",
+            temperature: 0.1,
+            maxTokens: 50
+        )
+        
+        let cleanResponse = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if cleanResponse.uppercased() == "NONE" {
+            return nil
+        }
+        
+        return formatter.date(from: cleanResponse)
+    }
 }
