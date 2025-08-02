@@ -107,12 +107,12 @@ enum AIServiceError: Error, LocalizedError {
         case .noAPIKey:
             return "No API key provided"
         case .missingResponse:
-                return "Missing response from Gemini API"
+            return "Missing response from Gemini API"
         }
     }
 }
 
-// MARK: - AI Service Class for Gemini
+// MARK: - AI Service Class for Gemini + Search
 public class AIServices {
     
     // MARK: - Properties
@@ -131,15 +131,15 @@ public class AIServices {
         config.timeoutIntervalForResource = 60.0
         self.session = URLSession(configuration: config)
         
-        // Load API key from Info.plist or environment
+        // Load Gemini API key from Info.plist or environment
         self.apiKey = Bundle.main.object(forInfoDictionaryKey: "GEMINI_API_KEY") as? String ?? ""
         
-        // Gemini API configuration
+        // Gemini API base URL and model
         self.baseURL = "https://generativelanguage.googleapis.com/v1beta/models/"
         self.defaultModel = "gemini-2.5-flash" // or "gemini-pro"
     }
     
-    // MARK: - Public Methods
+    // MARK: - Gemini API Methods
     
     /// Send a simple text prompt to Gemini
     func sendPrompt(_ prompt: String,
@@ -395,6 +395,7 @@ public class AIServices {
         }
     }
     
+    // MARK: - Bet Suggestion Helpers
     
     /// Generate suggestions for bets
     @available(iOS 15.0, *)
@@ -427,7 +428,7 @@ public class AIServices {
     }
 
     
-    /// Generate suggestions for bets
+    /// Generate suggestions for bets (alternative)
     @available(iOS 15.0, *)
     public func generateBetSuggestions(prompt: String) async throws -> [String] {
      
@@ -450,5 +451,54 @@ public class AIServices {
         
         return try JSONDecoder().decode([String].self, from: jsonData)
     }
+    
+    // MARK: - Google Custom Search API Integration
+    
+    @available(iOS 15.0, *)
+    func performGoogleCustomSearch(query: String, numResults: Int = 3) async throws -> String {
+        let apiKey = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CSE_API_KEY") as? String ?? ""
+        let engineId = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CSE_ENGINE_ID") as? String ?? ""
+        if apiKey.isEmpty || engineId.isEmpty {
+            throw AIServiceError.noAPIKey
+        }
+        
+        var components = URLComponents(string: "https://www.googleapis.com/customsearch/v1")!
+        components.queryItems = [
+            URLQueryItem(name: "key", value: apiKey),
+            URLQueryItem(name: "cx", value: engineId),
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "num", value: "\(numResults)")
+        ]
+        
+        guard let url = components.url else {
+            throw AIServiceError.invalidURL
+        }
+        
+        let (data, _) = try await URLSession.shared.data(from: url)
+        
+        struct GoogleSearchResponse: Codable {
+            struct Item: Codable {
+                let title: String
+                let snippet: String
+                let link: String
+            }
+            let items: [Item]?
+        }
+        
+        let searchResult = try JSONDecoder().decode(GoogleSearchResponse.self, from: data)
+        let items = searchResult.items ?? []
+        
+        return items.map { "🔗 \($0.title): \($0.snippet) (\($0.link))" }
+                    .joined(separator: "\n\n")
+    }
+    
+    @available(iOS 15.0, *)
+    public func searchAndAskGeminiWithGoogle(query: String, question: String) async throws -> String {
+        let searchSummary = try await performGoogleCustomSearch(query: query)
+        let prompt = """
+        Here are search results for "\(query)":\n\n\(searchSummary)\n\n
+        Based on these, answer:\n\(question)
+        """
+        return try await sendPrompt(prompt, model: defaultModel, temperature: 0.7, maxTokens: 2048)
+    }
 }
-

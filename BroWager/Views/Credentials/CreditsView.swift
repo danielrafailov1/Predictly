@@ -59,14 +59,14 @@ struct CreditsView: View {
                         
                         // Design Team Section
                         CreditsSectionView(
-                            title: "Design Team and Structural Engineer",
+                            title: "Structural Engineer",
                             iconName: "paintbrush.pointed",
                             iconColor: .purple,
                             credits: [
                                 CreditItem(
-                                    name: "Daniel Novick",
-                                    role: "Design & Engineering",
-                                    description: "Masters Student in Civil Engineering at University of Toronto"
+                                    name: "DnovTheRuler",
+                                    role: "NVM Diagram Analyzer",
+                                    description: "Has not been paid yet"
                                 )
                             ]
                         )

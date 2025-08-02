@@ -8,7 +8,8 @@ struct PlaceBetView: View {
     let betPrompt: String
     let betOptions: [String]
     let betTerms: String
-    let isEditing: Bool // New parameter to determine if editing
+    let maxSelections: Int // Add this parameter
+    let isEditing: Bool
     
     @Environment(\.supabaseClient) private var supabaseClient
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +31,7 @@ struct PlaceBetView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea(.all) // This ensures the gradient covers everything
+                .ignoresSafeArea(.all)
                 
                 if isLoading {
                     ProgressView()
@@ -68,6 +69,49 @@ struct PlaceBetView: View {
                             }
                             .padding(.horizontal, 24)
                             
+                            // Selection Rules
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.system(size: 16))
+                                
+                                Text(maxSelections == 1 ?
+                                     "Select exactly 1 option" :
+                                     "Select up to \(maxSelections) options")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.blue)
+                                
+                                Spacer()
+                                
+                                Text("\(selectedOptions.count)/\(maxSelections)")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(selectedOptions.count > maxSelections ? .red : .blue)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.05))
+                            .cornerRadius(10)
+                            .padding(.horizontal, 24)
+                            
+                            // Show warning if too many selections
+                            if selectedOptions.count > maxSelections {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.orange)
+                                    Text("Too many selections! Please choose \(maxSelections == 1 ? "only 1 option" : "up to \(maxSelections) options").")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.orange)
+                                }
+                                .padding()
+                                .background(Color.orange.opacity(0.1))
+                                .cornerRadius(8)
+                                .padding(.horizontal, 24)
+                            }
+                            
                             // Bet Terms (if available)
                             if !betTerms.isEmpty {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -94,11 +138,7 @@ struct PlaceBetView: View {
                                 
                                 ForEach(betOptions, id: \.self) { option in
                                     Button(action: {
-                                        if selectedOptions.contains(option) {
-                                            selectedOptions.remove(option)
-                                        } else {
-                                            selectedOptions.insert(option)
-                                        }
+                                        toggleOption(option)
                                     }) {
                                         HStack {
                                             Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
@@ -161,11 +201,11 @@ struct PlaceBetView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .padding(.vertical, 14)
                                 .padding(.horizontal, 32)
-                                .background(selectedOptions.isEmpty ? Color.gray : Color.orange.opacity(0.9))
+                                .background(canSubmit ? Color.orange.opacity(0.9) : Color.gray)
                                 .foregroundColor(.white)
                                 .cornerRadius(14)
                             }
-                            .disabled(selectedOptions.isEmpty)
+                            .disabled(!canSubmit)
                             .padding(.top, 20)
                         }
                         .padding(.bottom, 30)
@@ -173,7 +213,7 @@ struct PlaceBetView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar) // Hide the navigation bar background
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -198,6 +238,29 @@ struct PlaceBetView: View {
             }
         }
     }
+    
+    // Computed property to check if submission is allowed
+    private var canSubmit: Bool {
+        return !selectedOptions.isEmpty && selectedOptions.count <= maxSelections
+    }
+    
+    // Function to handle option toggling with max selection logic
+    private func toggleOption(_ option: String) {
+        if selectedOptions.contains(option) {
+            // Always allow deselection
+            selectedOptions.remove(option)
+        } else {
+            // Check if we can add more selections
+            if selectedOptions.count < maxSelections {
+                selectedOptions.insert(option)
+            } else if maxSelections == 1 {
+                // For single selection, replace the current selection
+                selectedOptions.removeAll()
+                selectedOptions.insert(option)
+            }
+            // For multiple selections, if at limit, don't add more
+        }
+    }
 
     private func loadExistingBet() async {
         await MainActor.run {
@@ -207,7 +270,7 @@ struct PlaceBetView: View {
         
         do {
             let response = try await supabaseClient
-                .from("User Bets") // Use consistent table name
+                .from("User Bets")
                 .select("id, bet_selection")
                 .eq("user_id", value: userId)
                 .eq("party_id", value: Int(partyId))
@@ -216,7 +279,7 @@ struct PlaceBetView: View {
             
             struct ExistingBet: Codable {
                 let id: Int64
-                let bet_selection: String // Keep as String since it's stored as text
+                let bet_selection: String
             }
             
             let existingBets = try JSONDecoder().decode([ExistingBet].self, from: response.data)
@@ -246,6 +309,16 @@ struct PlaceBetView: View {
     }
     
     private func placeBet() async {
+        // Validate selections before submitting
+        guard !selectedOptions.isEmpty && selectedOptions.count <= maxSelections else {
+            await MainActor.run {
+                self.errorMessage = maxSelections == 1 ?
+                    "Please select exactly 1 option." :
+                    "Please select between 1 and \(maxSelections) options."
+            }
+            return
+        }
+        
         await MainActor.run {
             isLoading = true
             errorMessage = nil
@@ -254,13 +327,11 @@ struct PlaceBetView: View {
         do {
             let selectedOptionsArray = Array(selectedOptions)
             
-            // Decide which table to use consistently
-            // Option 1: Use "User Bets" table (recommended)
             struct BetInsert: Codable {
                 let party_id: Int64
-                let user_id: String  // Keep as String since User Bets table has user_id as text
-                let bet_selection: String // Store as comma-separated string
-                let is_winner: Bool? // Optional, will be set when outcome is confirmed
+                let user_id: String
+                let bet_selection: String
+                let is_winner: Bool?
             }
             
             let selectedOptionText = selectedOptionsArray.joined(separator: ", ")
@@ -269,11 +340,11 @@ struct PlaceBetView: View {
                 party_id: partyId,
                 user_id: userId,
                 bet_selection: selectedOptionText,
-                is_winner: nil // Will be set later when outcome is confirmed
+                is_winner: nil
             )
             
             _ = try await supabaseClient
-                .from("User Bets") // Use consistent table name
+                .from("User Bets")
                 .insert(betData)
                 .execute()
             
@@ -310,6 +381,16 @@ struct PlaceBetView: View {
             return
         }
         
+        // Validate selections before updating
+        guard !selectedOptions.isEmpty && selectedOptions.count <= maxSelections else {
+            await MainActor.run {
+                self.errorMessage = maxSelections == 1 ?
+                    "Please select exactly 1 option." :
+                    "Please select between 1 and \(maxSelections) options."
+            }
+            return
+        }
+        
         await MainActor.run {
             isLoading = true
             errorMessage = nil
@@ -320,7 +401,7 @@ struct PlaceBetView: View {
             let selectedOptionText = selectedOptionsArray.joined(separator: ", ")
             
             _ = try await supabaseClient
-                .from("User Bets") // Use consistent table name
+                .from("User Bets")
                 .update(["bet_selection": selectedOptionText])
                 .eq("id", value: Int(betId))
                 .execute()
@@ -347,7 +428,8 @@ struct PlaceBetView: View {
         partyName: "Test Party",
         betPrompt: "Who will win the game?",
         betOptions: ["Team A", "Team B", "Tie"],
-        betTerms: "Winner takes all",
+        betTerms: "Each participant can select up to 2 options out of 3 total options. Winner takes all",
+        maxSelections: 2,
         isEditing: false
     )
     .environmentObject(SessionManager(supabaseClient: SupabaseClient(
