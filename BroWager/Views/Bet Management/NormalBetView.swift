@@ -25,6 +25,7 @@ struct NormalBetView: View {
     @State private var optionCount = 4
     @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
+    @State private var isOptimizingQuestion = false
     
     // Refresh cooldown states - using AppStorage for persistence
     @AppStorage("aiRefreshCount") private var refreshCount = 0
@@ -37,6 +38,7 @@ struct NormalBetView: View {
     @State private var selectedMonth = Calendar.current.component(.month, from: Date())
     @State private var selectedDay = Calendar.current.component(.day, from: Date())
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    
     
     private let months = Array(1...12)
     private let currentYear = Calendar.current.component(.year, from: Date())
@@ -167,10 +169,34 @@ struct NormalBetView: View {
                     .frame(height: 150)
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Write your Bet")
-                            .foregroundColor(.white)
-                            .font(.title2)
-                            .padding(.vertical)
+                        HStack {
+                            Text("Write your Bet")
+                                .foregroundColor(.white)
+                                .font(.title2)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                Task {
+                                    await optimizeBetQuestion()
+                                }
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wand.and.stars")
+                                        .foregroundColor(.yellow)
+                                        .font(.system(size: 16))
+                                    Text("Optimize")
+                                        .foregroundColor(.yellow)
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.yellow.opacity(0.2))
+                                .cornerRadius(8)
+                            }
+                            .disabled(betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        .padding(.vertical)
                         
                         TextEditor(text: $betPrompt)
                             .scrollContentBackground(.hidden)
@@ -521,6 +547,47 @@ struct NormalBetView: View {
     }
 
     @MainActor
+    func optimizeBetQuestion() async {
+        guard !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        isOptimizingQuestion = true
+        
+        do {
+            let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+            let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
+            
+            let prompt = """
+            Optimize this betting question for clarity, engagement, and measurability: "\(betPrompt)"
+            
+            This is a \(categoryName) category bet. Please:
+            1. Add specific team names, player names, or event details if applicable
+            2. Make the question more specific and measurable
+            3. Ensure it's clear what constitutes a win/loss
+            4. Add relevant context or details that make it more engaging
+            5. Keep the core intent but make it better for betting
+            
+            Context: \(categoryContext)
+            
+            Return only the optimized question, no additional text or explanation.
+            """
+            
+            let optimizedQuestion = try await AIServices.shared.sendPrompt(
+                prompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.7,
+                maxTokens: 200
+            )
+            
+            betPrompt = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+        } catch {
+            print("Failed to optimize bet question: \(error)")
+        }
+        
+        isOptimizingQuestion = false
+    }
+    
+    @MainActor
     func loadAISuggestions() {
         let calendar = Calendar.current
         let currentDate = selectedDate
@@ -670,6 +737,7 @@ struct BetOptionsView: View {
     @State private var betTerms: String = ""
     @State private var isNextActive = false
     @State private var isGeneratingOptions = false
+    @State private var isOptimizing = false
     
     private var filledOptionsCount: Int {
         betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
@@ -803,6 +871,51 @@ struct BetOptionsView: View {
                     .scrollContentBackground(.hidden)
 
                 Spacer()
+                
+                // AI Optimization Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("AI Optimization")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            Task {
+                                await optimizeEverything()
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "wand.and.stars")
+                                    .foregroundColor(.purple)
+                                    .font(.system(size: 16))
+                                Text("Optimize All")
+                                    .foregroundColor(.purple)
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.purple.opacity(0.2))
+                            .cornerRadius(8)
+                        }
+                        .disabled(!canProceed || isOptimizing)
+                    }
+                    
+                    if isOptimizing {
+                        HStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                                .scaleEffect(0.8)
+                            Text("Optimizing bet, options, and terms...")
+                                .foregroundColor(.purple.opacity(0.8))
+                                .font(.caption)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                .padding(.horizontal)
+                
 
                 NavigationLink(
                     destination: FinalizeBetView(
@@ -826,10 +939,10 @@ struct BetOptionsView: View {
                         isNextActive = true
                     }
                 }) {
-                    Text("Next")
+                    Text("View Summary")
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(canProceed ? Color.green : Color.gray)
+                        .background(canProceed ? Color.blue : Color.gray)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
@@ -860,6 +973,88 @@ struct BetOptionsView: View {
         }
     }
 
+    @MainActor
+    func optimizeEverything() async {
+        isOptimizing = true
+        
+        do {
+            let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+            let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
+            
+            // Optimize the bet question
+            let questionPrompt = """
+            Optimize this betting question for clarity and engagement: "\(betPrompt)"
+            
+            This is a \(categoryName) category bet. Make it more specific, measurable, and engaging while keeping the core intent.
+            Return only the optimized question.
+            """
+            
+            let optimizedQuestion = try await AIServices.shared.sendPrompt(
+                questionPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.7,
+                maxTokens: 200
+            )
+            
+            // Optimize the options
+            let optionsPrompt = """
+            For this betting question: "\(optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines))"
+            
+            Generate \(optionCount) optimized, specific options that are:
+            - Clear and measurable
+            - Mutually exclusive
+            - Realistic for \(categoryContext)
+            - More engaging than generic options
+            
+            Return exactly \(optionCount) options, one per line, no numbering.
+            """
+            
+            let optimizedOptionsText = try await AIServices.shared.sendPrompt(
+                optionsPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.5,
+                maxTokens: 300
+            )
+            
+            let optimizedOptionsArray = optimizedOptionsText
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(optionCount)
+            
+            // Optimize the terms
+            let termsPrompt = """
+            Generate optimized, well-formatted terms for a \(categoryName) bet with these details:
+            - Question: \(optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines))
+            - Options: \(Array(optimizedOptionsArray).joined(separator: ", "))
+            - Max selections per user: \(max_selections)
+            
+            Make the terms clear, fair, and engaging. Use proper formatting with bold text and sections.
+            """
+            
+            let optimizedTerms = try await AIServices.shared.sendPrompt(
+                termsPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.6,
+                maxTokens: 600
+            )
+            
+            // Update all fields
+            // Note: We can't update betPrompt here since it's let, but we'll update what we can
+            for (index, option) in optimizedOptionsArray.enumerated() {
+                if index < betOptions.count {
+                    betOptions[index] = option
+                }
+            }
+            betTerms = optimizedTerms.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+        } catch {
+            print("Failed to optimize everything: \(error)")
+        }
+        
+        isOptimizing = false
+    }
+    
     func generateOptions(betPrompt: String, date: Date?) {
         isGeneratingOptions = true
         Task {
@@ -1551,51 +1746,119 @@ struct FinalizeBetView: View {
                     }
                     
                     // Bet Summary Section
-                    VStack(alignment: .leading, spacing: 8) {
+                    // Enhanced Bet Summary Section
+                    VStack(alignment: .leading, spacing: 16) {
                         Text("Bet Summary")
                             .foregroundColor(.white)
-                            .font(.headline)
+                            .font(.title)
+                            .fontWeight(.bold)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Question:")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
+                        // Party Details
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Party Details", systemImage: "person.3.fill")
+                                .foregroundColor(.blue)
+                                .font(.headline)
+                            
+                            HStack {
+                                Text("Name:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline)
+                                Text(party_name.isEmpty ? "Not set" : party_name)
+                                    .foregroundColor(.white)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            HStack {
+                                Text("Privacy:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline)
+                                Text(privacy)
+                                    .foregroundColor(.blue)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            HStack {
+                                Text("Max Members:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline)
+                                Text("\(max_members)")
+                                    .foregroundColor(.green)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                        
+                        // Bet Question
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Bet Question", systemImage: "questionmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.headline)
+                            
                             Text(betPrompt)
                                 .foregroundColor(.white)
                                 .font(.system(size: 16))
-                                .padding(8)
+                                .padding()
                                 .background(Color.white.opacity(0.1))
-                                .cornerRadius(6)
+                                .cornerRadius(8)
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Options (\(betOptions.count)):")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
-                            VStack(alignment: .leading, spacing: 2) {
+                        // Options Summary
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Options (\(betOptions.count))", systemImage: "list.bullet")
+                                .foregroundColor(.orange)
+                                .font(.headline)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
                                     if !option.isEmpty {
-                                        Text("• \(option)")
-                                            .foregroundColor(.white)
-                                            .font(.system(size: 14))
+                                        HStack {
+                                            Text("\(index + 1).")
+                                                .foregroundColor(.orange)
+                                                .font(.system(size: 14, weight: .bold))
+                                                .frame(width: 20)
+                                            Text(option)
+                                                .foregroundColor(.white)
+                                                .font(.system(size: 14))
+                                        }
                                     }
                                 }
                             }
-                            .padding(8)
+                            .padding()
                             .background(Color.white.opacity(0.1))
-                            .cornerRadius(6)
+                            .cornerRadius(8)
+                            
+                            HStack {
+                                Text("Max Selections per User:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.caption)
+                                Text("\(max_selections) out of \(betOptions.count)")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Max Selections per User:")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
-                            Text("\(max_selections) out of \(betOptions.count) options")
-                                .foregroundColor(.blue)
-                                .font(.system(size: 14, weight: .semibold))
-                                .padding(8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(6)
+                        // Terms Summary
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Terms Summary", systemImage: "doc.text")
+                                .foregroundColor(.purple)
+                                .font(.headline)
+                            
+                            ScrollView {
+                                Text(betTerms.isEmpty ? "No terms set" : betTerms)
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 12))
+                                    .lineLimit(nil)
+                            }
+                            .frame(maxHeight: 100)
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(8)
                         }
                     }
                     .padding(.horizontal)
@@ -1644,7 +1907,7 @@ struct FinalizeBetView: View {
                             .foregroundColor(.red)
                             .padding(.horizontal)
                     }
-                   
+
                     Button(action: submitBet) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 10)
@@ -1655,7 +1918,7 @@ struct FinalizeBetView: View {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             } else {
-                                Text("Create Bet")
+                                Text("Create Bet Party")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
                             }
@@ -1665,10 +1928,9 @@ struct FinalizeBetView: View {
                     .padding(.horizontal)
                     .disabled(!canProceed || isSubmitting)
 
-                    
                     // Validation message
                     if !canProceed {
-                        Text("Please enter a party name and select privacy option to continue")
+                        Text("Please complete all required fields to create the bet party")
                             .foregroundColor(.red)
                             .font(.caption)
                             .padding(.horizontal)
