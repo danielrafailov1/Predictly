@@ -30,7 +30,7 @@ struct PartyLobbyView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showSuccess = false
-    @State private var createdPartyCode: String = ""
+    @State private var createdParty_code: String = ""
     @State private var showProfile = false
     @State private var profileImage: Image? = nil
     @State private var showGameEventView = false
@@ -305,8 +305,8 @@ struct PartyLobbyView: View {
                     betType: settings.betType,
                     game: settings.game
                 ),
-                onPartyCreated: { partyCode in
-                    navPath.append(BetFlowPath.partyDetails(partyCode: partyCode, email: email))
+                onPartyCreated: { party_code in
+                    navPath.append(BetFlowPath.partyDetails(party_code: party_code, email: email))
                     pendingPartySettings = nil // Dismiss sheet after party creation
                 },
                 fixedEvents: nil,

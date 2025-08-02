@@ -23,8 +23,9 @@ struct NormalBetView: View {
     @State private var isDateEnabled = false // New toggle state
     @State private var isNextActive = false
     @State private var optionCount = 4
-    @State private var maxSelections = 1
+    @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
+    @State private var isOptimizingQuestion = false
     
     // Refresh cooldown states - using AppStorage for persistence
     @AppStorage("aiRefreshCount") private var refreshCount = 0
@@ -37,6 +38,7 @@ struct NormalBetView: View {
     @State private var selectedMonth = Calendar.current.component(.month, from: Date())
     @State private var selectedDay = Calendar.current.component(.day, from: Date())
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    
     
     private let months = Array(1...12)
     private let currentYear = Calendar.current.component(.year, from: Date())
@@ -167,10 +169,34 @@ struct NormalBetView: View {
                     .frame(height: 150)
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Write your Bet")
-                            .foregroundColor(.white)
-                            .font(.title2)
-                            .padding(.vertical)
+                        HStack {
+                            Text("Write your Bet")
+                                .foregroundColor(.white)
+                                .font(.title2)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                Task {
+                                    await optimizeBetQuestion()
+                                }
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wand.and.stars")
+                                        .foregroundColor(.yellow)
+                                        .font(.system(size: 16))
+                                    Text("Optimize")
+                                        .foregroundColor(.yellow)
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.yellow.opacity(0.2))
+                                .cornerRadius(8)
+                            }
+                            .disabled(betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        .padding(.vertical)
                         
                         TextEditor(text: $betPrompt)
                             .scrollContentBackground(.hidden)
@@ -248,9 +274,9 @@ struct NormalBetView: View {
                         }
                     }
                     .onChange(of: optionCount) { _ in
-                        // Ensure maxSelections doesn't exceed optionCount - 1
-                        if maxSelections >= optionCount {
-                            maxSelections = max(1, optionCount - 1)
+                        // Ensure max_selections doesn't exceed optionCount - 1
+                        if max_selections >= optionCount {
+                            max_selections = max(1, optionCount - 1)
                         }
                     }
                     
@@ -312,31 +338,31 @@ struct NormalBetView: View {
                             // Counter/Ticker on the right
                             HStack(spacing: 16) {
                                 Button(action: {
-                                    if maxSelections > 1 {
-                                        maxSelections -= 1
+                                    if max_selections > 1 {
+                                        max_selections -= 1
                                     }
                                 }) {
                                     Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(maxSelections > 1 ? .blue : .gray)
+                                        .foregroundColor(max_selections > 1 ? .blue : .gray)
                                         .font(.title2)
                                 }
-                                .disabled(maxSelections <= 1)
+                                .disabled(max_selections <= 1)
                                 
-                                Text("\(maxSelections)")
+                                Text("\(max_selections)")
                                     .foregroundColor(.white)
                                     .font(.system(size: 18, weight: .semibold))
                                     .frame(minWidth: 30)
                                 
                                 Button(action: {
-                                    if maxSelections < (optionCount - 1) {
-                                        maxSelections += 1
+                                    if max_selections < (optionCount - 1) {
+                                        max_selections += 1
                                     }
                                 }) {
                                     Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(maxSelections < (optionCount - 1) ? .blue : .gray)
+                                        .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
                                         .font(.title2)
                                 }
-                                .disabled(maxSelections >= (optionCount - 1))
+                                .disabled(max_selections >= (optionCount - 1))
                             }
                         }
                     }
@@ -354,7 +380,7 @@ struct NormalBetView: View {
                             email: email,
                             userId: userId,
                             optionCount: optionCount,
-                            maxSelections: maxSelections,
+                            max_selections: max_selections,
                             selectedCategory: selectedCategory
                         ),
                         isActive: $isNextActive
@@ -521,6 +547,47 @@ struct NormalBetView: View {
     }
 
     @MainActor
+    func optimizeBetQuestion() async {
+        guard !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        isOptimizingQuestion = true
+        
+        do {
+            let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+            let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
+            
+            let prompt = """
+            Optimize this betting question for clarity, engagement, and measurability: "\(betPrompt)"
+            
+            This is a \(categoryName) category bet. Please:
+            1. Add specific team names, player names, or event details if applicable
+            2. Make the question more specific and measurable
+            3. Ensure it's clear what constitutes a win/loss
+            4. Add relevant context or details that make it more engaging
+            5. Keep the core intent but make it better for betting
+            
+            Context: \(categoryContext)
+            
+            Return only the optimized question, no additional text or explanation.
+            """
+            
+            let optimizedQuestion = try await AIServices.shared.sendPrompt(
+                prompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.7,
+                maxTokens: 200
+            )
+            
+            betPrompt = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+        } catch {
+            print("Failed to optimize bet question: \(error)")
+        }
+        
+        isOptimizingQuestion = false
+    }
+    
+    @MainActor
     func loadAISuggestions() {
         let calendar = Calendar.current
         let currentDate = selectedDate
@@ -617,6 +684,7 @@ struct NormalBetView: View {
         }
     }
 }
+
 // New DatePickerView component similar to TimerSetView
 struct DatePickerView: View {
     private let pickerViewTitlePadding: CGFloat = 4.0
@@ -662,13 +730,14 @@ struct BetOptionsView: View {
     let email: String
     let userId: UUID?
     let optionCount: Int
-    let maxSelections: Int
+    let max_selections: Int
     let selectedCategory: BetCategoryView.BetCategory?
 
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
     @State private var isNextActive = false
     @State private var isGeneratingOptions = false
+    @State private var isOptimizing = false
     
     private var filledOptionsCount: Int {
         betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
@@ -802,6 +871,51 @@ struct BetOptionsView: View {
                     .scrollContentBackground(.hidden)
 
                 Spacer()
+                
+                // AI Optimization Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("AI Optimization")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            Task {
+                                await optimizeEverything()
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "wand.and.stars")
+                                    .foregroundColor(.purple)
+                                    .font(.system(size: 16))
+                                Text("Optimize All")
+                                    .foregroundColor(.purple)
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.purple.opacity(0.2))
+                            .cornerRadius(8)
+                        }
+                        .disabled(!canProceed || isOptimizing)
+                    }
+                    
+                    if isOptimizing {
+                        HStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                                .scaleEffect(0.8)
+                            Text("Optimizing bet, options, and terms...")
+                                .foregroundColor(.purple.opacity(0.8))
+                                .font(.caption)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                .padding(.horizontal)
+                
 
                 NavigationLink(
                     destination: FinalizeBetView(
@@ -811,8 +925,8 @@ struct BetOptionsView: View {
                         selectedDate: selectedDate, // Pass the optional date
                         betOptions: betOptions,
                         betTerms: betTerms,
-                        betType: "normal",
-                        maxSelections: maxSelections,
+                        bet_type: "normal",
+                        max_selections: max_selections,
                         userId: userId
                     ),
                     isActive: $isNextActive
@@ -825,10 +939,10 @@ struct BetOptionsView: View {
                         isNextActive = true
                     }
                 }) {
-                    Text("Next")
+                    Text("View Summary")
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(canProceed ? Color.green : Color.gray)
+                        .background(canProceed ? Color.blue : Color.gray)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
@@ -859,6 +973,88 @@ struct BetOptionsView: View {
         }
     }
 
+    @MainActor
+    func optimizeEverything() async {
+        isOptimizing = true
+        
+        do {
+            let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+            let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
+            
+            // Optimize the bet question
+            let questionPrompt = """
+            Optimize this betting question for clarity and engagement: "\(betPrompt)"
+            
+            This is a \(categoryName) category bet. Make it more specific, measurable, and engaging while keeping the core intent.
+            Return only the optimized question.
+            """
+            
+            let optimizedQuestion = try await AIServices.shared.sendPrompt(
+                questionPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.7,
+                maxTokens: 200
+            )
+            
+            // Optimize the options
+            let optionsPrompt = """
+            For this betting question: "\(optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines))"
+            
+            Generate \(optionCount) optimized, specific options that are:
+            - Clear and measurable
+            - Mutually exclusive
+            - Realistic for \(categoryContext)
+            - More engaging than generic options
+            
+            Return exactly \(optionCount) options, one per line, no numbering.
+            """
+            
+            let optimizedOptionsText = try await AIServices.shared.sendPrompt(
+                optionsPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.5,
+                maxTokens: 300
+            )
+            
+            let optimizedOptionsArray = optimizedOptionsText
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(optionCount)
+            
+            // Optimize the terms
+            let termsPrompt = """
+            Generate optimized, well-formatted terms for a \(categoryName) bet with these details:
+            - Question: \(optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines))
+            - Options: \(Array(optimizedOptionsArray).joined(separator: ", "))
+            - Max selections per user: \(max_selections)
+            
+            Make the terms clear, fair, and engaging. Use proper formatting with bold text and sections.
+            """
+            
+            let optimizedTerms = try await AIServices.shared.sendPrompt(
+                termsPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.6,
+                maxTokens: 600
+            )
+            
+            // Update all fields
+            // Note: We can't update betPrompt here since it's let, but we'll update what we can
+            for (index, option) in optimizedOptionsArray.enumerated() {
+                if index < betOptions.count {
+                    betOptions[index] = option
+                }
+            }
+            betTerms = optimizedTerms.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+        } catch {
+            print("Failed to optimize everything: \(error)")
+        }
+        
+        isOptimizing = false
+    }
+    
     func generateOptions(betPrompt: String, date: Date?) {
         isGeneratingOptions = true
         Task {
@@ -889,7 +1085,7 @@ struct BetOptionsView: View {
                     Return only the 2 options, one per line, no numbering or extra text.
                     """
                 } else {
-                    // Modified prompt to conditionally include date context
+                    // Modified prompt to exclude date context when no date is selected
                     let dateContext: String
                     if let date = date {
                         let dateFormatter = DateFormatter()
@@ -897,7 +1093,7 @@ struct BetOptionsView: View {
                         let formattedDate = dateFormatter.string(from: date)
                         dateContext = "- Make them realistic for the date: \(formattedDate)"
                     } else {
-                        dateContext = "- Make them generally realistic and timeless"
+                        dateContext = "- Make them generally realistic and timeless (no specific date context needed)"
                     }
                     
                     prompt = """
@@ -1162,7 +1358,7 @@ struct BetOptionsView: View {
                 let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
                 let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
                 
-                // Conditionally include date context
+                // Conditionally include date context - don't mention date if none is selected
                 let dateContext: String
                 if let date = date {
                     let dateFormatter = DateFormatter()
@@ -1170,14 +1366,14 @@ struct BetOptionsView: View {
                     let formattedDate = dateFormatter.string(from: date)
                     dateContext = "scheduled for \(formattedDate)"
                 } else {
-                    dateContext = "with no specific deadline"
+                    dateContext = "with no specific timeline or deadline"
                 }
                 
                 let prompt = """
                 Generate well-organized, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
                 involving these options: \(betDescription). 
                 
-                CRITICAL REQUIREMENT: Each participant can select a maximum of \(maxSelections) option(s) out of \(betOptions.count) total options.
+                CRITICAL REQUIREMENT: Each participant can select a maximum of \(max_selections) option(s) out of \(betOptions.count) total options.
                 This selection limit must be PROMINENTLY featured and clearly emphasized in the terms.
                 
                 Format the response with clear sections and use formatting like:
@@ -1229,9 +1425,9 @@ struct BetOptionsView: View {
             dateString = "no specific deadline"
         }
         
-        let selectionRule = maxSelections == 1 ?
+        let selectionRule = max_selections == 1 ?
             "**⚠️ IMPORTANT: Each participant must select EXACTLY 1 OPTION only.**" :
-            "**⚠️ CRITICAL RULE: Each participant can select UP TO \(maxSelections) OPTIONS out of \(betOptions.count) total options. NO MORE THAN \(maxSelections) SELECTIONS ALLOWED.**"
+            "**⚠️ CRITICAL RULE: Each participant can select UP TO \(max_selections) OPTIONS out of \(betOptions.count) total options. NO MORE THAN \(max_selections) SELECTIONS ALLOWED.**"
         
         guard let category = selectedCategory else {
             return """
@@ -1430,6 +1626,7 @@ extension AIServices {
         - Fun for friends to bet on
         - Measurable with clear outcomes
         - Appropriate for social betting
+        - Timeless (not dependent on specific dates or events unless explicitly time-based)
         
         Examples of \(categoryName) bets should include scenarios like \(getSamplePrompts(for: category)).
         
@@ -1481,13 +1678,13 @@ struct FinalizeBetView: View {
     let selectedDate: Date? // Now optional
     let betOptions: [String]
     let betTerms: String
-    let betType: String
-    let maxSelections: Int
+    let bet_type: String
+    let max_selections: Int
     let userId: UUID?
 
-    @State private var partyName: String = ""
-    @State private var privacy: String = "Public"
-    @State private var maxMembers: Int = 2
+    @State private var party_name: String = ""
+    @State private var privacy: String = "Open" // Set default to "Open"
+    @State private var max_members: Int = 2
     @State private var terms: String = ""
     @State private var isSubmitting = false
     @State private var showPartyDetails = false
@@ -1496,9 +1693,10 @@ struct FinalizeBetView: View {
     
     @Environment(\.supabaseClient) private var supabaseClient
     
-    // Validation computed property
+    // Validation computed property - privacy is now mandatory
     private var canProceed: Bool {
-        !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !party_name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !privacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -1548,51 +1746,119 @@ struct FinalizeBetView: View {
                     }
                     
                     // Bet Summary Section
-                    VStack(alignment: .leading, spacing: 8) {
+                    // Enhanced Bet Summary Section
+                    VStack(alignment: .leading, spacing: 16) {
                         Text("Bet Summary")
                             .foregroundColor(.white)
-                            .font(.headline)
+                            .font(.title)
+                            .fontWeight(.bold)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Question:")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
+                        // Party Details
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Party Details", systemImage: "person.3.fill")
+                                .foregroundColor(.blue)
+                                .font(.headline)
+                            
+                            HStack {
+                                Text("Name:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline)
+                                Text(party_name.isEmpty ? "Not set" : party_name)
+                                    .foregroundColor(.white)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            HStack {
+                                Text("Privacy:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline)
+                                Text(privacy)
+                                    .foregroundColor(.blue)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            HStack {
+                                Text("Max Members:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline)
+                                Text("\(max_members)")
+                                    .foregroundColor(.green)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                        
+                        // Bet Question
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Bet Question", systemImage: "questionmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.headline)
+                            
                             Text(betPrompt)
                                 .foregroundColor(.white)
                                 .font(.system(size: 16))
-                                .padding(8)
+                                .padding()
                                 .background(Color.white.opacity(0.1))
-                                .cornerRadius(6)
+                                .cornerRadius(8)
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Options (\(betOptions.count)):")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
-                            VStack(alignment: .leading, spacing: 2) {
+                        // Options Summary
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Options (\(betOptions.count))", systemImage: "list.bullet")
+                                .foregroundColor(.orange)
+                                .font(.headline)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
                                     if !option.isEmpty {
-                                        Text("• \(option)")
-                                            .foregroundColor(.white)
-                                            .font(.system(size: 14))
+                                        HStack {
+                                            Text("\(index + 1).")
+                                                .foregroundColor(.orange)
+                                                .font(.system(size: 14, weight: .bold))
+                                                .frame(width: 20)
+                                            Text(option)
+                                                .foregroundColor(.white)
+                                                .font(.system(size: 14))
+                                        }
                                     }
                                 }
                             }
-                            .padding(8)
+                            .padding()
                             .background(Color.white.opacity(0.1))
-                            .cornerRadius(6)
+                            .cornerRadius(8)
+                            
+                            HStack {
+                                Text("Max Selections per User:")
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.caption)
+                                Text("\(max_selections) out of \(betOptions.count)")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Max Selections per User:")
-                                .foregroundColor(.white.opacity(0.7))
-                                .font(.caption)
-                            Text("\(maxSelections) out of \(betOptions.count) options")
-                                .foregroundColor(.blue)
-                                .font(.system(size: 14, weight: .semibold))
-                                .padding(8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(6)
+                        // Terms Summary
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Terms Summary", systemImage: "doc.text")
+                                .foregroundColor(.purple)
+                                .font(.headline)
+                            
+                            ScrollView {
+                                Text(betTerms.isEmpty ? "No terms set" : betTerms)
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 12))
+                                    .lineLimit(nil)
+                            }
+                            .frame(maxHeight: 100)
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(8)
                         }
                     }
                     .padding(.horizontal)
@@ -1603,7 +1869,7 @@ struct FinalizeBetView: View {
                             .font(.headline)
                             .padding(.horizontal)
                         HStack {
-                            TextField("Party Name", text: $partyName)
+                            TextField("Party Name", text: $party_name)
                                 .padding()
                                 .background(Color.gray.opacity(0.2))
                                 .cornerRadius(10)
@@ -1631,8 +1897,8 @@ struct FinalizeBetView: View {
                         .padding(.horizontal)
                     }
 
-                    Stepper(value: $maxMembers, in: 2...50) {
-                        Text("Max Members: \(maxMembers)").foregroundColor(.white)
+                    Stepper(value: $max_members, in: 2...50) {
+                        Text("Max Members: \(max_members)").foregroundColor(.white)
                     }.padding(.horizontal)
 
                     // Show error message if any
@@ -1641,7 +1907,7 @@ struct FinalizeBetView: View {
                             .foregroundColor(.red)
                             .padding(.horizontal)
                     }
-                   
+
                     Button(action: submitBet) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 10)
@@ -1652,7 +1918,7 @@ struct FinalizeBetView: View {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             } else {
-                                Text("Create Bet")
+                                Text("Create Bet Party")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
                             }
@@ -1662,10 +1928,9 @@ struct FinalizeBetView: View {
                     .padding(.horizontal)
                     .disabled(!canProceed || isSubmitting)
 
-                    
                     // Validation message
                     if !canProceed {
-                        Text("Please enter a party name to continue")
+                        Text("Please complete all required fields to create the bet party")
                             .foregroundColor(.red)
                             .font(.caption)
                             .padding(.horizontal)
@@ -1675,7 +1940,7 @@ struct FinalizeBetView: View {
             }
         }
         .navigationDestination(isPresented: $showPartyDetails) {
-            PartyDetailsView(partyCode: createdPartyCode, email: email)
+            PartyDetailsView(party_code: createdPartyCode, email: email)
         }
     }
 
@@ -1698,7 +1963,7 @@ struct FinalizeBetView: View {
             "Risk Takers"
         ]
 
-        partyName = suggestions.randomElement() ?? "My Betting Party"
+        party_name = suggestions.randomElement() ?? "My Betting Party"
     }
 
     func submitBet() {
@@ -1708,9 +1973,15 @@ struct FinalizeBetView: View {
             return
         }
         
-        guard !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !party_name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             print("Error: Party name cannot be empty")
             errorMessage = "Party name cannot be empty"
+            return
+        }
+        
+        guard !privacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("Error: Privacy option must be selected")
+            errorMessage = "Privacy option must be selected"
             return
         }
         
@@ -1724,38 +1995,53 @@ struct FinalizeBetView: View {
         isSubmitting = true
         errorMessage = ""
 
-        let partyCode = UUID().uuidString.prefix(6).uppercased()
+        let party_code = UUID().uuidString.prefix(6).uppercased()
 
-        // Handle optional date formatting
+        // Handle optional date formatting - FIXED: Use nil instead of empty string
         let formattedDate: String?
         if let date = selectedDate {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
             formattedDate = dateFormatter.string(from: date)
         } else {
-            formattedDate = nil
+            formattedDate = nil  // FIXED: Use nil instead of empty string
         }
         
         print("🔄 Formatted date: \(formattedDate ?? "nil")") // Debug log
         
-        let payload = PartyInsertPayload(
+        struct Payload: Encodable {
+            let created_by: String
+            let party_name: String
+            let privacy_option: String
+            let max_members: Int
+            let bet: String
+            let bet_date: String?
+            let bet_type: String
+            let options: [String]
+            let terms: String
+            let status: String
+            let party_code: String
+            let max_selections: Int
+        }
+
+        let payload = Payload(
             created_by: userId.uuidString,
-            party_name: partyName,
+            party_name: party_name,
             privacy_option: privacy,
-            max_members: maxMembers,
+            max_members: max_members,
             bet: betPrompt,
-            bet_date: formattedDate ?? "", // Use empty string if no date
-            bet_type: betType,
-            options: validOptions, // Use filtered valid options
+            bet_date: formattedDate,
+            bet_type: bet_type,
+            options: validOptions,
             terms: betTerms,
             status: "open",
-            party_code: String(partyCode),
-            max_selections: maxSelections // Add this line!
+            party_code: String(party_code),
+            max_selections: max_selections
         )
 
         Task {
             do {
-                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate ?? "no date") with max selections: \(maxSelections)")
+                print("🔄 Creating party with code: \(party_code) for date: \(formattedDate ?? "no date") with max selections: \(max_selections)")
                 
                 // First, insert the party
                 let response = try await supabaseClient
@@ -1793,7 +2079,7 @@ struct FinalizeBetView: View {
                 
                 // Navigate to PartyDetailsView
                 await MainActor.run {
-                    self.createdPartyCode = String(partyCode)
+                    self.createdPartyCode = String(party_code)
                     self.showPartyDetails = true
                     self.isSubmitting = false
                     print("✅ Navigation set up for party code: \(self.createdPartyCode)")

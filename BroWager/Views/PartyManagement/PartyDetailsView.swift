@@ -2,7 +2,7 @@ import SwiftUI
 import Supabase
 
 struct PartyDetailsView: View {
-    let partyCode: String
+    let party_code: String
     let email: String
     @Environment(\.supabaseClient) private var supabaseClient
     @Environment(\.dismiss) private var dismiss
@@ -157,7 +157,7 @@ struct PartyDetailsView: View {
         .navigationBarBackButtonHidden(true) // Hide the default back button
         .navigationDestination(isPresented: $showGameEventView) {
             if let game = selectedGame, let partyId = self.partyId, let userId = self.currentUserId, !partyBets.isEmpty {
-                GameEventHostView(navPath: .constant(NavigationPath()), game: game, partyId: partyId, userId: userId, betType: .predefined, refreshCount: .constant(0), maxRefreshes: 0, partyCode: partyCode, userEmail: email, fixedEvents: partyBets)
+                GameEventHostView(navPath: .constant(NavigationPath()), game: game, partyId: partyId, userId: userId, betType: .predefined, refreshCount: .constant(0), maxRefreshes: 0, party_code: party_code, userEmail: email, fixedEvents: partyBets)
                     .onAppear { print("PartyDetailsView: Navigating to GameEventHostView with game = \(game), partyId = \(partyId), userId = \(userId)") }
             } else {
                 Text("Missing game, user, or events data.")
@@ -656,7 +656,7 @@ struct PartyDetailsView: View {
                 Spacer()
             }
             HStack(spacing: 12) {
-                Text(partyCode)
+                Text(party_code)
                     .font(.system(size: 22, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                     .padding(.vertical, 6)
@@ -664,7 +664,7 @@ struct PartyDetailsView: View {
                     .background(Color.white.opacity(0.08))
                     .cornerRadius(10)
                 Button(action: {
-                    UIPasteboard.general.string = partyCode
+                    UIPasteboard.general.string = party_code
                     withAnimation { showCopied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                         withAnimation { showCopied = false }
@@ -1045,12 +1045,12 @@ struct PartyDetailsView: View {
             print("DEBUG: Found userId: \(userId) for email: \(userEmail)")
             await MainActor.run { self.currentUserId = userId }
             
-            print("DEBUG: Fetching party details for code: \(partyCode)")
+            print("DEBUG: Fetching party details for code: \(party_code)")
             // Updated to include max_selections in the select query
             let partyResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, created_by, party_name, bet_type, max_members, status, bet, terms, game_status, max_selections")
-                .eq("party_code", value: partyCode)
+                .eq("party_code", value: party_code)
                 .execute()
             
             print("DEBUG: Party fetch succeeded")
@@ -1071,10 +1071,10 @@ struct PartyDetailsView: View {
             }
             
             let partyArray = try decoder.decode([PartyResult].self, from: partyResponse.data)
-            print("DEBUG: Number of parties returned for code \(partyCode): \(partyArray.count)")
+            print("DEBUG: Number of parties returned for code \(party_code): \(partyArray.count)")
             
             if partyArray.count > 1 {
-                print("❌ Duplicate party_code detected in DB! Code:", partyCode)
+                print("❌ Duplicate party_code detected in DB! Code:", party_code)
                 await MainActor.run {
                     self.errorMessage = "Error: Duplicate party codes found for this code. Please contact support."
                     self.isLoading = false
@@ -1083,7 +1083,7 @@ struct PartyDetailsView: View {
             }
             
             if partyArray.isEmpty {
-                print("❌ No party found for code:", partyCode)
+                print("❌ No party found for code:", party_code)
                 await MainActor.run {
                     self.errorMessage = "No party found for this code."
                     self.isLoading = false
@@ -1236,7 +1236,7 @@ struct QuickActionButton: View {
 }
 
 #Preview {
-    PartyDetailsView(partyCode: "6FA0B4", email: "danielrafailov7@gmail.com")
+    PartyDetailsView(party_code: "6FA0B4", email: "danielrafailov7@gmail.com")
         .environmentObject(SessionManager(supabaseClient: SupabaseClient(
             supabaseURL: URL(string: "https://example.supabase.co")!,
             supabaseKey: "public-anon-key"

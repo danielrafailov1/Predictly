@@ -11,7 +11,7 @@ import Supabase
 
 struct CreatePartyView: View {
     @Binding var navPath: NavigationPath
-    let partyCode: String
+    let party_code: String
     let betType: BetType
     let userEmail: String
     @State private var showCopiedMessage = false
@@ -66,7 +66,7 @@ struct CreatePartyView: View {
                         .foregroundColor(.white.opacity(0.9))
                     
                     HStack(spacing: 12) {
-                        Text(partyCode)
+                        Text(party_code)
                             .font(.system(size: 24, weight: .bold))
                             .padding(.horizontal, 24)
                             .padding(.vertical, 16)
@@ -79,7 +79,7 @@ struct CreatePartyView: View {
                             .foregroundColor(.white)
                         
                         Button(action: {
-                            UIPasteboard.general.string = partyCode
+                            UIPasteboard.general.string = party_code
                             withAnimation {
                                 showCopiedMessage = true
                             }
@@ -226,7 +226,7 @@ struct CreatePartyView: View {
                             return
                         }
                         let newParty = NewParty(
-                            party_code: partyCode,
+                            party_code: party_code,
                             game_id: Int64(game.id),
                             created_by: userId ?? userEmail,
                             party_name: partyName,
@@ -244,7 +244,7 @@ struct CreatePartyView: View {
                                 hostUserId = await fetchUserId(for: userEmail)
                             }
                             if let userId = hostUserId {
-                                if let partyId = await fetchPartyId(for: partyCode), let game = selectedGame {
+                                if let partyId = await fetchPartyId(for: party_code), let game = selectedGame {
                                     let now = ISO8601DateFormatter().string(from: Date())
                                     let newMember = NewPartyMember(party_id: partyId, user_id: userId, joined_at: now, created_at: now)
                                     do {
@@ -261,7 +261,7 @@ struct CreatePartyView: View {
                                         partyId: partyId,
                                         userId: userId,
                                         betType: betType,
-                                        partyCode: partyCode,
+                                        party_code: party_code,
                                         userEmail: userEmail
                                     ))
                                 }
@@ -290,7 +290,7 @@ struct CreatePartyView: View {
             let partyResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, game_id")
-                .eq("party_code", value: partyCode)
+                .eq("party_code", value: party_code)
                 .limit(1)
                 .execute()
             struct PartyResult: Codable { let id: Int64; let game_id: Int64 }
@@ -497,6 +497,6 @@ struct CreatePartyView: View {
 }
 
 #Preview {
-    CreatePartyView(navPath: .constant(NavigationPath()), partyCode: String(UUID().uuidString.prefix(6)).uppercased(), betType: .predefined, userEmail: "example@example.com")
+    CreatePartyView(navPath: .constant(NavigationPath()), party_code: String(UUID().uuidString.prefix(6)).uppercased(), betType: .predefined, userEmail: "example@example.com")
         .environment(\.supabaseClient, .development)
 }
