@@ -317,10 +317,10 @@ struct GameEventView: View {
             let gameIdResults = try decoder.decode([GameIDResponse].self, from: gameInsertResponse.data)
             let gameId = gameIdResults.first?.id ?? Int64(partySettings.game.id)
             // Generate a random 6-character party code
-            let partyCode = String((0..<6).map { _ in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".randomElement()! })
+            let party_code = String((0..<6).map { _ in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".randomElement()! })
             // Create new party
             let newParty = NewParty(
-                party_code: partyCode,
+                party_code: party_code,
                 game_id: gameId,
                 created_by: hostUserId,
                 party_name: partySettings.name,
@@ -337,7 +337,7 @@ struct GameEventView: View {
             await MainActor.run {
                 isLoading = false
                 showSuccess = true
-                onPartyCreated?(partyCode)
+                onPartyCreated?(party_code)
             }
         } catch {
             await MainActor.run {
@@ -415,7 +415,7 @@ struct GameEventHostView: View {
     let betType: BetType
     @Binding var refreshCount: Int
     let maxRefreshes: Int
-    let partyCode: String
+    let party_code: String
     let userEmail: String
     let fixedEvents: [String]?
 
@@ -554,7 +554,7 @@ struct GameEventHostView: View {
             .ignoresSafeArea()
         )
         .onAppear {
-            print("[GameEventHostView] onAppear. partyId: \(partyId), userId: \(userId), betType: \(betType), partyCode: \(partyCode), userEmail: \(userEmail)")
+            print("[GameEventHostView] onAppear. partyId: \(partyId), userId: \(userId), betType: \(betType), party_code: \(party_code), userEmail: \(userEmail)")
             if let fixed = fixedEvents {
                 bingoSquares = fixed
                 isLoadingBingo = false
@@ -678,7 +678,7 @@ struct GameEventHostView: View {
                 .execute()
             await MainActor.run {
                 // Optionally show a confirmation or navigate
-                navPath.append(BetFlowPath.partyDetails(partyCode: partyCode, email: userEmail))
+                navPath.append(BetFlowPath.partyDetails(party_code: party_code, email: userEmail))
             }
         } catch {
             await MainActor.run {

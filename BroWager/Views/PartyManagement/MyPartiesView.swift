@@ -3,7 +3,7 @@ import SwiftUI
 import Supabase
 
 struct PartyNavigation: Hashable {
-    let partyCode: String
+    let party_code: String
     let email: String
 }
 
@@ -13,7 +13,7 @@ struct MyPartiesView: View {
     @State private var openParties: [Party] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var selectedPartyDetails: (partyCode: String, email: String)? = nil
+    @State private var selectedPartyDetails: (party_code: String, email: String)? = nil
     @State private var isShowingDetails = false
     @State private var showJoinParty = false
     @State private var showPartyInvites = false
@@ -105,7 +105,7 @@ struct MyPartiesView: View {
                                 }
                             )
                         } else {
-                            NavigationLink(value: PartyNavigation(partyCode: row.party.party_code ?? "", email: email)) {
+                            NavigationLink(value: PartyNavigation(party_code: row.party.party_code ?? "", email: email)) {
                                 PartyCard(
                                     party: row.party,
                                     memberCount: row.memberCount,
@@ -279,7 +279,7 @@ struct MyPartiesView: View {
                 }
             }
             .navigationDestination(for: PartyNavigation.self) { details in
-                PartyDetailsView(partyCode: details.partyCode, email: details.email)
+                PartyDetailsView(party_code: details.party_code, email: details.email)
             }
         }
         .sheet(isPresented: $showJoinParty, onDismiss: {

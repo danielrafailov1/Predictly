@@ -121,12 +121,12 @@ struct SportSelectionView: View {
             switch path {
             case .partyLobby(let game, let gameName, let email):
                 PartyLobbyView(navPath: $navPath, game: game, gameName: gameName, email: email)
-            case .createParty(let partyCode, let betType, let userEmail):
-                CreatePartyView(navPath: $navPath, partyCode: partyCode, betType: betType, userEmail: userEmail)
-            case .gameEvent(let game, let partyId, let userId, let betType, let partyCode, let userEmail):
-                GameEventHostView(navPath: $navPath, game: game, partyId: partyId, userId: userId, betType: betType, refreshCount: .constant(0), maxRefreshes: 3, partyCode: partyCode, userEmail: userEmail, fixedEvents: nil)
-            case .partyDetails(let partyCode, let email):
-                PartyDetailsView(partyCode: partyCode, email: email)
+            case .createParty(let party_code, let betType, let userEmail):
+                CreatePartyView(navPath: $navPath, party_code: party_code, betType: betType, userEmail: userEmail)
+            case .gameEvent(let game, let partyId, let userId, let betType, let party_code, let userEmail):
+                GameEventHostView(navPath: $navPath, game: game, partyId: partyId, userId: userId, betType: betType, refreshCount: .constant(0), maxRefreshes: 3, party_code: party_code, userEmail: userEmail, fixedEvents: nil)
+            case .partyDetails(let party_code, let email):
+                PartyDetailsView(party_code: party_code, email: email)
             }
         }
     }

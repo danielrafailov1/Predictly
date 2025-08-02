@@ -43,7 +43,7 @@ struct PartyInsertPayload: Codable {
     let max_members: Int
     let bet: String
     let bet_date: String
-    let bet_type: String
+    let bet_type: String?
     let options: [String]
     let terms: String
     let status: String

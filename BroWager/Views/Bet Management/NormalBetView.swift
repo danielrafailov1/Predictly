@@ -23,7 +23,7 @@ struct NormalBetView: View {
     @State private var isDateEnabled = false // New toggle state
     @State private var isNextActive = false
     @State private var optionCount = 4
-    @State private var maxSelections = 1
+    @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
     
     // Refresh cooldown states - using AppStorage for persistence
@@ -248,9 +248,9 @@ struct NormalBetView: View {
                         }
                     }
                     .onChange(of: optionCount) { _ in
-                        // Ensure maxSelections doesn't exceed optionCount - 1
-                        if maxSelections >= optionCount {
-                            maxSelections = max(1, optionCount - 1)
+                        // Ensure max_selections doesn't exceed optionCount - 1
+                        if max_selections >= optionCount {
+                            max_selections = max(1, optionCount - 1)
                         }
                     }
                     
@@ -312,31 +312,31 @@ struct NormalBetView: View {
                             // Counter/Ticker on the right
                             HStack(spacing: 16) {
                                 Button(action: {
-                                    if maxSelections > 1 {
-                                        maxSelections -= 1
+                                    if max_selections > 1 {
+                                        max_selections -= 1
                                     }
                                 }) {
                                     Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(maxSelections > 1 ? .blue : .gray)
+                                        .foregroundColor(max_selections > 1 ? .blue : .gray)
                                         .font(.title2)
                                 }
-                                .disabled(maxSelections <= 1)
+                                .disabled(max_selections <= 1)
                                 
-                                Text("\(maxSelections)")
+                                Text("\(max_selections)")
                                     .foregroundColor(.white)
                                     .font(.system(size: 18, weight: .semibold))
                                     .frame(minWidth: 30)
                                 
                                 Button(action: {
-                                    if maxSelections < (optionCount - 1) {
-                                        maxSelections += 1
+                                    if max_selections < (optionCount - 1) {
+                                        max_selections += 1
                                     }
                                 }) {
                                     Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(maxSelections < (optionCount - 1) ? .blue : .gray)
+                                        .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
                                         .font(.title2)
                                 }
-                                .disabled(maxSelections >= (optionCount - 1))
+                                .disabled(max_selections >= (optionCount - 1))
                             }
                         }
                     }
@@ -354,7 +354,7 @@ struct NormalBetView: View {
                             email: email,
                             userId: userId,
                             optionCount: optionCount,
-                            maxSelections: maxSelections,
+                            max_selections: max_selections,
                             selectedCategory: selectedCategory
                         ),
                         isActive: $isNextActive
@@ -617,6 +617,7 @@ struct NormalBetView: View {
         }
     }
 }
+
 // New DatePickerView component similar to TimerSetView
 struct DatePickerView: View {
     private let pickerViewTitlePadding: CGFloat = 4.0
@@ -662,7 +663,7 @@ struct BetOptionsView: View {
     let email: String
     let userId: UUID?
     let optionCount: Int
-    let maxSelections: Int
+    let max_selections: Int
     let selectedCategory: BetCategoryView.BetCategory?
 
     @State private var betOptions: [String] = []
@@ -811,8 +812,8 @@ struct BetOptionsView: View {
                         selectedDate: selectedDate, // Pass the optional date
                         betOptions: betOptions,
                         betTerms: betTerms,
-                        betType: "normal",
-                        maxSelections: maxSelections,
+                        bet_type: "normal",
+                        max_selections: max_selections,
                         userId: userId
                     ),
                     isActive: $isNextActive
@@ -889,7 +890,7 @@ struct BetOptionsView: View {
                     Return only the 2 options, one per line, no numbering or extra text.
                     """
                 } else {
-                    // Modified prompt to conditionally include date context
+                    // Modified prompt to exclude date context when no date is selected
                     let dateContext: String
                     if let date = date {
                         let dateFormatter = DateFormatter()
@@ -897,7 +898,7 @@ struct BetOptionsView: View {
                         let formattedDate = dateFormatter.string(from: date)
                         dateContext = "- Make them realistic for the date: \(formattedDate)"
                     } else {
-                        dateContext = "- Make them generally realistic and timeless"
+                        dateContext = "- Make them generally realistic and timeless (no specific date context needed)"
                     }
                     
                     prompt = """
@@ -1162,7 +1163,7 @@ struct BetOptionsView: View {
                 let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
                 let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
                 
-                // Conditionally include date context
+                // Conditionally include date context - don't mention date if none is selected
                 let dateContext: String
                 if let date = date {
                     let dateFormatter = DateFormatter()
@@ -1170,14 +1171,14 @@ struct BetOptionsView: View {
                     let formattedDate = dateFormatter.string(from: date)
                     dateContext = "scheduled for \(formattedDate)"
                 } else {
-                    dateContext = "with no specific deadline"
+                    dateContext = "with no specific timeline or deadline"
                 }
                 
                 let prompt = """
                 Generate well-organized, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
                 involving these options: \(betDescription). 
                 
-                CRITICAL REQUIREMENT: Each participant can select a maximum of \(maxSelections) option(s) out of \(betOptions.count) total options.
+                CRITICAL REQUIREMENT: Each participant can select a maximum of \(max_selections) option(s) out of \(betOptions.count) total options.
                 This selection limit must be PROMINENTLY featured and clearly emphasized in the terms.
                 
                 Format the response with clear sections and use formatting like:
@@ -1229,9 +1230,9 @@ struct BetOptionsView: View {
             dateString = "no specific deadline"
         }
         
-        let selectionRule = maxSelections == 1 ?
+        let selectionRule = max_selections == 1 ?
             "**⚠️ IMPORTANT: Each participant must select EXACTLY 1 OPTION only.**" :
-            "**⚠️ CRITICAL RULE: Each participant can select UP TO \(maxSelections) OPTIONS out of \(betOptions.count) total options. NO MORE THAN \(maxSelections) SELECTIONS ALLOWED.**"
+            "**⚠️ CRITICAL RULE: Each participant can select UP TO \(max_selections) OPTIONS out of \(betOptions.count) total options. NO MORE THAN \(max_selections) SELECTIONS ALLOWED.**"
         
         guard let category = selectedCategory else {
             return """
@@ -1430,6 +1431,7 @@ extension AIServices {
         - Fun for friends to bet on
         - Measurable with clear outcomes
         - Appropriate for social betting
+        - Timeless (not dependent on specific dates or events unless explicitly time-based)
         
         Examples of \(categoryName) bets should include scenarios like \(getSamplePrompts(for: category)).
         
@@ -1481,13 +1483,13 @@ struct FinalizeBetView: View {
     let selectedDate: Date? // Now optional
     let betOptions: [String]
     let betTerms: String
-    let betType: String
-    let maxSelections: Int
+    let bet_type: String
+    let max_selections: Int
     let userId: UUID?
 
-    @State private var partyName: String = ""
-    @State private var privacy: String = "Public"
-    @State private var maxMembers: Int = 2
+    @State private var party_name: String = ""
+    @State private var privacy: String = "Open" // Set default to "Open"
+    @State private var max_members: Int = 2
     @State private var terms: String = ""
     @State private var isSubmitting = false
     @State private var showPartyDetails = false
@@ -1496,9 +1498,10 @@ struct FinalizeBetView: View {
     
     @Environment(\.supabaseClient) private var supabaseClient
     
-    // Validation computed property
+    // Validation computed property - privacy is now mandatory
     private var canProceed: Bool {
-        !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !party_name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !privacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -1587,7 +1590,7 @@ struct FinalizeBetView: View {
                             Text("Max Selections per User:")
                                 .foregroundColor(.white.opacity(0.7))
                                 .font(.caption)
-                            Text("\(maxSelections) out of \(betOptions.count) options")
+                            Text("\(max_selections) out of \(betOptions.count) options")
                                 .foregroundColor(.blue)
                                 .font(.system(size: 14, weight: .semibold))
                                 .padding(8)
@@ -1603,7 +1606,7 @@ struct FinalizeBetView: View {
                             .font(.headline)
                             .padding(.horizontal)
                         HStack {
-                            TextField("Party Name", text: $partyName)
+                            TextField("Party Name", text: $party_name)
                                 .padding()
                                 .background(Color.gray.opacity(0.2))
                                 .cornerRadius(10)
@@ -1631,8 +1634,8 @@ struct FinalizeBetView: View {
                         .padding(.horizontal)
                     }
 
-                    Stepper(value: $maxMembers, in: 2...50) {
-                        Text("Max Members: \(maxMembers)").foregroundColor(.white)
+                    Stepper(value: $max_members, in: 2...50) {
+                        Text("Max Members: \(max_members)").foregroundColor(.white)
                     }.padding(.horizontal)
 
                     // Show error message if any
@@ -1665,7 +1668,7 @@ struct FinalizeBetView: View {
                     
                     // Validation message
                     if !canProceed {
-                        Text("Please enter a party name to continue")
+                        Text("Please enter a party name and select privacy option to continue")
                             .foregroundColor(.red)
                             .font(.caption)
                             .padding(.horizontal)
@@ -1675,7 +1678,7 @@ struct FinalizeBetView: View {
             }
         }
         .navigationDestination(isPresented: $showPartyDetails) {
-            PartyDetailsView(partyCode: createdPartyCode, email: email)
+            PartyDetailsView(party_code: createdPartyCode, email: email)
         }
     }
 
@@ -1698,7 +1701,7 @@ struct FinalizeBetView: View {
             "Risk Takers"
         ]
 
-        partyName = suggestions.randomElement() ?? "My Betting Party"
+        party_name = suggestions.randomElement() ?? "My Betting Party"
     }
 
     func submitBet() {
@@ -1708,9 +1711,15 @@ struct FinalizeBetView: View {
             return
         }
         
-        guard !partyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !party_name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             print("Error: Party name cannot be empty")
             errorMessage = "Party name cannot be empty"
+            return
+        }
+        
+        guard !privacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            print("Error: Privacy option must be selected")
+            errorMessage = "Privacy option must be selected"
             return
         }
         
@@ -1724,38 +1733,53 @@ struct FinalizeBetView: View {
         isSubmitting = true
         errorMessage = ""
 
-        let partyCode = UUID().uuidString.prefix(6).uppercased()
+        let party_code = UUID().uuidString.prefix(6).uppercased()
 
-        // Handle optional date formatting
+        // Handle optional date formatting - FIXED: Use nil instead of empty string
         let formattedDate: String?
         if let date = selectedDate {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
             formattedDate = dateFormatter.string(from: date)
         } else {
-            formattedDate = nil
+            formattedDate = nil  // FIXED: Use nil instead of empty string
         }
         
         print("🔄 Formatted date: \(formattedDate ?? "nil")") // Debug log
         
-        let payload = PartyInsertPayload(
+        struct Payload: Encodable {
+            let created_by: String
+            let party_name: String
+            let privacy_option: String
+            let max_members: Int
+            let bet: String
+            let bet_date: String?
+            let bet_type: String
+            let options: [String]
+            let terms: String
+            let status: String
+            let party_code: String
+            let max_selections: Int
+        }
+
+        let payload = Payload(
             created_by: userId.uuidString,
-            party_name: partyName,
+            party_name: party_name,
             privacy_option: privacy,
-            max_members: maxMembers,
+            max_members: max_members,
             bet: betPrompt,
-            bet_date: formattedDate ?? "", // Use empty string if no date
-            bet_type: betType,
-            options: validOptions, // Use filtered valid options
+            bet_date: formattedDate,
+            bet_type: bet_type,
+            options: validOptions,
             terms: betTerms,
             status: "open",
-            party_code: String(partyCode),
-            max_selections: maxSelections // Add this line!
+            party_code: String(party_code),
+            max_selections: max_selections
         )
 
         Task {
             do {
-                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate ?? "no date") with max selections: \(maxSelections)")
+                print("🔄 Creating party with code: \(party_code) for date: \(formattedDate ?? "no date") with max selections: \(max_selections)")
                 
                 // First, insert the party
                 let response = try await supabaseClient
@@ -1793,7 +1817,7 @@ struct FinalizeBetView: View {
                 
                 // Navigate to PartyDetailsView
                 await MainActor.run {
-                    self.createdPartyCode = String(partyCode)
+                    self.createdPartyCode = String(party_code)
                     self.showPartyDetails = true
                     self.isSubmitting = false
                     print("✅ Navigation set up for party code: \(self.createdPartyCode)")
