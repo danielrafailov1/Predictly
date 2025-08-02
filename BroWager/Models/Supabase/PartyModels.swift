@@ -48,11 +48,11 @@ struct PartyInsertPayload: Codable {
     let terms: String
     let status: String
     let party_code: String
-    
+    let max_selections: Int // Changed from Int? to Int
     // Optional fields that might be set by database defaults
     let game_status: String?
     
-    init(created_by: String, party_name: String, privacy_option: String, max_members: Int, bet: String, bet_date: String, bet_type: String, options: [String], terms: String, status: String, party_code: String, game_status: String? = "waiting") {
+    init(created_by: String, party_name: String, privacy_option: String, max_members: Int, bet: String, bet_date: String, bet_type: String, options: [String], terms: String, status: String, party_code: String, max_selections: Int, game_status: String? = "waiting") { // Added max_selections parameter
         self.created_by = created_by
         self.party_name = party_name
         self.privacy_option = privacy_option
@@ -64,6 +64,7 @@ struct PartyInsertPayload: Codable {
         self.terms = terms
         self.status = status
         self.party_code = party_code
+        self.max_selections = max_selections // Changed from nil to the parameter value
         self.game_status = game_status
     }
 }

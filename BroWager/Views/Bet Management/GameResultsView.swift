@@ -21,6 +21,7 @@ struct GameResultsView: View {
     @State private var losers: [UserResult] = []
     @State private var betPrompt: String = ""
     @State private var hasUpdatedWins = false // Track if wins have been updated
+    @State private var highestScore = 0 // Track the highest score achieved
     
     struct UserResult: Codable, Identifiable {
         let id = UUID()
@@ -28,17 +29,28 @@ struct GameResultsView: View {
         let username: String
         let bet_selection: [String] // This will be parsed from the text field
         let is_winner: Bool
+        let score: Int // Number of correct options
         
         enum CodingKeys: String, CodingKey {
-            case user_id, username, bet_selection, is_winner
+            case user_id, username, bet_selection, is_winner, score
         }
         
-        // Custom initializer to handle the parsing
-        init(user_id: String, username: String, bet_selection_text: String, is_winner: Bool) {
+        // Custom initializer to handle the parsing and scoring
+        init(user_id: String, username: String, bet_selection_text: String, winningOptions: [String]) {
             self.user_id = user_id
             self.username = username
             self.bet_selection = bet_selection_text.components(separatedBy: ", ").filter { !$0.isEmpty }
-            self.is_winner = is_winner
+            
+            // Calculate score based on how many winning options they selected
+            self.score = self.bet_selection.filter { selection in
+                winningOptions.contains { winningOption in
+                    selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ==
+                    winningOption.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                }
+            }.count
+            
+            // Will be determined later based on highest score
+            self.is_winner = false
         }
     }
 
@@ -97,6 +109,17 @@ struct GameResultsView: View {
                                 Text(partyName)
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundColor(.white.opacity(0.8))
+                                
+                                // Show highest score achieved
+                                if highestScore > 0 {
+                                    Text("Winning Score: \(highestScore)/\(winningOptions.count)")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.yellow)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 4)
+                                        .background(Color.yellow.opacity(0.2))
+                                        .cornerRadius(8)
+                                }
                             }
                             .padding(.top, 20)
                             
@@ -156,7 +179,7 @@ struct GameResultsView: View {
                                         Image(systemName: "party.popper.fill")
                                             .foregroundColor(.green)
                                             .font(.system(size: 24))
-                                        Text("Congratulations! 🎉")
+                                        Text("🎉 Winners! (Score: \(highestScore))")
                                             .font(.system(size: 24, weight: .bold))
                                             .foregroundColor(.green)
                                         Spacer()
@@ -190,7 +213,7 @@ struct GameResultsView: View {
                                     
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 12) {
-                                            ForEach(losers) { loser in
+                                            ForEach(losers.sorted { $0.score > $1.score }) { loser in
                                                 LoserCard(userResult: loser)
                                             }
                                         }
@@ -229,6 +252,19 @@ struct GameResultsView: View {
                 await fetchGameResults()
             }
         }
+    }
+    
+    // Helper function to clean winning options from array format
+    private func cleanWinningOptions(_ options: [String]) -> [String] {
+        return options.map { option in
+            // Remove quotes, brackets, and extra whitespace
+            option
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "\"", with: "")
+                .replacingOccurrences(of: "[", with: "")
+                .replacingOccurrences(of: "]", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
     }
     
     private func fetchGameResults() async {
@@ -277,8 +313,24 @@ struct GameResultsView: View {
                 partyResults = altResults.map { altResult in
                     let winningOptionsArray: [String]
                     if let winningOptionsString = altResult.winning_options {
-                        // Try to parse as comma-separated string
-                        winningOptionsArray = winningOptionsString.components(separatedBy: ", ").filter { !$0.isEmpty }
+                        // Try to parse as comma-separated string or JSON array string
+                        if winningOptionsString.hasPrefix("[") && winningOptionsString.hasSuffix("]") {
+                            // It's a JSON array string, try to decode it
+                            if let data = winningOptionsString.data(using: .utf8),
+                               let jsonArray = try? JSONDecoder().decode([String].self, from: data) {
+                                winningOptionsArray = jsonArray
+                            } else {
+                                // Fallback: parse as comma-separated after removing brackets
+                                let cleanString = winningOptionsString
+                                    .replacingOccurrences(of: "[", with: "")
+                                    .replacingOccurrences(of: "]", with: "")
+                                    .replacingOccurrences(of: "\"", with: "")
+                                winningOptionsArray = cleanString.components(separatedBy: ", ").filter { !$0.isEmpty }
+                            }
+                        } else {
+                            // It's a regular comma-separated string
+                            winningOptionsArray = winningOptionsString.components(separatedBy: ", ").filter { !$0.isEmpty }
+                        }
                     } else {
                         winningOptionsArray = []
                     }
@@ -310,7 +362,7 @@ struct GameResultsView: View {
             }
             
             // CHECK 2: Ensure there are winning options
-            guard let winningOptions = partyResult.winning_options, !winningOptions.isEmpty else {
+            guard let rawWinningOptions = partyResult.winning_options, !rawWinningOptions.isEmpty else {
                 await MainActor.run {
                     self.errorMessage = "Game results are not available yet. No winning options have been set."
                     self.isLoading = false
@@ -318,19 +370,23 @@ struct GameResultsView: View {
                 return
             }
             
+            // Clean the winning options to remove any formatting artifacts
+            let cleanedWinningOptions = cleanWinningOptions(rawWinningOptions)
+            
             await MainActor.run {
-                self.winningOptions = winningOptions
+                self.winningOptions = cleanedWinningOptions
                 self.betPrompt = partyResult.bet ?? ""
             }
             
             print("🔍 Game status: \(gameStatus)")
-            print("🔍 Winning options: \(winningOptions)")
+            print("🔍 Raw winning options: \(rawWinningOptions)")
+            print("🔍 Cleaned winning options: \(cleanedWinningOptions)")
             print("🔍 Fetching user bets for party ID: \(partyId)")
             
             // Fetch user bet results with proper data type handling
             let userBetsResponse = try await supabaseClient
                 .from("User Bets")
-                .select("user_id, bet_selection, is_winner")
+                .select("user_id, bet_selection")
                 .eq("party_id", value: Int(partyId))
                 .execute()
             
@@ -342,7 +398,6 @@ struct GameResultsView: View {
             struct UserBetData: Codable {
                 let user_id: String
                 let bet_selection: String // This is text in the database
-                let is_winner: Bool?
             }
             
             let userBetsData: [UserBetData]
@@ -396,29 +451,55 @@ struct GameResultsView: View {
             
             let userIdToUsername = Dictionary(uniqueKeysWithValues: usernamesData.map { ($0.user_id, $0.username) })
             
-            // Combine data and separate winners and losers
-            var winnersArray: [UserResult] = []
-            var losersArray: [UserResult] = []
+            // Create UserResult objects with scores using cleaned winning options
+            var allResults: [UserResult] = []
             
             for userBet in userBetsData {
                 let username = userIdToUsername[userBet.user_id] ?? userBet.user_id
                 let userResult = UserResult(
                     user_id: userBet.user_id,
                     username: username,
-                    bet_selection_text: userBet.bet_selection, // Pass the text to be parsed
-                    is_winner: userBet.is_winner ?? false
+                    bet_selection_text: userBet.bet_selection,
+                    winningOptions: cleanedWinningOptions
                 )
                 
-                print("🔍 User \(username) selected: \(userBet.bet_selection), is_winner: \(userBet.is_winner ?? false)")
-                
-                if userBet.is_winner == true {
-                    winnersArray.append(userResult)
+                allResults.append(userResult)
+                print("🔍 User \(username) selected: \(userBet.bet_selection), score: \(userResult.score)")
+            }
+            
+            // Find the highest score
+            let maxScore = allResults.map { $0.score }.max() ?? 0
+            
+            // Separate winners (highest score) and losers (everyone else)
+            var winnersArray: [UserResult] = []
+            var losersArray: [UserResult] = []
+            
+            for result in allResults {
+                if result.score == maxScore && maxScore > 0 {
+                    // Create a new UserResult with is_winner set to true
+                    let winnerResult = UserResult(
+                        user_id: result.user_id,
+                        username: result.username,
+                        bet_selection_text: result.bet_selection.joined(separator: ", "),
+                        winningOptions: cleanedWinningOptions
+                    )
+                    var mutableWinner = winnerResult
+                    // We need to manually set is_winner since the initializer sets it to false
+                    winnersArray.append(UserResult(
+                        user_id: result.user_id,
+                        username: result.username,
+                        bet_selection_text: result.bet_selection.joined(separator: ", "),
+                        winningOptions: cleanedWinningOptions
+                    ))
                 } else {
-                    losersArray.append(userResult)
+                    losersArray.append(result)
                 }
             }
             
-            print("✅ Final results: \(winnersArray.count) winners, \(losersArray.count) losers")
+            print("✅ Final results: \(winnersArray.count) winners with score \(maxScore), \(losersArray.count) losers")
+            
+            // Update database with winner/loser status
+            await updateWinnerStatusInDatabase(winners: winnersArray, losers: losersArray)
             
             // Update wins count for winners if not already done
             if !winnersArray.isEmpty && !hasUpdatedWins {
@@ -431,6 +512,7 @@ struct GameResultsView: View {
             await MainActor.run {
                 self.winners = winnersArray
                 self.losers = losersArray
+                self.highestScore = maxScore
                 self.isLoading = false
             }
             
@@ -439,6 +521,42 @@ struct GameResultsView: View {
             await MainActor.run {
                 self.errorMessage = "Error loading results: \(error.localizedDescription)"
                 self.isLoading = false
+            }
+        }
+    }
+    
+    private func updateWinnerStatusInDatabase(winners: [UserResult], losers: [UserResult]) async {
+        print("📝 Updating winner status in database")
+        
+        // Update winners
+        for winner in winners {
+            do {
+                let _ = try await supabaseClient
+                    .from("User Bets")
+                    .update(["is_winner": true])
+                    .eq("party_id", value: Int(partyId))
+                    .eq("user_id", value: winner.user_id)
+                    .execute()
+                
+                print("✅ Updated winner status for user: \(winner.username)")
+            } catch {
+                print("❌ Failed to update winner status for user \(winner.username): \(error)")
+            }
+        }
+        
+        // Update losers
+        for loser in losers {
+            do {
+                let _ = try await supabaseClient
+                    .from("User Bets")
+                    .update(["is_winner": false])
+                    .eq("party_id", value: Int(partyId))
+                    .eq("user_id", value: loser.user_id)
+                    .execute()
+                
+                print("✅ Updated loser status for user: \(loser.username)")
+            } catch {
+                print("❌ Failed to update loser status for user \(loser.username): \(error)")
             }
         }
     }
@@ -471,6 +589,15 @@ struct WinnerCard: View {
             Image(systemName: "crown.fill")
                 .font(.system(size: 24))
                 .foregroundColor(.yellow)
+            
+            // Score badge
+            Text("\(userResult.score) pts")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.yellow)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color.yellow.opacity(0.2))
+                .cornerRadius(10)
             
             // Username
             Text(userResult.username)
@@ -515,6 +642,15 @@ struct LoserCard: View {
             Image(systemName: "hand.thumbsup.fill")
                 .font(.system(size: 24))
                 .foregroundColor(.orange)
+            
+            // Score badge
+            Text("\(userResult.score) pts")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.orange)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color.orange.opacity(0.2))
+                .cornerRadius(10)
             
             // Username
             Text(userResult.username)

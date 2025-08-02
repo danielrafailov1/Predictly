@@ -555,6 +555,7 @@ struct MyPartiesView: View {
             let party_code: String?
             let created_by: String?
             let privacy_option: String?
+            let game_status: String?  // Added game_status field
         }
         
         struct UserPartyRow: Decodable {
@@ -573,10 +574,10 @@ struct MyPartiesView: View {
             
             var allOpenParties: [OpenPartyRow] = []
             
-            // Query for "Open" parties with pagination
+            // Query for "Open" parties with pagination - now including game_status
             let openResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option")
+                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status")
                 .eq("privacy_option", value: "Open")
                 .order("created_at", ascending: false)
                 .range(from: 0, to: chunkSize - 1)
@@ -585,10 +586,10 @@ struct MyPartiesView: View {
             let openParties = try JSONDecoder().decode([OpenPartyRow].self, from: openResponse.data)
             allOpenParties.append(contentsOf: openParties)
             
-            // Query for "Public" parties with pagination
+            // Query for "Public" parties with pagination - now including game_status
             let publicResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option")
+                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status")
                 .eq("privacy_option", value: "Public")
                 .order("created_at", ascending: false)
                 .range(from: 0, to: chunkSize - 1)
@@ -597,9 +598,17 @@ struct MyPartiesView: View {
             let publicParties = try JSONDecoder().decode([OpenPartyRow].self, from: publicResponse.data)
             allOpenParties.append(contentsOf: publicParties)
             
+            // Filter out parties that user is already member of AND parties with "ended" game_status
             let availableOpenParties = allOpenParties.filter { party in
                 guard let partyId = party.id else { return false }
-                return !userPartyIds.contains(partyId)
+                
+                // Check if user is not already a member
+                let isNotMember = !userPartyIds.contains(partyId)
+                
+                // Check if game is not ended
+                let isNotEnded = party.game_status != "ended"
+                
+                return isNotMember && isNotEnded
             }
             
             let loadedOpenParties = availableOpenParties.compactMap { p -> Party? in
@@ -617,7 +626,7 @@ struct MyPartiesView: View {
                     bet: nil,
                     terms: nil,
                     options: nil,
-                    game_status: nil,
+                    game_status: p.game_status,  // Include the game_status in the Party object
                     privacy_option: p.privacy_option
                 )
             }
