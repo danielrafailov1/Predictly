@@ -35,7 +35,8 @@ struct ProfileView: View {
     // Authentication provider state
     @State private var authProvider: String? = nil
 
-    @State private var friends: [String] = []
+    // Updated friends state to include profile images
+    @State private var friendsWithImages: [FriendWithImage] = []
 
     @EnvironmentObject var sessionManager: SessionManager
 
@@ -61,12 +62,10 @@ struct ProfileView: View {
                 VStack(spacing: 32) {
                     profileHeader
                     
-                  
-                    
                     // Account Info Section
                     accountInfoSection
                     
-                    // Friends Section (moved below account info)
+                    // Friends Section (updated with profile pictures)
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Friends")
@@ -76,7 +75,8 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 8)
-                        if friends.isEmpty {
+                        
+                        if friendsWithImages.isEmpty {
                             Text("No friends yet.")
                                 .foregroundColor(.white.opacity(0.5))
                                 .font(.system(size: 16))
@@ -84,13 +84,28 @@ struct ProfileView: View {
                         } else {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 16) {
-                                    ForEach(friends, id: \.self) { friend in
+                                    ForEach(friendsWithImages, id: \.id) { friend in
                                         VStack(spacing: 8) {
-                                            Image(systemName: "person.crop.circle.fill")
-                                                .resizable()
-                                                .frame(width: 48, height: 48)
-                                                .foregroundColor(.blue)
-                                            Text(friend)
+                                            // Profile picture with async loading
+                                            AsyncImage(url: friend.profileImageURL) { image in
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 48, height: 48)
+                                                    .clipShape(Circle())
+                                                    .overlay(
+                                                        Circle()
+                                                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                                                    )
+                                            } placeholder: {
+                                                // Fallback to default icon while loading or if no image
+                                                Image(systemName: "person.crop.circle.fill")
+                                                    .resizable()
+                                                    .frame(width: 48, height: 48)
+                                                    .foregroundColor(.blue)
+                                            }
+                                            
+                                            Text(friend.username)
                                                 .font(.system(size: 16, weight: .medium))
                                                 .foregroundColor(.white)
                                                 .lineLimit(1)
@@ -379,7 +394,7 @@ struct ProfileView: View {
             // Fetch username, profile image, and friends in parallel
             async let usernameTask = fetchUsernameAndIdentifier(for: userId)
             async let profileImageTask = fetchAndLoadProfileImage(for: userId)
-            async let friendsTask = fetchFriends(for: userId)
+            async let friendsTask = fetchFriendsWithProfileImages(for: userId)
 
             let (fetchedUsername, fetchedIdentifier) = await (try? usernameTask) ?? ("", "")
             let loadedImage = await (try? profileImageTask)
@@ -392,7 +407,7 @@ struct ProfileView: View {
                     self.profileUIImage = uiImage
                     self.profileImage = image
                 }
-                self.friends = fetchedFriends
+                self.friendsWithImages = fetchedFriends
                 self.isErrorUpdate = false
                 self.updateMessage = nil
             }
@@ -575,8 +590,8 @@ struct ProfileView: View {
         return nil
     }
 
-    // Fetch friends' usernames for the user
-    func fetchFriends(for userId: String) async throws -> [String] {
+    // Updated function to fetch friends with their profile images
+    func fetchFriendsWithProfileImages(for userId: String) async throws -> [FriendWithImage] {
         // Get all accepted friends where user is either user_id or friend_id
         let friendsResp = try await supabaseClient
             .from("Friends")
@@ -584,21 +599,72 @@ struct ProfileView: View {
             .or("user_id.eq.\(userId),friend_id.eq.\(userId)")
             .eq("status", value: "accepted")
             .execute()
-        struct FriendRow: Decodable { let user_id: String; let friend_id: String }
-        let arr = try JSONDecoder().decode([FriendRow].self, from: friendsResp.data)
+        
+        struct FriendRow: Decodable {
+            let user_id: String
+            let friend_id: String
+        }
+        
+        let friendRows = try JSONDecoder().decode([FriendRow].self, from: friendsResp.data)
+        
         // Get the other user's id
-        let friendIds = arr.map { $0.user_id == userId ? $0.friend_id : $0.user_id }
+        let friendIds = friendRows.map { $0.user_id == userId ? $0.friend_id : $0.user_id }
+        
         if friendIds.isEmpty { return [] }
+        
         // Fetch usernames for all friendIds
         let usernamesResp = try await supabaseClient
             .from("Username")
             .select("user_id, username")
             .in("user_id", values: friendIds)
             .execute()
-        struct UsernameRow: Decodable { let user_id: String; let username: String }
-        let usernamesArr = try JSONDecoder().decode([UsernameRow].self, from: usernamesResp.data)
-        return usernamesArr.map { $0.username }
+        
+        struct UsernameResponse: Decodable {
+            let user_id: String
+            let username: String
+        }
+        
+        let usernamesData = try JSONDecoder().decode([UsernameResponse].self, from: usernamesResp.data)
+        
+        // Create ProfileManager instance
+        let profileManager = ProfileManager(supabaseClient: supabaseClient)
+        
+        // Fetch profile images for each friend
+        var friendsWithImages: [FriendWithImage] = []
+        
+        for usernameData in usernamesData {
+            let profileImageURL: URL?
+            
+            do {
+                // Try to fetch profile image URL
+                if let urlString = try await profileManager.fetchProfileImageURL(for: usernameData.user_id),
+                   let url = URL(string: urlString + "?t=\(Int(Date().timeIntervalSince1970))") {
+                    profileImageURL = url
+                } else {
+                    profileImageURL = nil
+                }
+            } catch {
+                print("⚠️ Could not fetch profile image for user \(usernameData.user_id): \(error)")
+                profileImageURL = nil
+            }
+            
+            let friend = FriendWithImage(
+                id: usernameData.user_id,
+                username: usernameData.username,
+                profileImageURL: profileImageURL
+            )
+            friendsWithImages.append(friend)
+        }
+        
+        return friendsWithImages
     }
+}
+
+// MARK: - FriendWithImage Model (separate from your existing Friend struct)
+struct FriendWithImage: Identifiable {
+    let id: String
+    let username: String
+    let profileImageURL: URL?
 }
 
 // A reusable view for displaying static info
