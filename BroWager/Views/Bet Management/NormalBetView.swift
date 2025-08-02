@@ -1611,12 +1611,13 @@ struct FinalizeBetView: View {
             options: validOptions, // Use filtered valid options
             terms: betTerms,
             status: "open",
-            party_code: String(partyCode)
+            party_code: String(partyCode),
+            max_selections: maxSelections // Add this line!
         )
 
         Task {
             do {
-                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate ?? "no date")")
+                print("🔄 Creating party with code: \(partyCode) for date: \(formattedDate ?? "no date") with max selections: \(maxSelections)")
                 
                 // First, insert the party
                 let response = try await supabaseClient
