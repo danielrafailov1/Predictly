@@ -90,74 +90,77 @@ struct MyPartiesView: View {
     
     // MARK: - Optimized Parties List View with LazyVStack
     private var partiesListView: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(Array(partyRows.enumerated()), id: \.element.party.id) { index, row in
-                    Group {
-                        if partyFilter == .open {
-                            OpenPartyCard(
+        List {
+            ForEach(Array(partyRows.enumerated()), id: \.element.party.id) { index, row in
+                Group {
+                    if partyFilter == .open {
+                        OpenPartyCard(
+                            party: row.party,
+                            memberCount: row.memberCount,
+                            betType: row.betType,
+                            backgroundColor: cardBackgroundColor(for: row.party),
+                            onJoin: {
+                                Task { await joinOpenParty(row.party) }
+                            }
+                        )
+                    } else {
+                        NavigationLink(value: PartyNavigation(party_code: row.party.party_code ?? "", email: email)) {
+                            PartyCard(
                                 party: row.party,
                                 memberCount: row.memberCount,
                                 betType: row.betType,
-                                backgroundColor: cardBackgroundColor(for: row.party),
-                                onJoin: {
-                                    Task { await joinOpenParty(row.party) }
-                                }
+                                backgroundColor: cardBackgroundColor(for: row.party)
                             )
-                        } else {
-                            NavigationLink(value: PartyNavigation(party_code: row.party.party_code ?? "", email: email)) {
-                                PartyCard(
-                                    party: row.party,
-                                    memberCount: row.memberCount,
-                                    betType: row.betType,
-                                    backgroundColor: cardBackgroundColor(for: row.party)
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    Task { await handlePartyDeletion(row.party) }
-                                } label: {
-                                    Label(isPartyLeader(row.party) ? "Delete Party" : "Leave Party",
-                                          systemImage: isPartyLeader(row.party) ? "trash" : "rectangle.portrait.and.arrow.right")
-                                }
-                                
-                                if partyFilter == .active {
-                                    Button {
-                                        archiveParty(row.party)
-                                    } label: {
-                                        Label("Archive", systemImage: "archivebox")
-                                    }
-                                }
-                            }
                         }
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .padding(.horizontal, 24)
-                    .onAppear {
-                        // Load more when approaching the end
-                        if index == partyRows.count - 3 && !isLoadingMore && hasMoreParties {
-                            Task {
-                                await loadMoreParties()
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    if partyFilter != .open {
+                        Button(role: .destructive) {
+                            Task { await handlePartyDeletion(row.party) }
+                        } label: {
+                            Label(isPartyLeader(row.party) ? "Delete" : "Leave",
+                                  systemImage: isPartyLeader(row.party) ? "trash" : "rectangle.portrait.and.arrow.right")
+                        }
+                        
+                        if partyFilter == .active {
+                            Button {
+                                archiveParty(row.party)
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
                             }
+                            .tint(.orange)
                         }
                     }
                 }
-                
-                // Loading indicator for pagination
-                if isLoadingMore {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Loading more parties...")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.7))
+                .onAppear {
+                    if index == partyRows.count - 3 && !isLoadingMore && hasMoreParties {
+                        Task {
+                            await loadMoreParties()
+                        }
                     }
-                    .padding()
                 }
             }
-            .padding(.vertical, 8)
+            
+            if isLoadingMore {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Loading more parties...")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
         }
+        .listStyle(PlainListStyle())
+        .scrollContentBackground(.hidden)
     }
+
     
     // Fixed partyListSection with proper layout structure
     @ViewBuilder
@@ -419,19 +422,32 @@ struct MyPartiesView: View {
             return
         }
         
+        print("🗑️ Handling party deletion for party: \(party.party_name ?? "Unknown") (ID: \(partyId))")
+        
         do {
             if isPartyLeader(party) {
+                print("🗑️ User is party leader - deleting entire party")
                 try await deleteEntireParty(partyId: partyId)
             } else {
+                print("🗑️ User is not party leader - leaving party")
                 try await leaveParty(partyId: partyId)
             }
             
+            // Update local state immediately
             DispatchQueue.main.async {
+                // Remove from all local arrays
                 self.parties.removeAll { $0.id == partyId }
+                self.openParties.removeAll { $0.id == partyId }
                 self.wonPartyIds.remove(partyId)
                 self.lostPartyIds.remove(partyId)
                 self.loadedPartyIds.remove(partyId)
+                self.memberCounts.removeValue(forKey: partyId)
+                
+                print("✅ Updated local state after party deletion")
             }
+            
+            // Refresh the current view to ensure consistency
+            await resetAndLoadParties()
             
         } catch {
             print("❌ Error handling party deletion: \(error)")
@@ -443,31 +459,47 @@ struct MyPartiesView: View {
     
     /// Delete the entire party (leader only)
     private func deleteEntireParty(partyId: Int64) async throws {
+        print("🗑️ Starting deletion of party ID: \(partyId)")
+        
+        // Convert to string for database operations
         let partyIdString = String(partyId)
         
-        try await supabaseClient
+        // Delete in the correct order to avoid foreign key constraints
+        // 1. Delete all party members (kicks everyone out)
+        print("🗑️ Deleting party members...")
+        let membersResult = try await supabaseClient
             .from("Party Members")
             .delete()
             .eq("party_id", value: partyIdString)
             .execute()
+        print("✅ Deleted party members, affected rows: \(membersResult.count ?? 0)")
         
-        try await supabaseClient
+        // 2. Delete all user bets for this party
+        print("🗑️ Deleting user bets...")
+        let betsResult = try await supabaseClient
             .from("User Bets")
             .delete()
             .eq("party_id", value: partyIdString)
             .execute()
+        print("✅ Deleted user bets, affected rows: \(betsResult.count ?? 0)")
         
-        try await supabaseClient
+        // 3. Delete all party invites
+        print("🗑️ Deleting party invites...")
+        let invitesResult = try await supabaseClient
             .from("Party Invites")
             .delete()
             .eq("party_id", value: partyIdString)
             .execute()
+        print("✅ Deleted party invites, affected rows: \(invitesResult.count ?? 0)")
         
-        try await supabaseClient
+        // 4. Finally delete the party itself
+        print("🗑️ Deleting party...")
+        let partyResult = try await supabaseClient
             .from("Parties")
             .delete()
             .eq("id", value: partyIdString)
             .execute()
+        print("✅ Deleted party, affected rows: \(partyResult.count ?? 0)")
         
         print("✅ Successfully deleted entire party with ID: \(partyId)")
     }
@@ -541,7 +573,6 @@ struct MyPartiesView: View {
         }
     }
     
-    /// Load open parties that the user can join
     private func loadOpenParties() async {
         guard !userId.isEmpty else {
             print("⚠️ Attempted to load open parties but userId is empty.")
@@ -555,7 +586,7 @@ struct MyPartiesView: View {
             let party_code: String?
             let created_by: String?
             let privacy_option: String?
-            let game_status: String?  // Added game_status field
+            let game_status: String?
         }
         
         struct UserPartyRow: Decodable {
@@ -563,6 +594,7 @@ struct MyPartiesView: View {
         }
         
         do {
+            // Get parties user is already a member of
             let userPartiesResponse = try await supabaseClient
                 .from("Party Members")
                 .select("party_id")
@@ -574,11 +606,12 @@ struct MyPartiesView: View {
             
             var allOpenParties: [OpenPartyRow] = []
             
-            // Query for "Open" parties with pagination - now including game_status
+            // Query for "Open" parties - including game_status
             let openResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status")
                 .eq("privacy_option", value: "Open")
+                .neq("game_status", value: "ended") // Exclude ended games
                 .order("created_at", ascending: false)
                 .range(from: 0, to: chunkSize - 1)
                 .execute()
@@ -586,11 +619,12 @@ struct MyPartiesView: View {
             let openParties = try JSONDecoder().decode([OpenPartyRow].self, from: openResponse.data)
             allOpenParties.append(contentsOf: openParties)
             
-            // Query for "Public" parties with pagination - now including game_status
+            // Query for "Public" parties - including game_status
             let publicResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status")
                 .eq("privacy_option", value: "Public")
+                .neq("game_status", value: "ended") // Exclude ended games
                 .order("created_at", ascending: false)
                 .range(from: 0, to: chunkSize - 1)
                 .execute()
@@ -598,17 +632,10 @@ struct MyPartiesView: View {
             let publicParties = try JSONDecoder().decode([OpenPartyRow].self, from: publicResponse.data)
             allOpenParties.append(contentsOf: publicParties)
             
-            // Filter out parties that user is already member of AND parties with "ended" game_status
+            // Filter out parties that user is already member of
             let availableOpenParties = allOpenParties.filter { party in
                 guard let partyId = party.id else { return false }
-                
-                // Check if user is not already a member
-                let isNotMember = !userPartyIds.contains(partyId)
-                
-                // Check if game is not ended
-                let isNotEnded = party.game_status != "ended"
-                
-                return isNotMember && isNotEnded
+                return !userPartyIds.contains(partyId)
             }
             
             let loadedOpenParties = availableOpenParties.compactMap { p -> Party? in
@@ -626,7 +653,7 @@ struct MyPartiesView: View {
                     bet: nil,
                     terms: nil,
                     options: nil,
-                    game_status: p.game_status,  // Include the game_status in the Party object
+                    game_status: p.game_status,
                     privacy_option: p.privacy_option
                 )
             }
@@ -643,6 +670,7 @@ struct MyPartiesView: View {
             
             DispatchQueue.main.async {
                 self.openParties = loadedOpenParties
+                print("✅ Loaded \(loadedOpenParties.count) open parties")
             }
             
         } catch {
@@ -673,10 +701,6 @@ struct MyPartiesView: View {
         }
     }
 
-    /// Loads parties in chunks for better performance
-    /// - Parameters:
-    ///   - isInitialLoad: Whether this is the first load (shows main loading indicator)
-    ///   - silentRefresh: Whether this is a background refresh (doesn't reset pagination)
     func loadPartiesChunked(isInitialLoad: Bool, silentRefresh: Bool = false) async {
         if isInitialLoad && !silentRefresh {
             DispatchQueue.main.async {
@@ -702,55 +726,43 @@ struct MyPartiesView: View {
             let created_by: String?
         }
         struct WinRow: Decodable { let party_id: Int64 }
-        struct PartyMemberRow: Decodable { let party_id: Int64 }
 
         do {
-            // First get user's party IDs if this is initial load or silent refresh
-            var userPartyIds: Set<Int64> = []
+            // Get user's party IDs first
+            let memberResponse = try await supabaseClient
+                .from("Party Members")
+                .select("party_id")
+                .eq("user_id", value: userId)
+                .execute()
             
-            if isInitialLoad || silentRefresh {
-                let memberResponse = try await supabaseClient
-                    .from("Party Members")
-                    .select("party_id")
-                    .eq("user_id", value: userId)
-                    .execute()
-                
-                let memberRows = try JSONDecoder().decode([PartyMemberRow].self, from: memberResponse.data)
-                userPartyIds = Set(memberRows.map { $0.party_id })
-                
-                guard !userPartyIds.isEmpty else {
-                    DispatchQueue.main.async {
-                        self.parties = []
-                        self.wonPartyIds = []
-                        self.lostPartyIds = []
-                        self.hasMoreParties = false
-                        if isInitialLoad { self.isLoading = false }
-                    }
-                    return
+            struct PartyMemberRow: Decodable { let party_id: Int64 }
+            let memberRows = try JSONDecoder().decode([PartyMemberRow].self, from: memberResponse.data)
+            let userPartyIds = Set(memberRows.map { $0.party_id })
+            
+            guard !userPartyIds.isEmpty else {
+                DispatchQueue.main.async {
+                    self.parties = []
+                    self.wonPartyIds = []
+                    self.lostPartyIds = []
+                    self.hasMoreParties = false
+                    if isInitialLoad { self.isLoading = false }
                 }
+                return
             }
             
-            // Fetch parties with pagination
+            // Convert userPartyIds to strings for the IN filter
+            let partyIdStrings = userPartyIds.map { String($0) }
+            
+            // Fetch only parties where user is a member, with pagination
             let partiesResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, party_name, bet_type, party_code, created_by")
+                .in("id", values: partyIdStrings)
                 .order("created_at", ascending: false)
                 .range(from: currentOffset, to: currentOffset + chunkSize - 1)
                 .execute()
             
-            let allPartiesChunk = try JSONDecoder().decode([PartyRow].self, from: partiesResponse.data)
-            
-            // Filter to only parties where user is a member (if we have userPartyIds)
-            let filteredPartiesChunk: [PartyRow]
-            if !userPartyIds.isEmpty {
-                filteredPartiesChunk = allPartiesChunk.filter { party in
-                    guard let partyId = party.id else { return false }
-                    return userPartyIds.contains(partyId)
-                }
-            } else {
-                // For pagination, we assume user party filtering was done in initial load
-                filteredPartiesChunk = allPartiesChunk
-            }
+            let partiesChunk = try JSONDecoder().decode([PartyRow].self, from: partiesResponse.data)
             
             // Load win/loss data if this is initial load or silent refresh
             var winPartyIds: Set<Int64> = []
@@ -781,7 +793,7 @@ struct MyPartiesView: View {
                 lossPartyIds = Set(lossRows.map { $0.party_id })
             }
             
-            let newParties = filteredPartiesChunk.compactMap { p -> Party? in
+            let newParties = partiesChunk.compactMap { p -> Party? in
                 guard let partyId = p.id else { return nil }
                 
                 // Avoid duplicates
