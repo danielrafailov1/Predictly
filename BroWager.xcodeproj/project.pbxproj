@@ -40,7 +40,6 @@
 		4B56EEFB2E1C99D80088E513 /* PoliticsBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B56EEFA2E1C99D80088E513 /* PoliticsBetView.swift */; };
 		4B56EEFD2E1C99E20088E513 /* LifeEventsBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B56EEFC2E1C99E20088E513 /* LifeEventsBetView.swift */; };
 		4B56EF012E1C9F8F0088E513 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B56EF002E1C9F8F0088E513 /* SidebarView.swift */; };
-		4B56EF032E1C9F960088E513 /* RootWithSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B56EF022E1C9F960088E513 /* RootWithSidebarView.swift */; };
 		4B5D5CE12E0CB5A4000B05AC /* SupabaseEnvironmentKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B5D5CDF2E0CB5A4000B05AC /* SupabaseEnvironmentKey.swift */; };
 		4B5D5CE62E0CD758000B05AC /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B5D5CE52E0CD758000B05AC /* SessionManager.swift */; };
 		4B5D5CE82E0CD767000B05AC /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B5D5CE72E0CD767000B05AC /* RootView.swift */; };
@@ -115,7 +114,6 @@
 		4B56EEFA2E1C99D80088E513 /* PoliticsBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PoliticsBetView.swift; sourceTree = "<group>"; };
 		4B56EEFC2E1C99E20088E513 /* LifeEventsBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeEventsBetView.swift; sourceTree = "<group>"; };
 		4B56EF002E1C9F8F0088E513 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
-		4B56EF022E1C9F960088E513 /* RootWithSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootWithSidebarView.swift; sourceTree = "<group>"; };
 		4B5D5CDD2E0C9DA7000B05AC /* BroWager.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BroWager.entitlements; sourceTree = "<group>"; };
 		4B5D5CDF2E0CB5A4000B05AC /* SupabaseEnvironmentKey.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SupabaseEnvironmentKey.swift; sourceTree = "<group>"; };
 		4B5D5CE52E0CD758000B05AC /* SessionManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
@@ -419,7 +417,6 @@
 				4BF3C89F2E0B43B800872BEC /* ProfileImageLoader.swift */,
 				4BF3C89A2E0A451A00872BEC /* ProfileIconOverlay.swift */,
 				4B56EF002E1C9F8F0088E513 /* SidebarView.swift */,
-				4B56EF022E1C9F960088E513 /* RootWithSidebarView.swift */,
 				4B5D5CE72E0CD767000B05AC /* RootView.swift */,
 			);
 			path = Shared;
@@ -551,7 +548,6 @@
 				4BDD17972E01FB6B00CD117D /* PartyModels.swift in Sources */,
 				4B6AE1062E03579D00656DF3 /* ChooseUsernameView.swift in Sources */,
 				4B56EEFD2E1C99E20088E513 /* LifeEventsBetView.swift in Sources */,
-				4B56EF032E1C9F960088E513 /* RootWithSidebarView.swift in Sources */,
 				4B56EEFB2E1C99D80088E513 /* PoliticsBetView.swift in Sources */,
 				4BDD17922E01F65400CD117D /* PartyDetailsView.swift in Sources */,
 				4B2D15A52DFCB3CB0068E5E4 /* ProfileView.swift in Sources */,

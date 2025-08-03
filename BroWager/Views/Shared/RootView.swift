@@ -11,60 +11,32 @@ struct RootView: View {
         "\(sessionManager.isLoggedIn)-\(sessionManager.userEmail ?? "")-\(sessionManager.needsUsername)"
     }
 
-    // Helper view to add swipe gesture to tab content
-    struct SwipeGestureView<Content: View>: View {
-        let selectedTab: Int
-        let setTab: (Int) -> Void
-        let content: () -> Content
-        var body: some View {
-            content()
-                .gesture(
-                    DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                        .onEnded { value in
-                            if abs(value.translation.width) > abs(value.translation.height) {
-                                if value.translation.width < 0 && selectedTab < 4 {
-                                    setTab(selectedTab + 1)
-                                } else if value.translation.width > 0 && selectedTab > 0 {
-                                    setTab(selectedTab - 1)
-                                }
-                            }
-                        }
-                )
-        }
-    }
-
     var body: some View {
         Group {
             if sessionManager.isLoggedIn, let email = sessionManager.userEmail, !sessionManager.needsUsername {
                 ZStack {
                     TabView(selection: $selectedTab) {
-                        SwipeGestureView(selectedTab: selectedTab, setTab: { selectedTab = $0 }) {
-                            MyPartiesView(email: email)
-                        }
-                        .tabItem { Label("My Parties", systemImage: "person.3.fill") }
-                        .tag(0)
-                        SwipeGestureView(selectedTab: selectedTab, setTab: { selectedTab = $0 }) {
-                            FriendsView(email: email)
-                        }
-                        .tabItem { Label("Friends", systemImage: "person.2.fill") }
-                        .tag(1)
-                        SwipeGestureView(selectedTab: selectedTab, setTab: { selectedTab = $0 }) {
-                            NavigationStack {
-                                BetTypeView(navPath: $navPath, email: email)
-                            }
+                        MyPartiesView(email: email)
+                            .tabItem { Label("My Parties", systemImage: "person.3.fill") }
+                            .tag(0)
+                        
+                        FriendsView(email: email)
+                            .tabItem { Label("Friends", systemImage: "person.2.fill") }
+                            .tag(1)
+                        
+                        NavigationStack {
+                            BetTypeView(navPath: $navPath, email: email)
                         }
                         .tabItem { Label("Home", systemImage: "house.fill") }
                         .tag(2)
-                        SwipeGestureView(selectedTab: selectedTab, setTab: { selectedTab = $0 }) {
-                            LeaderBoardView()
-                        }
-                        .tabItem { Label("Leaderboard", systemImage: "trophy.fill") }
-                        .tag(3)
-                        SwipeGestureView(selectedTab: selectedTab, setTab: { selectedTab = $0 }) {
-                            ProfileView(navPath: .constant(NavigationPath()), email: email)
-                        }
-                        .tabItem { Label("Profile", systemImage: "person.crop.circle") }
-                        .tag(4)
+                        
+                        LeaderBoardView()
+                            .tabItem { Label("Leaderboard", systemImage: "trophy.fill") }
+                            .tag(3)
+                        
+                        ProfileView(navPath: .constant(NavigationPath()), email: email)
+                            .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                            .tag(4)
                     }
                 }
             } else {
@@ -123,4 +95,4 @@ struct RootView: View {
             }
         }
     }
-} 
+}
