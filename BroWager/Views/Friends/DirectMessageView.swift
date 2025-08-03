@@ -204,16 +204,10 @@ struct DirectMessageView: View {
 
     func uploadAndSendImage(data: Data) async {
         isUploading = true
-        let fileName = UUID().uuidString + ".jpg"
-        let bucket = "chat-media"
-        let path = "images/\(fileName)"
         do {
-            print("[ImageUpload] Starting upload to path: \(path)")
-            try await supabaseClient.storage
-                .from(bucket)
-                .upload(path: path, file: data)
-            let publicUrl = "https://wwqbjakkuprsyvwxlgch.supabase.co/storage/v1/object/public/\(bucket)/\(path)"
-            print("[ImageUpload] Uploaded. Public URL: \(publicUrl)")
+            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let publicUrl = try await helper.uploadImage(data: data)
+            
             let message = [
                 "sender_id": currentUserId,
                 "receiver_id": friend.user_id,
@@ -221,9 +215,7 @@ struct DirectMessageView: View {
                 "media_url": publicUrl,
                 "media_type": "image"
             ]
-            print("[ImageUpload] Inserting message: \(message)")
             _ = try await supabaseClient.from("DirectMessages").insert(message).execute()
-            print("[ImageUpload] Message inserted. Reloading messages.")
             await MainActor.run {
                 loadMessages()
                 if let last = messages.last?.id {
@@ -231,7 +223,6 @@ struct DirectMessageView: View {
                 }
             }
         } catch {
-            print("[ImageUpload] Error: \(error)")
             uploadError = UploadError(message: error.localizedDescription)
         }
         isUploading = false
@@ -239,17 +230,10 @@ struct DirectMessageView: View {
 
     func uploadAndSendAudio(url: URL) async {
         isUploading = true
-        let fileName = UUID().uuidString + ".m4a"
-        let bucket = "chat-media"
-        let path = "audio/\(fileName)"
         do {
-            print("[AudioUpload] Starting upload to path: \(path)")
-            let data = try Data(contentsOf: url)
-            try await supabaseClient.storage
-                .from(bucket)
-                .upload(path: path, file: data)
-            let publicUrl = "https://wwqbjakkuprsyvwxlgch.supabase.co/storage/v1/object/public/\(bucket)/\(path)"
-            print("[AudioUpload] Uploaded. Public URL: \(publicUrl)")
+            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let publicUrl = try await helper.uploadAudio(url: url)
+            
             let message = [
                 "sender_id": currentUserId,
                 "receiver_id": friend.user_id,
@@ -257,9 +241,7 @@ struct DirectMessageView: View {
                 "media_url": publicUrl,
                 "media_type": "audio"
             ]
-            print("[AudioUpload] Inserting message: \(message)")
             _ = try await supabaseClient.from("DirectMessages").insert(message).execute()
-            print("[AudioUpload] Message inserted. Reloading messages.")
             await MainActor.run {
                 loadMessages()
                 if let last = messages.last?.id {
@@ -267,7 +249,6 @@ struct DirectMessageView: View {
                 }
             }
         } catch {
-            print("[AudioUpload] Error: \(error)")
             uploadError = UploadError(message: error.localizedDescription)
         }
         isUploading = false
@@ -293,83 +274,10 @@ struct DirectMessage: Codable, Identifiable {
     let id: Int64?
     let sender_id: String
     let receiver_id: String
-    let message: String?      // <-- Make this optional!
+    let message: String?
     let created_at: String?
     let read: Bool?
     let media_type: String?
     let media_url: String?
     var idValue: Int64 { id ?? Int64(abs(sender_id.hashValue ^ receiver_id.hashValue)) }
 }
-
-class AudioRecorder: NSObject, ObservableObject {
-    var recorder: AVAudioRecorder?
-    @Published var isRecording = false
-    var audioURL: URL?
-
-    func startRecording() {
-        let fileName = UUID().uuidString + ".m4a"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-        let settings = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 12000,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-        do {
-            print("[AudioRecorder] Starting recording to: \(url)")
-            recorder = try AVAudioRecorder(url: url, settings: settings)
-            recorder?.record()
-            isRecording = true
-            audioURL = url
-        } catch {
-            print("[AudioRecorder] Failed to start recording: \(error)")
-        }
-    }
-
-    func stopRecording() {
-        print("[AudioRecorder] Stopping recording.")
-        recorder?.stop()
-        isRecording = false
-    }
-}
-
-struct AudioPlayerView: View {
-    let audioURL: URL
-    @State private var player: AVPlayer? = nil
-    @State private var isPlaying = false
-
-    var body: some View {
-        HStack {
-            Button(action: {
-                if isPlaying {
-                    print("[AudioPlayer] Pausing audio")
-                    player?.pause()
-                } else {
-                    if player == nil {
-                        print("[AudioPlayer] Creating AVPlayer for URL: \(audioURL)")
-                        player = AVPlayer(url: audioURL)
-                    }
-                    do {
-                        print("[AudioPlayer] Setting AVAudioSession to playback")
-                        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-                        try AVAudioSession.sharedInstance().setActive(true)
-                    } catch {
-                        print("[AudioPlayer] Failed to set AVAudioSession: \(error)")
-                    }
-                    print("[AudioPlayer] Playing audio")
-                    player?.play()
-                }
-                isPlaying.toggle()
-            }) {
-                Image(systemName: isPlaying ? "pause.circle" : "play.circle")
-                    .font(.title)
-            }
-            Text(isPlaying ? "Playing..." : "Play Audio")
-        }
-    }
-}
-
-struct UploadError: Identifiable {
-    let id = UUID()
-    let message: String
-} 
