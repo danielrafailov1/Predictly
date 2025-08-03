@@ -1,5 +1,7 @@
 import SwiftUI
 import Supabase
+import PhotosUI
+import AVFoundation
 
 struct PartyChatView: View {
     let partyId: Int64
@@ -15,12 +17,21 @@ struct PartyChatView: View {
     @State private var username: String = ""
     @State private var userId: String? = nil
     @State private var profileImages: [String: Image?] = [:]
+    
     // Live polling
     @State private var messageTimer: Timer? = nil
+    
     // Typing indicator (local demo)
     @State private var isTyping = false
     @State private var otherUserTyping = false
     @State private var lastTypedAt: Date = Date()
+    
+    // Media support
+    @State private var selectedItem: PhotosPickerItem? = nil
+    @State private var selectedImageData: Data? = nil
+    @StateObject private var audioRecorder = AudioRecorder()
+    @State private var isUploading = false
+    @State private var uploadError: UploadError? = nil
     
     struct ChatMessage: Identifiable, Codable, Equatable {
         let id: Int64
@@ -43,6 +54,7 @@ struct PartyChatView: View {
         let msg: PartyChatView.ChatMessage
         let isSelf: Bool
         let profileImage: Image?
+        
         var body: some View {
             HStack(alignment: .bottom, spacing: 8) {
                 if !isSelf {
@@ -63,12 +75,39 @@ struct PartyChatView: View {
                             .font(.caption2)
                             .foregroundColor(.gray)
                     }
-                    Text(msg.message)
-                        .padding(10)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(16)
-                        .frame(maxWidth: 260, alignment: isSelf ? .trailing : .leading)
+                    
+                    // Handle message content
+                    if msg.message.hasPrefix("https://") && (msg.message.contains("/images/") || msg.message.contains("/audio/")) {
+                        // This is a media message
+                        if msg.message.contains("/images/") {
+                            // Image message
+                            if let url = URL(string: msg.message) {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().scaledToFit()
+                                } placeholder: {
+                                    ProgressView()
+                                }
+                                .frame(maxHeight: 200)
+                                .cornerRadius(16)
+                            }
+                        } else if msg.message.contains("/audio/") {
+                            // Audio message
+                            if let url = URL(string: msg.message) {
+                                AudioPlayerView(audioURL: url)
+                                    .padding(10)
+                                    .background(Color.blue)
+                                    .cornerRadius(16)
+                            }
+                        }
+                    } else {
+                        // Regular text message
+                        Text(msg.message)
+                            .padding(10)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(16)
+                            .frame(maxWidth: 260, alignment: isSelf ? .trailing : .leading)
+                    }
                 }
                 if isSelf {
                     (profileImage ?? Image(systemName: "person.crop.circle.fill"))
@@ -79,6 +118,7 @@ struct PartyChatView: View {
                 if !isSelf { Spacer(minLength: 40) }
             }
         }
+        
         func shortTime(_ iso: String) -> String {
             let formatter = ISO8601DateFormatter()
             if let date = formatter.date(from: iso) {
@@ -140,6 +180,7 @@ struct PartyChatView: View {
             }
             .padding()
             .background(Color.blue.opacity(0.8))
+            
             if isLoading {
                 ProgressView().padding()
             } else if let error = error {
@@ -147,6 +188,8 @@ struct PartyChatView: View {
             } else {
                 messageList
             }
+            
+            // Enhanced input area with media support
             HStack {
                 if username.isEmpty {
                     if let error = error, error.contains("username") {
@@ -158,6 +201,42 @@ struct PartyChatView: View {
                             .padding()
                     }
                 } else {
+                    // Photo picker
+                    PhotosPicker(
+                        selection: $selectedItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        Image(systemName: "photo")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                    }
+                    .onChange(of: selectedItem) { newItem in
+                        Task {
+                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                selectedImageData = data
+                                await uploadAndSendImage(data: data)
+                            }
+                        }
+                    }
+                    
+                    // Audio recorder
+                    Button(action: {
+                        if audioRecorder.isRecording {
+                            audioRecorder.stopRecording()
+                            if let url = audioRecorder.audioURL {
+                                Task { await uploadAndSendAudio(url: url) }
+                            }
+                        } else {
+                            audioRecorder.startRecording()
+                        }
+                    }) {
+                        Image(systemName: audioRecorder.isRecording ? "stop.circle.fill" : "mic")
+                            .font(.title2)
+                            .foregroundColor(audioRecorder.isRecording ? .red : .blue)
+                    }
+                    .padding(.horizontal, 4)
+                    
                     TextField("Type a message...", text: $newMessage, onEditingChanged: { editing in
                         if editing {
                             isTyping = true
@@ -172,6 +251,7 @@ struct PartyChatView: View {
                         isTyping = true
                         lastTypedAt = Date()
                     }
+                    
                     Button(action: sendMessage) {
                         Image(systemName: "paperplane.fill")
                             .foregroundColor(newMessage.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .blue)
@@ -188,6 +268,9 @@ struct PartyChatView: View {
                 startPoint: .top, endPoint: .bottom
             ).ignoresSafeArea()
         )
+        .alert(item: $uploadError) { error in
+            Alert(title: Text("Upload Error"), message: Text(error.message), dismissButton: .default(Text("OK")))
+        }
         .onAppear {
             Task { await initializeUserIdAndUsername() ; await loadMessages() }
             // Start polling for messages
@@ -312,13 +395,79 @@ struct PartyChatView: View {
                     .from("PartyChatMessages")
                     .insert(newMsg)
                     .execute()
-                newMessage = ""
+                await MainActor.run {
+                    newMessage = ""
+                }
                 await loadMessages()
             } catch {
                 print("Failed to send message: \(error)")
-                self.error = "Failed to send message: \(error.localizedDescription)"
+                await MainActor.run {
+                    self.error = "Failed to send message: \(error.localizedDescription)"
+                }
             }
         }
+    }
+    
+    func uploadAndSendImage(data: Data) async {
+        await MainActor.run { isUploading = true }
+        
+        do {
+            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let publicUrl = try await helper.uploadImage(data: data)
+            
+            guard let userId = self.userId else { return }
+            
+            let newMsg = NewChatMessage(
+                party_id: partyId,
+                user_id: userId,
+                username: username,
+                message: publicUrl,  // Store URL directly in message field
+                created_at: ISO8601DateFormatter().string(from: Date())
+            )
+            
+            _ = try await supabaseClient
+                .from("PartyChatMessages")
+                .insert(newMsg)
+                .execute()
+            
+            await loadMessages()
+        } catch {
+            await MainActor.run {
+                uploadError = UploadError(message: error.localizedDescription)
+            }
+        }
+        await MainActor.run { isUploading = false }
+    }
+    
+    func uploadAndSendAudio(url: URL) async {
+        await MainActor.run { isUploading = true }
+        
+        do {
+            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let publicUrl = try await helper.uploadAudio(url: url)
+            
+            guard let userId = self.userId else { return }
+            
+            let newMsg = NewChatMessage(
+                party_id: partyId,
+                user_id: userId,
+                username: username,
+                message: publicUrl,  // Store URL directly in message field
+                created_at: ISO8601DateFormatter().string(from: Date())
+            )
+            
+            _ = try await supabaseClient
+                .from("PartyChatMessages")
+                .insert(newMsg)
+                .execute()
+            
+            await loadMessages()
+        } catch {
+            await MainActor.run {
+                uploadError = UploadError(message: error.localizedDescription)
+            }
+        }
+        await MainActor.run { isUploading = false }
     }
     
     func shortTime(_ iso: String) -> String {
@@ -356,4 +505,4 @@ struct PartyChatView: View {
         }
         return nil
     }
-} 
+}
