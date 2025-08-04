@@ -12,42 +12,45 @@ struct FriendRequestsView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                Text("Friend Requests")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .padding(.top, 16)
-                if isLoading {
-                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else if let error = errorMessage {
-                    Text(error).foregroundColor(.red)
-                } else if requests.isEmpty {
-                    Text("No pending requests.").foregroundColor(.white.opacity(0.7))
-                } else {
-                    List(requests, id: \.id) { req in
-                        HStack {
-                            Text(req.username).foregroundColor(.white)
-                            Spacer()
-                            Button("Accept") { Task { await accept(req) } }
-                                .foregroundColor(.green)
-                                .buttonStyle(PlainButtonStyle())
-                            Button("Reject") { Task { await reject(req) } }
-                                .foregroundColor(.red)
-                                .buttonStyle(PlainButtonStyle())
-                        }
-                        .listRowBackground(Color.clear)
-                    }
-                    .background(Color.clear)
-                }
-                Spacer()
-            }
-            .padding()
-            .background(
+            ZStack {
+                // Background gradient that covers entire screen
                 LinearGradient(
                     gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
                     startPoint: .top, endPoint: .bottom
-                ).ignoresSafeArea()
-            )
+                )
+                .ignoresSafeArea(.all)
+                
+                VStack(spacing: 16) {
+                    Text("Friend Requests")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.top, 16)
+                    if isLoading {
+                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else if let error = errorMessage {
+                        Text(error).foregroundColor(.red)
+                    } else if requests.isEmpty {
+                        Text("No pending requests.").foregroundColor(.white.opacity(0.7))
+                    } else {
+                        List(requests, id: \.id) { req in
+                            HStack {
+                                Text(req.username).foregroundColor(.white)
+                                Spacer()
+                                Button("Accept") { Task { await accept(req) } }
+                                    .foregroundColor(.green)
+                                    .buttonStyle(PlainButtonStyle())
+                                Button("Reject") { Task { await reject(req) } }
+                                    .foregroundColor(.red)
+                                    .buttonStyle(PlainButtonStyle())
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                        .background(Color.clear)
+                    }
+                    Spacer()
+                }
+                .padding()
+            }
             .navigationTitle("Requests")
             .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Close") { dismiss() } } }
         }
@@ -156,4 +159,4 @@ struct FriendRequestRow: Identifiable {
     let id: Int64
     let user_id: String
     let username: String
-} 
+}
