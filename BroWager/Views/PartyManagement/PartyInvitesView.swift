@@ -13,56 +13,8 @@ struct PartyInvitesView: View {
     
     var body: some View {
         NavigationView {
-            VStack {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
-                } else if let error = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundColor(.red)
-                        Text(error)
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                        Button("Retry") {
-                            Task { await loadInvites() }
-                        }
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                    }
-                } else if invites.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "envelope")
-                            .font(.system(size: 48))
-                            .foregroundColor(.white.opacity(0.5))
-                        Text("No party invites")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                } else {
-                    List {
-                        ForEach(invites) { invite in
-                            PartyInviteRow(
-                                invite: invite,
-                                partyName: partyNames[invite.partyId] ?? "Unknown Party",
-                                inviterUsername: inviterUsernames[invite.inviterUserId] ?? "Unknown User",
-                                onInviteProcessed: { inviteId in
-                                    invites.removeAll { $0.id == inviteId }
-                                }
-                            )
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
-                    }
-                    .listStyle(PlainListStyle())
-                    .scrollContentBackground(.hidden)
-                }
-            }
-            .background(
+            ZStack {
+                // Background gradient that covers entire screen
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(red: 0.1, green: 0.1, blue: 0.2),
@@ -70,8 +22,59 @@ struct PartyInvitesView: View {
                     ]),
                     startPoint: .top,
                     endPoint: .bottom
-                ).ignoresSafeArea()
-            )
+                )
+                .ignoresSafeArea(.all)
+                
+                VStack {
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+                    } else if let error = errorMessage {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 40))
+                                .foregroundColor(.red)
+                            Text(error)
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                            Button("Retry") {
+                                Task { await loadInvites() }
+                            }
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                    } else if invites.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "envelope")
+                                .font(.system(size: 48))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("No party invites")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    } else {
+                        List {
+                            ForEach(invites) { invite in
+                                PartyInviteRow(
+                                    invite: invite,
+                                    partyName: partyNames[invite.partyId] ?? "Unknown Party",
+                                    inviterUsername: inviterUsernames[invite.inviterUserId] ?? "Unknown User",
+                                    onInviteProcessed: { inviteId in
+                                        invites.removeAll { $0.id == inviteId }
+                                    }
+                                )
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                            }
+                        }
+                        .listStyle(PlainListStyle())
+                        .scrollContentBackground(.hidden)
+                    }
+                }
+            }
             .navigationTitle("Party Invites")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
