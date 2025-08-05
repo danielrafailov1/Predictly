@@ -7,7 +7,8 @@ import SwiftUI
         navPath: .constant(NavigationPath()),
         email: "preview@example.com",
         userId: UUID(),
-        selectedCategory: BetCategoryView.BetCategory.sports
+        selectedCategory: BetCategoryView.BetCategory.sports,
+        betType: "normal"
     )
 }
 
@@ -16,6 +17,7 @@ struct NormalBetView: View {
     let email: String
     let userId: UUID?
     let selectedCategory: BetCategoryView.BetCategory?
+    let betType: String
 
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
