@@ -240,7 +240,8 @@ struct CategoryCard: View {
         BetCategoryView(
             navPath: .constant(NavigationPath()),
             email: "preview@example.com",
-            userId: UUID()
+            userId: UUID(),
+            betType: "normal"
         )
     }
 }

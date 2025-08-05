@@ -295,97 +295,100 @@ struct NormalBetView: View {
                         }
                     }
                     
-                    // Number of Options Section
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Number of options")
-                                .foregroundColor(.white)
-                                .font(.system(size: 16, weight: .medium))
-                            
-                            Spacer()
-                            
-                            // Counter/Ticker on the right
-                            HStack(spacing: 16) {
-                                Button(action: {
-                                    if optionCount > 2 {
-                                        optionCount -= 1
-                                    }
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(optionCount > 2 ? .blue : .gray)
-                                        .font(.title2)
-                                }
-                                .disabled(optionCount <= 2)
-                                
-                                Text("\(optionCount)")
+                    if betType == "normal" {
+                        
+                        // Number of Options Section
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Number of options")
                                     .foregroundColor(.white)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .frame(minWidth: 30)
+                                    .font(.system(size: 16, weight: .medium))
                                 
-                                Button(action: {
-                                    if optionCount < 10 {
-                                        optionCount += 1
+                                Spacer()
+                                
+                                // Counter/Ticker on the right
+                                HStack(spacing: 16) {
+                                    Button(action: {
+                                        if optionCount > 2 {
+                                            optionCount -= 1
+                                        }
+                                    }) {
+                                        Image(systemName: "minus.circle.fill")
+                                            .foregroundColor(optionCount > 2 ? .blue : .gray)
+                                            .font(.title2)
                                     }
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(optionCount < 10 ? .blue : .gray)
-                                        .font(.title2)
+                                    .disabled(optionCount <= 2)
+                                    
+                                    Text("\(optionCount)")
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .frame(minWidth: 30)
+                                    
+                                    Button(action: {
+                                        if optionCount < 10 {
+                                            optionCount += 1
+                                        }
+                                    }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(optionCount < 10 ? .blue : .gray)
+                                            .font(.title2)
+                                    }
+                                    .disabled(optionCount >= 10)
                                 }
-                                .disabled(optionCount >= 10)
                             }
                         }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
-                    
-                    // Maximum Selections Section
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Max selections per user")
-                                .foregroundColor(.white)
-                                .font(.system(size: 16, weight: .medium))
-                            
-                            Spacer()
-                            
-                            // Counter/Ticker on the right
-                            HStack(spacing: 16) {
-                                Button(action: {
-                                    if max_selections > 1 {
-                                        max_selections -= 1
-                                    }
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(max_selections > 1 ? .blue : .gray)
-                                        .font(.title2)
-                                }
-                                .disabled(max_selections <= 1)
-                                
-                                Text("\(max_selections)")
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                        
+                        // Maximum Selections Section
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Max selections per user")
                                     .foregroundColor(.white)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .frame(minWidth: 30)
+                                    .font(.system(size: 16, weight: .medium))
                                 
-                                Button(action: {
-                                    if max_selections < (optionCount - 1) {
-                                        max_selections += 1
+                                Spacer()
+                                
+                                // Counter/Ticker on the right
+                                HStack(spacing: 16) {
+                                    Button(action: {
+                                        if max_selections > 1 {
+                                            max_selections -= 1
+                                        }
+                                    }) {
+                                        Image(systemName: "minus.circle.fill")
+                                            .foregroundColor(max_selections > 1 ? .blue : .gray)
+                                            .font(.title2)
                                     }
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
-                                        .font(.title2)
+                                    .disabled(max_selections <= 1)
+                                    
+                                    Text("\(max_selections)")
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .frame(minWidth: 30)
+                                    
+                                    Button(action: {
+                                        if max_selections < (optionCount - 1) {
+                                            max_selections += 1
+                                        }
+                                    }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
+                                            .font(.title2)
+                                    }
+                                    .disabled(max_selections >= (optionCount - 1))
                                 }
-                                .disabled(max_selections >= (optionCount - 1))
                             }
                         }
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
                     
                     NavigationLink(
                         destination: BetOptionsView(
@@ -687,7 +690,7 @@ struct NormalBetView: View {
             let prompt = """
             Optimize this betting question for clarity, engagement, and measurability: "\(betPrompt)"
             
-            This is a \(categoryName) category bet. Please:
+            This is a \(categoryName) category bet and a \(betType) bet type. Please:
             1. Add specific team names, player names, or event details if applicable
             2. Make the question more specific and measurable
             3. Ensure it's clear what constitutes a win/loss
