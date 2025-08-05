@@ -28,6 +28,10 @@ struct NormalBetView: View {
     @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
     @State private var isOptimizingQuestion = false
+    @State private var timerDays = 0
+    @State private var timerHours = 0
+    @State private var timerMinutes = 0
+    @State private var timerSeconds = 0
     
     // Refresh cooldown states - using AppStorage for persistence
     @AppStorage("aiRefreshCount") private var refreshCount = 0
@@ -70,6 +74,163 @@ struct NormalBetView: View {
     // Validation computed property
     private var canProceed: Bool {
         !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    @ViewBuilder
+    private var betTypeSpecificView: some View {
+        if betType == "normal" {
+            normalBetOptions
+        } else if betType == "timed" {
+            timedBetOptions
+        }
+    }
+    
+    private var navigationSection: some View {
+        Group {
+            NavigationLink(
+                destination: BetOptionsView(
+                    navPath: $navPath,
+                    betPrompt: betPrompt,
+                    selectedDate: isDateEnabled ? selectedDate : nil,
+                    email: email,
+                    userId: userId,
+                    optionCount: optionCount,
+                    max_selections: max_selections,
+                    selectedCategory: selectedCategory
+                ),
+                isActive: $isNextActive
+            ) {
+                EmptyView()
+            }
+            
+            Button(action: {
+                if canProceed {
+                    isNextActive = true
+                }
+            }) {
+                Text("Next")
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(canProceed ? Color.green : Color.gray)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+            }
+            .disabled(!canProceed)
+            
+            if !canProceed {
+                Text("Please enter a bet question to continue")
+                    .foregroundColor(.red)
+                    .font(.caption)
+                    .padding(.horizontal)
+            }
+        }
+    }
+
+    private var normalBetOptions: some View {
+        Group {
+            // Number of Options Section
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Number of options")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Spacer()
+                    
+                    // Counter/Ticker on the right
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            if optionCount > 2 {
+                                optionCount -= 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(optionCount > 2 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(optionCount <= 2)
+                        
+                        Text("\(optionCount)")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(minWidth: 30)
+                        
+                        Button(action: {
+                            if optionCount < 10 {
+                                optionCount += 1
+                            }
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(optionCount < 10 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(optionCount >= 10)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+            
+            // Maximum Selections Section
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Max selections per user")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Spacer()
+                    
+                    // Counter/Ticker on the right
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            if max_selections > 1 {
+                                max_selections -= 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(max_selections > 1 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(max_selections <= 1)
+                        
+                        Text("\(max_selections)")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(minWidth: 30)
+                        
+                        Button(action: {
+                            if max_selections < (optionCount - 1) {
+                                max_selections += 1
+                            }
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(max_selections >= (optionCount - 1))
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
+    }
+
+    private var timedBetOptions: some View {
+        HStack() {
+            TimerSetView(title: "days", range: 0...7, binding: $timerDays)
+            TimerSetView(title: "hours", range: 0...23, binding: $timerHours)
+            TimerSetView(title: "min", range: 0...59, binding: $timerMinutes)
+            TimerSetView(title: "sec", range: 0...59, binding: $timerSeconds)
+        }
+        .frame(height: 100)
     }
 
     var body: some View {
@@ -295,140 +456,9 @@ struct NormalBetView: View {
                         }
                     }
                     
-                    if betType == "normal" {
-                        
-                        // Number of Options Section
-                        VStack(spacing: 12) {
-                            HStack {
-                                Text("Number of options")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 16, weight: .medium))
-                                
-                                Spacer()
-                                
-                                // Counter/Ticker on the right
-                                HStack(spacing: 16) {
-                                    Button(action: {
-                                        if optionCount > 2 {
-                                            optionCount -= 1
-                                        }
-                                    }) {
-                                        Image(systemName: "minus.circle.fill")
-                                            .foregroundColor(optionCount > 2 ? .blue : .gray)
-                                            .font(.title2)
-                                    }
-                                    .disabled(optionCount <= 2)
-                                    
-                                    Text("\(optionCount)")
-                                        .foregroundColor(.white)
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .frame(minWidth: 30)
-                                    
-                                    Button(action: {
-                                        if optionCount < 10 {
-                                            optionCount += 1
-                                        }
-                                    }) {
-                                        Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(optionCount < 10 ? .blue : .gray)
-                                            .font(.title2)
-                                    }
-                                    .disabled(optionCount >= 10)
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                        
-                        // Maximum Selections Section
-                        VStack(spacing: 12) {
-                            HStack {
-                                Text("Max selections per user")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 16, weight: .medium))
-                                
-                                Spacer()
-                                
-                                // Counter/Ticker on the right
-                                HStack(spacing: 16) {
-                                    Button(action: {
-                                        if max_selections > 1 {
-                                            max_selections -= 1
-                                        }
-                                    }) {
-                                        Image(systemName: "minus.circle.fill")
-                                            .foregroundColor(max_selections > 1 ? .blue : .gray)
-                                            .font(.title2)
-                                    }
-                                    .disabled(max_selections <= 1)
-                                    
-                                    Text("\(max_selections)")
-                                        .foregroundColor(.white)
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .frame(minWidth: 30)
-                                    
-                                    Button(action: {
-                                        if max_selections < (optionCount - 1) {
-                                            max_selections += 1
-                                        }
-                                    }) {
-                                        Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
-                                            .font(.title2)
-                                    }
-                                    .disabled(max_selections >= (optionCount - 1))
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                    }
+                    betTypeSpecificView
                     
-                    NavigationLink(
-                        destination: BetOptionsView(
-                            navPath: $navPath,
-                            betPrompt: betPrompt,
-                            selectedDate: isDateEnabled ? selectedDate : nil, // Pass nil if date is disabled
-                            email: email,
-                            userId: userId,
-                            optionCount: optionCount,
-                            max_selections: max_selections,
-                            selectedCategory: selectedCategory
-                        ),
-                        isActive: $isNextActive
-                    ) {
-                        EmptyView()
-                    }
-                    
-                    Button(action: {
-                        if canProceed {
-                            isNextActive = true
-                        }
-                    }) {
-                        Text("Next")
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(canProceed ? Color.green : Color.gray)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .padding(.horizontal)
-                    }
-                    .disabled(!canProceed)
-
-                    
-                    // Validation message
-                    if !canProceed {
-                        Text("Please enter a bet question to continue")
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding(.horizontal)
-                    }
+                    navigationSection
                     
                     Spacer()
                 }
@@ -926,16 +956,14 @@ struct BetOptionsView: View {
 
                 HStack {
                     Text("Options (")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        +
-                        Text("\(filledOptionsCount)")
-                            .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
-                            .font(.headline)
-                        +
-                        Text(" filled / \(optionCount) required)")
-                            .foregroundColor(.white)
-                            .font(.headline)
+                        .foregroundColor(.white)
+                        .font(.headline)
+                    Text("\(filledOptionsCount)")
+                        .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
+                        .font(.headline)
+                    Text(" filled / \(optionCount) required)")
+                        .foregroundColor(.white)
+                        .font(.headline)
                         
                     Spacer()
                     Button {
