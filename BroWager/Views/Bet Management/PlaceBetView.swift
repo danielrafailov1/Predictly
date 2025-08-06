@@ -243,70 +243,86 @@ struct PlaceBetView: View {
             }
             
             // Timer Controls
-            HStack(spacing: 20) {
+            HStack(spacing: 12) {
                 if !hasTimerStarted {
                     Button(action: startTimer) {
-                        HStack {
+                        HStack(spacing: 6) {
                             Image(systemName: "play.circle.fill")
-                            Text("Start Timer")
+                            Text("Start")
                         }
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
-                        .padding()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                         .background(Color.green.opacity(0.8))
-                        .cornerRadius(12)
+                        .cornerRadius(10)
                     }
                 } else if timerRunning && !isTimerFinished {
                     Button(action: pauseTimer) {
-                        HStack {
+                        HStack(spacing: 4) {
                             Image(systemName: "pause.circle.fill")
                             Text("Pause")
                         }
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
-                        .padding()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                         .background(Color.orange.opacity(0.8))
-                        .cornerRadius(12)
+                        .cornerRadius(10)
                     }
                     
                     if allowEarlyFinish {
                         Button(action: finishEarly) {
-                            HStack {
+                            HStack(spacing: 4) {
                                 Image(systemName: "checkmark.circle.fill")
-                                Text("Finish Early")
+                                Text("Finish")
                             }
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
-                            .padding()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
                             .background(Color.blue.opacity(0.8))
-                            .cornerRadius(12)
+                            .cornerRadius(10)
                         }
                     }
-                } else if !timerRunning && hasTimerStarted && !isTimerFinished {
-                    Button(action: resumeTimer) {
-                        HStack {
-                            Image(systemName: "play.circle.fill")
-                            Text("Resume")
-                        }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.green.opacity(0.8))
-                        .cornerRadius(12)
-                    }
-                }
-                
-                if hasTimerStarted && !isTimerFinished {
+                    
                     Button(action: resetTimer) {
-                        HStack {
+                        HStack(spacing: 4) {
                             Image(systemName: "arrow.clockwise.circle.fill")
                             Text("Reset")
                         }
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
-                        .padding()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.8))
-                        .cornerRadius(12)
+                        .cornerRadius(10)
+                    }
+                } else if !timerRunning && hasTimerStarted && !isTimerFinished {
+                    Button(action: resumeTimer) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.circle.fill")
+                            Text("Resume")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.green.opacity(0.8))
+                        .cornerRadius(10)
+                    }
+                    
+                    Button(action: resetTimer) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                            Text("Reset")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color.gray.opacity(0.8))
+                        .cornerRadius(10)
                     }
                 }
             }
