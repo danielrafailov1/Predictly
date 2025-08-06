@@ -83,7 +83,6 @@ struct NormalBetView: View {
         } else if betType == "timed" {
             timedBetOptions
         }
-        
     }
     
     private var navigationSection: some View {
@@ -225,14 +224,22 @@ struct NormalBetView: View {
     }
 
     private var timedBetOptions: some View {
-        HStack() {
-            TimerSetView(title: "days", range: 0...7, binding: $timerDays)
-            TimerSetView(title: "hours", range: 0...23, binding: $timerHours)
-            TimerSetView(title: "min", range: 0...59, binding: $timerMinutes)
-            TimerSetView(title: "sec", range: 0...59, binding: $timerSeconds)
+        VStack(alignment: .leading) {
+            Text("Set Timer")
+                .font(.title2)
+                .foregroundColor(.white)
+                .padding(.leading)
+            
+            HStack {
+                TimerSetView(title: "days", range: 0...7, binding: $timerDays)
+                TimerSetView(title: "hours", range: 0...23, binding: $timerHours)
+                TimerSetView(title: "min", range: 0...59, binding: $timerMinutes)
+                TimerSetView(title: "sec", range: 0...59, binding: $timerSeconds)
+            }
+            .frame(height: 100)
         }
-        .frame(height: 100)
     }
+
 
     var body: some View {
         ZStack {
