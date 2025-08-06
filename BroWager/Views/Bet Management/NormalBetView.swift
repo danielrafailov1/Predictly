@@ -1829,20 +1829,25 @@ extension AIServices {
             
         case "timed":
             prompt = """
-            Generate \(count) fun and creative **timed** betting questions specifically about \(categoryContext).
-            These bets should challenge someone to complete an activity **within a certain amount of time**.
-            
-            Focus on bets that are:
-            - Realistic and achievable
-            - Measurable with a time constraint (e.g., “Can you do X in Y minutes?”)
-            - Fun and challenging
-            - Safe and social
-            
+            Generate \(count) fun and creative **timed** betting questions about \(categoryContext).
+            These should be challenges where the person must complete something within a limited amount of time,
+            but do **not** include any specific time durations in the question.
+
+            Let the user choose the time themselves later in the app.
+
+            Guidelines:
+            - Make it clear that the task is time-based
+            - Do **not** mention specific times like "2 minutes" or "30 seconds"
+            - Use phrases like "quickly", "as fast as you can", or "before time runs out"
+            - Keep it fun, achievable, and measurable
+            - Avoid any sensitive or unsafe suggestions
+
             Examples:
-            - Can you eat 10 hot dogs in 2 minutes?
-            - Can you solve a Rubik’s cube in under a minute?
-            
-            Return only the betting questions, one per line, no numbering.
+            - Can you finish a plate of spaghetti before time runs out?
+            - Can you build a card tower as fast as you can without it falling?
+            - Can you name 20 countries quickly without pausing?
+
+            Return only the betting questions, one per line, no numbering or extra text.
             """
             
         case "contest":
