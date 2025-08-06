@@ -950,224 +950,314 @@ struct BetOptionsView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                startPoint: .top,
-                endPoint: .bottom
-            ).ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 16) {
-                // Category and Date Display
-                HStack {
-                    if let category = selectedCategory {
-                        HStack {
-                            Image(systemName: category.icon)
-                                .foregroundColor(category.color)
-                            Text(category.rawValue)
-                                .foregroundColor(.white)
-                                .font(.headline)
-                        }
+            backgroundGradient
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    categoryAndDateSection
+                    
+                    if betType == "normal" {
+                        optionsHeaderSection
+                        optionsListSection
                     }
                     
-                    Spacer()
+                    termsHeaderSection
+                    termsEditorSection
                     
-                    // Only show date if it's set
-                    if let date = selectedDate {
-                        HStack {
-                            Image(systemName: "calendar")
-                                .foregroundColor(.blue)
-                            Text("Bet Date: \(date, style: .date)")
-                                .foregroundColor(.white.opacity(0.8))
-                                .font(.subheadline)
-                        }
-                    } else {
-                        HStack {
-                            Image(systemName: "calendar.badge.minus")
-                                .foregroundColor(.gray)
-                            Text("No specific date")
-                                .foregroundColor(.white.opacity(0.6))
-                                .font(.subheadline)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-
-                if betType == "normal" {
-                    HStack {
-                        Text("Options (")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        Text("\(filledOptionsCount)")
-                            .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
-                            .font(.headline)
-                        Text(" filled / \(optionCount) required)")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        
-                        Spacer()
-                        Button {
-                            Task {
-                                await generateOptions(betPrompt: betPrompt, date: selectedDate)
-                            }
-                        } label: {
-                            if isGeneratingOptions {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
-                                    .scaleEffect(0.8)
-                            } else {
-                                Image(systemName: "sparkles")
-                                    .foregroundColor(.yellow)
-                                    .font(.system(size: 20))
-                            }
-                        }
-                        .disabled(isGeneratingOptions)
-                    }
-                    .padding(.horizontal)
+                    Spacer(minLength: 20)
                     
-                    ScrollView {
-                        VStack(spacing: 10) {
-                            ForEach(betOptions.indices, id: \.self) { index in
-                                HStack {
-                                    Text("\(index + 1).")
-                                        .foregroundColor(.white)
-                                        .font(.system(size: 16, weight: .medium))
-                                        .frame(width: 20)
-                                    
-                                    TextField("Option \(index + 1)", text: $betOptions[index])
-                                        .padding()
-                                        .background(Color.gray.opacity(0.2))
-                                        .cornerRadius(8)
-                                        .foregroundColor(.white)
-                                }
-                                .padding(.horizontal)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 250)
+                    aiOptimizationSection
+                    navigationLinksSection
+                    actionButtonSection
+                    validationMessageSection
                 }
-
-                HStack {
-                    Text("Terms (Penalties, Prizes, Rules)")
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button {
-                        generateTerms(date: selectedDate)
-                    } label: {
-                        Image(systemName: "sparkles")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 20))
-                    }
-                }
-                .padding(.horizontal)
-
-                TextEditor(text: $betTerms)
-                    .frame(minHeight: 100)
-                    .padding(8)
-                    .background(Color.gray.opacity(0.2))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
-                    .scrollContentBackground(.hidden)
-
-                Spacer()
-                
-                // AI Optimization Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("AI Optimization")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            Task {
-                                await optimizeEverything()
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "wand.and.stars")
-                                    .foregroundColor(.purple)
-                                    .font(.system(size: 16))
-                                Text("Optimize All")
-                                    .foregroundColor(.purple)
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.purple.opacity(0.2))
-                            .cornerRadius(8)
-                        }
-                        .disabled(!canProceed || isOptimizing)
-                    }
-                    
-                    if isOptimizing {
-                        HStack {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
-                                .scaleEffect(0.8)
-                            Text("Optimizing bet, options, and terms...")
-                                .foregroundColor(.purple.opacity(0.8))
-                                .font(.caption)
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-                .padding(.horizontal)
-                
-
-                NavigationLink(
-                    destination: FinalizeBetView(
-                        navPath: $navPath,
-                        email: email,
-                        betPrompt: betPrompt,
-                        selectedDate: selectedDate, // Pass the optional date
-                        betOptions: betOptions,
-                        betTerms: betTerms,
-                        bet_type: "normal",
-                        max_selections: max_selections,
-                        userId: userId
-                    ),
-                    isActive: $isNextActive
-                ) {
-                    EmptyView()
-                }
-                
-                Button(action: {
-                    if canProceed {
-                        isNextActive = true
-                    }
-                }) {
-                    Text("View Summary")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(canProceed ? Color.blue : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                .disabled(!canProceed)
-
-                
-                // Validation message
-                if !canProceed {
-                    Text("Please fill out all options and terms to continue")
-                        .foregroundColor(.red)
-                        .font(.caption)
-                        .padding(.horizontal)
-                }
-                
+                .padding(.top)
             }
-            .padding(.top)
         }
         .onAppear {
-            // Initialize with the specified number of empty options
-            if betOptions.isEmpty {
-                betOptions = Array(repeating: "", count: optionCount)
-                // Auto-generate options when the view appears
-                Task {
-                    await generateOptions(betPrompt: betPrompt, date: selectedDate)
+            setupInitialOptions()
+        }
+    }
+
+    // MARK: - Extracted View Components
+
+    private var backgroundGradient: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color(red: 0.1, green: 0.1, blue: 0.2),
+                Color(red: 0.15, green: 0.15, blue: 0.25)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private var categoryAndDateSection: some View {
+        HStack {
+            categoryDisplay
+            Spacer()
+            dateDisplay
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var categoryDisplay: some View {
+        if let category = selectedCategory {
+            HStack {
+                Image(systemName: category.icon)
+                    .foregroundColor(category.color)
+                Text(category.rawValue)
+                    .foregroundColor(.white)
+                    .font(.headline)
+            }
+        }
+    }
+
+    private var dateDisplay: some View {
+        Group {
+            if let date = selectedDate {
+                HStack {
+                    Image(systemName: "calendar")
+                        .foregroundColor(.blue)
+                    Text("Bet Date: \(date, style: .date)")
+                        .foregroundColor(.white.opacity(0.8))
+                        .font(.subheadline)
                 }
+            } else {
+                HStack {
+                    Image(systemName: "calendar.badge.minus")
+                        .foregroundColor(.gray)
+                    Text("No specific date")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.subheadline)
+                }
+            }
+        }
+    }
+
+    private var optionsHeaderSection: some View {
+        HStack {
+            optionsCounterText
+            Spacer()
+            generateOptionsButton
+        }
+        .padding(.horizontal)
+    }
+
+    private var optionsCounterText: some View {
+        HStack(spacing: 0) {
+            Text("Options (")
+                .foregroundColor(.white)
+                .font(.headline)
+            Text("\(filledOptionsCount)")
+                .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
+                .font(.headline)
+            Text(" filled / \(optionCount) required)")
+                .foregroundColor(.white)
+                .font(.headline)
+        }
+    }
+
+    private var generateOptionsButton: some View {
+        Button {
+            Task {
+                await generateOptions(betPrompt: betPrompt, date: selectedDate)
+            }
+        } label: {
+            Group {
+                if isGeneratingOptions {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 20))
+                }
+            }
+        }
+        .disabled(isGeneratingOptions)
+    }
+
+    private var optionsListSection: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(betOptions.indices, id: \.self) { index in
+                    optionRow(at: index)
+                }
+            }
+        }
+        .frame(maxHeight: 250)
+    }
+
+    private func optionRow(at index: Int) -> some View {
+        HStack {
+            Text("\(index + 1).")
+                .foregroundColor(.white)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 20)
+            
+            TextField("Option \(index + 1)", text: $betOptions[index])
+                .padding()
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(8)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal)
+    }
+
+    private var termsHeaderSection: some View {
+        HStack {
+            Text("Terms (Penalties, Prizes, Rules)")
+                .foregroundColor(.white)
+            Spacer()
+            generateTermsButton
+        }
+        .padding(.horizontal)
+    }
+
+    private var generateTermsButton: some View {
+        Button {
+            generateTerms(date: selectedDate)
+        } label: {
+            Image(systemName: "sparkles")
+                .foregroundColor(.yellow)
+                .font(.system(size: 20))
+        }
+    }
+
+    private var termsEditorSection: some View {
+        TextEditor(text: $betTerms)
+            .frame(minHeight: 100)
+            .padding(8)
+            .background(Color.gray.opacity(0.2))
+            .cornerRadius(10)
+            .foregroundColor(.white)
+            .padding(.horizontal)
+            .scrollContentBackground(.hidden)
+    }
+
+    private var aiOptimizationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            optimizationHeader
+            
+            if isOptimizing {
+                optimizationProgress
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var optimizationHeader: some View {
+        HStack {
+            Text("AI Optimization")
+                .foregroundColor(.white)
+                .font(.headline)
+            
+            Spacer()
+            
+            optimizeAllButton
+        }
+    }
+
+    private var optimizeAllButton: some View {
+        Button(action: {
+            Task {
+                await optimizeEverything()
+            }
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .foregroundColor(.purple)
+                    .font(.system(size: 16))
+                Text("Optimize All")
+                    .foregroundColor(.purple)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.purple.opacity(0.2))
+            .cornerRadius(8)
+        }
+        .disabled(!canProceed || isOptimizing)
+    }
+
+    private var optimizationProgress: some View {
+        HStack {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                .scaleEffect(0.8)
+            Text("Optimizing bet, options, and terms...")
+                .foregroundColor(.purple.opacity(0.8))
+                .font(.caption)
+        }
+        .padding(.horizontal)
+    }
+
+    private var navigationLinksSection: some View {
+        NavigationLink(
+            destination: finalizeBetDestination,
+            isActive: $isNextActive
+        ) {
+            EmptyView()
+        }
+        .hidden()
+    }
+
+    private var finalizeBetDestination: some View {
+        FinalizeBetView(
+            navPath: $navPath,
+            email: email,
+            betPrompt: betPrompt,
+            selectedDate: selectedDate,
+            betOptions: betOptions,
+            betTerms: betTerms,
+            betType: betType,
+            max_selections: max_selections,
+            userId: userId,
+            timerDays: timerDays,
+            timerHours: timerHours,
+            timerMinutes: timerMinutes,
+            timerSeconds: timerSeconds
+        )
+    }
+
+    private var actionButtonSection: some View {
+        Button(action: {
+            if canProceed {
+                isNextActive = true
+            }
+        }) {
+            Text("View Summary")
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(canProceed ? Color.blue : Color.gray)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+        }
+        .padding(.horizontal)
+        .disabled(!canProceed)
+    }
+
+    @ViewBuilder
+    private var validationMessageSection: some View {
+        if !canProceed {
+            Text("Please fill out all options and terms to continue")
+                .foregroundColor(.red)
+                .font(.caption)
+                .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Helper Functions
+
+    private func setupInitialOptions() {
+        if betOptions.isEmpty {
+            betOptions = Array(repeating: "", count: optionCount)
+            Task {
+                await generateOptions(betPrompt: betPrompt, date: selectedDate)
             }
         }
     }
@@ -1929,9 +2019,13 @@ struct FinalizeBetView: View {
     let selectedDate: Date? // Now optional
     let betOptions: [String]
     let betTerms: String
-    let bet_type: String
+    let betType: String
     let max_selections: Int
     let userId: UUID?
+    let timerDays: Int
+    let timerHours: Int
+    let timerMinutes: Int
+    let timerSeconds: Int
 
     @State private var party_name: String = ""
     @State private var privacy: String = "Open" // Set default to "Open"
@@ -2058,39 +2152,42 @@ struct FinalizeBetView: View {
                                 .cornerRadius(8)
                         }
                         
-                        // Options Summary
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Options (\(betOptions.count))", systemImage: "list.bullet")
-                                .foregroundColor(.orange)
-                                .font(.headline)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
-                                    if !option.isEmpty {
-                                        HStack {
-                                            Text("\(index + 1).")
-                                                .foregroundColor(.orange)
-                                                .font(.system(size: 14, weight: .bold))
-                                                .frame(width: 20)
-                                            Text(option)
-                                                .foregroundColor(.white)
-                                                .font(.system(size: 14))
+                        
+                        // Options Summary (only show for normal bet type)
+                        if betType == "normal" {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("Options (\(betOptions.count))", systemImage: "list.bullet")
+                                    .foregroundColor(.orange)
+                                    .font(.headline)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
+                                        if !option.isEmpty {
+                                            HStack {
+                                                Text("\(index + 1).")
+                                                    .foregroundColor(.orange)
+                                                    .font(.system(size: 14, weight: .bold))
+                                                    .frame(width: 20)
+                                                Text(option)
+                                                    .foregroundColor(.white)
+                                                    .font(.system(size: 14))
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
-                            
-                            HStack {
-                                Text("Max Selections per User:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                                Text("\(max_selections) out of \(betOptions.count)")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
+                                .padding()
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(8)
+                                
+                                HStack {
+                                    Text("Max Selections per User:")
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .font(.caption)
+                                    Text("\(max_selections) out of \(betOptions.count)")
+                                        .foregroundColor(.orange)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                }
                             }
                         }
                         
@@ -2267,7 +2364,7 @@ struct FinalizeBetView: View {
             let max_members: Int
             let bet: String
             let bet_date: String?
-            let bet_type: String
+            let betType: String
             let options: [String]
             let terms: String
             let status: String
@@ -2282,7 +2379,7 @@ struct FinalizeBetView: View {
             max_members: max_members,
             bet: betPrompt,
             bet_date: formattedDate,
-            bet_type: bet_type,
+            betType: betType,
             options: validOptions,
             terms: betTerms,
             status: "open",
