@@ -775,12 +775,32 @@ struct NormalBetView: View {
         do {
             print("Attempting to fetch category-based AI suggestions...")
             
-            let result = try await AIServices.shared.generateCategoryBetSuggestions(
-                category: selectedCategory,
-                count: 5
-            )
-            print("Raw AI Response: \(result)")
-            aiSuggestions = result
+            if betType == "normal" {
+                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: "normal"
+                )
+                print("Raw AI Response: \(result)")
+                aiSuggestions = result
+            } else if betType == "timed" {
+                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: "timed"
+                )
+                print("Raw AI Response: \(result)")
+                aiSuggestions = result
+            } else if betType == "contest" {
+                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: "contest"
+                )
+                print("Raw AI Response: \(result)")
+                aiSuggestions = result
+            }
+            
         } catch {
             print("AI decoding error: \(error.localizedDescription)")
             
@@ -1780,26 +1800,72 @@ struct BetOptionsView: View {
 // Extension to AIServices for category-based bet suggestions
 extension AIServices {
     @available(iOS 15.0, *)
-    func generateCategoryBetSuggestions(category: BetCategoryView.BetCategory?, count: Int) async throws -> [String] {
+    func generateCategoryBetSuggestions(category: BetCategoryView.BetCategory?, count: Int, betType: String) async throws -> [String] {
         let categoryContext = category?.aiPromptContext ?? "general everyday activities"
         let categoryName = category?.rawValue.lowercased() ?? "general"
+        let examples = getSamplePrompts(for: category)
         
-        let prompt = """
-        Generate \(count) fun and creative betting questions specifically about \(categoryContext).
-        These should be engaging \(categoryName) situations that friends can make bets about.
+        // Define the prompt based on bet type
+        let prompt: String
         
-        Focus exclusively on \(categoryContext) and make them:
-        - Realistic and achievable
-        - Fun for friends to bet on
-        - Measurable with clear outcomes
-        - Appropriate for social betting
-        - Timeless (not dependent on specific dates or events unless explicitly time-based)
-        
-        Examples of \(categoryName) bets should include scenarios like \(getSamplePrompts(for: category)).
-        
-        Return only the betting questions, one per line, without numbering or additional text.
-        Make them diverse and engaging for \(categoryName) enthusiasts.
-        """
+        switch betType.lowercased() {
+        case "normal":
+            prompt = """
+            Generate \(count) fun and creative betting questions specifically about \(categoryContext).
+            These should be engaging \(categoryName) situations that friends can make bets about.
+            
+            Focus exclusively on \(categoryContext) and make them:
+            - Realistic and achievable
+            - Fun for friends to bet on
+            - Measurable with clear outcomes
+            - Appropriate for social betting
+            - Timeless (not dependent on specific dates or events)
+            
+            Examples of \(categoryName) bets include:
+            \(examples)
+            
+            Return only the betting questions, one per line, without numbering or extra text.
+            """
+            
+        case "timed":
+            prompt = """
+            Generate \(count) fun and creative **timed** betting questions specifically about \(categoryContext).
+            These bets should challenge someone to complete an activity **within a certain amount of time**.
+            
+            Focus on bets that are:
+            - Realistic and achievable
+            - Measurable with a time constraint (e.g., “Can you do X in Y minutes?”)
+            - Fun and challenging
+            - Safe and social
+            
+            Examples:
+            - Can you eat 10 hot dogs in 2 minutes?
+            - Can you solve a Rubik’s cube in under a minute?
+            
+            Return only the betting questions, one per line, no numbering.
+            """
+            
+        case "contest":
+            prompt = """
+            Generate \(count) competitive **contest-style** betting questions about \(categoryContext).
+            These should be bets where multiple people compete to see **who can do something the fastest or best**.
+            
+            Focus on:
+            - Head-to-head or group competition
+            - Clear and measurable outcomes (e.g., time, quantity, quality)
+            - Fun for groups of friends
+            - Fair and achievable challenges
+            
+            Examples:
+            - Who can eat 10 hot dogs the fastest?
+            - Who can do the most push-ups in 1 minute?
+            
+            Return only the betting questions, one per line, no numbering.
+            """
+            
+        default:
+            throw NSError(domain: "AIServices", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported bet type: \(betType)"])
+        }
         
         let response = try await sendPrompt(
             prompt,
@@ -1836,6 +1902,7 @@ extension AIServices {
             return "what the weather will be like, which movie will top the box office, who will reply to texts fastest"
         }
     }
+    
 }
 
 struct FinalizeBetView: View {
