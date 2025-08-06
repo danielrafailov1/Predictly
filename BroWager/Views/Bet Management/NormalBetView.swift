@@ -83,6 +83,7 @@ struct NormalBetView: View {
         } else if betType == "timed" {
             timedBetOptions
         }
+        
     }
     
     private var navigationSection: some View {
