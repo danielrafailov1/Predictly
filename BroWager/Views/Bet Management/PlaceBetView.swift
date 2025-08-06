@@ -41,6 +41,17 @@ struct PlaceBetView: View {
     @State private var elapsedTime: Int = 0
     @State private var elapsedTimer: Timer?
     
+    private var isTimerBet: Bool {
+        let normalizedBetType = betType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        print("🔍 Checking if timer bet - original: '\(betType)', normalized: '\(normalizedBetType)'")
+        return normalizedBetType == "timed"
+    }
+
+    private var isContestBet: Bool {
+        let normalizedBetType = betType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalizedBetType == "contest"
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -90,9 +101,18 @@ struct PlaceBetView: View {
                             }
                             .padding(.top, 20)
                             
-                            // NEW: Timer/Contest Control Section
-                            if betType.lowercased() == "timer" || betType.lowercased() == "contest" {
+                            // Timer/Contest Control Section - show for timer and contest types
+                            if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
                                 timerContestControlSection
+                                    .onAppear {
+                                        print("🔍 Timer/Contest section is showing for betType: \(betType)")
+                                    }
+                            } else {
+                                Text("Debug: betType is '\(betType)' - not showing timer")
+                                    .foregroundColor(.yellow)
+                                    .onAppear {
+                                        print("🔍 Timer section NOT showing - betType: '\(betType)'")
+                                    }
                             }
                             
                             // Bet Prompt
@@ -110,11 +130,13 @@ struct PlaceBetView: View {
                             }
                             .padding(.horizontal, 24)
                             
-                            // Selection Rules (only for normal bets with options)
                             if betType.lowercased() == "normal" && !betOptions.isEmpty {
                                 selectionRulesSection
                                 termsSection
                                 optionsSelectionSection
+                            } else if betType.lowercased() == "timed" {
+                                // For timer bets, show terms but no options selection
+                                termsSection
                             }
                             
                             // Error Message
@@ -155,8 +177,13 @@ struct PlaceBetView: View {
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             
+            print("🔍 Debug PlaceBetView - betType: '\(betType)'")
+            print("🔍 Debug PlaceBetView - betType lowercased: '\(betType.lowercased())'")
+            print("🔍 Debug PlaceBetView - timerDuration: \(timerDuration)")
+            print("🔍 Debug PlaceBetView - Should show timer: \(betType.lowercased() == "timed")")
+            
             // Initialize timer/contest states
-            if betType.lowercased() == "timer" {
+            if betType.lowercased() == "timed" {
                 timeRemaining = timerDuration
             }
             
@@ -175,10 +202,19 @@ struct PlaceBetView: View {
     
     private var timerContestControlSection: some View {
         VStack(spacing: 16) {
-            if betType.lowercased() == "timer" {
+            if betType.lowercased() == "timed" {
                 timerControlSection
+                    .onAppear {
+                        print("🔍 Showing timer control section")
+                    }
             } else if betType.lowercased() == "contest" {
                 contestControlSection
+                    .onAppear {
+                        print("🔍 Showing contest control section")
+                    }
+            } else {
+                Text("Debug: Unexpected betType in timerContestControlSection: '\(betType)'")
+                    .foregroundColor(.red)
             }
         }
         .padding()
@@ -570,7 +606,7 @@ struct PlaceBetView: View {
     
     private var betTypeIcon: String {
         switch betType.lowercased() {
-        case "timer": return "timer"
+        case "timed": return "timer"
         case "contest": return "trophy.fill"
         default: return "questionmark.circle.fill"
         }
@@ -578,7 +614,7 @@ struct PlaceBetView: View {
     
     private func getSubmitButtonText() -> String {
         switch betType.lowercased() {
-        case "timer":
+        case "timed":
             if isTimerFinished {
                 return "Submit Timer Result"
             } else {
@@ -600,10 +636,10 @@ struct PlaceBetView: View {
         switch betType.lowercased() {
         case "normal":
             return !selectedOptions.isEmpty && selectedOptions.count <= maxSelections
-        case "timer":
-            return true // Can always submit timer bets
+        case "timed":
+            return true // Timer bets can always be submitted
         case "contest":
-            return true // Can always submit contest bets
+            return true // Contest bets can always be submitted
         default:
             return !selectedOptions.isEmpty && selectedOptions.count <= maxSelections
         }
@@ -949,13 +985,14 @@ struct PlaceBetView: View {
         switch betType.lowercased() {
         case "normal":
             return Array(selectedOptions).joined(separator: ", ")
-        case "timer":
+        case "timed":
             if isTimerFinished {
-                return "Completed in time"
+                let actualDuration = timerDuration - timeRemaining
+                return "Task completed in \(formatTime(actualDuration))"
             } else if hasTimerStarted {
-                return "Timer started but not completed"
+                return "Timer started - Task in progress"
             } else {
-                return "Timer not started"
+                return "Ready to start timer challenge"
             }
         case "contest":
             if contestFinished {
@@ -980,12 +1017,23 @@ struct PlaceBetView: View {
                     "Please select exactly 1 option." :
                     "Please select up to \(maxSelections) options."
             }
-        case "timer", "contest":
-            return "" // No validation needed for timer/contest
+        case "timed":
+            if !hasTimerStarted {
+                return "Start the timer to begin the challenge."
+            }
+            return "" // No validation issues for started timer
+        case "contest":
+            return "" // No validation needed for contest
         default:
             break
         }
         return ""
+    }
+    
+    // MARK: - Timer-specific validation for submission
+    private func canSubmitTimerBet() -> Bool {
+        // For timer bets, user must have at least started the timer to submit
+        return hasTimerStarted
     }
 }
 
@@ -998,7 +1046,7 @@ struct PlaceBetView: View {
         betOptions: ["Option A", "Option B", "Option C"],
         betTerms: "Complete the task within the given timeframe",
         maxSelections: 1,
-        betType: "timer",
+        betType: "timed",
         timerDuration: 300, // 5 minutes
         allowEarlyFinish: true,
         contestUnit: "points",

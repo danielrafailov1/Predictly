@@ -225,7 +225,7 @@ struct PartyDetailsView: View {
                     betOptions: partyBets,
                     betTerms: betTerms,
                     maxSelections: maxSelections,
-                    betType: betType, // NEW: Pass bet type
+                    betType: betType,
                     timerDuration: timerDuration, // NEW: Pass timer duration
                     allowEarlyFinish: allowEarlyFinish, // NEW: Pass early finish setting
                     contestUnit: contestUnit, // NEW: Pass contest unit

@@ -2429,7 +2429,8 @@ struct FinalizeBetView: View {
         
         // Calculate timer duration in seconds for timer and contest bets
         let timerDuration: Int?
-        if betType == "timer" || betType == "contest" {
+        if betType == "timed" || betType == "contest" {
+            print(timerDays, timerHours, timerMinutes, timerSeconds)
             timerDuration = (timerDays * 24 * 60 * 60) + (timerHours * 60 * 60) + (timerMinutes * 60) + timerSeconds
         } else {
             timerDuration = nil
@@ -2469,7 +2470,7 @@ struct FinalizeBetView: View {
             party_code: String(party_code),
             max_selections: betType == "normal" ? max_selections : nil,
             timer_duration: timerDuration,
-            allow_early_finish: betType == "timer" ? true : nil, // Default for timer bets
+            allow_early_finish: betType == "timed" ? true : nil, // Default for timer bets
             contest_unit: betType == "contest" ? "points" : nil, // Default for contest bets
             contest_target: betType == "contest" ? 100 : nil, // Default target for contest bets
             allow_ties: betType == "contest" ? false : nil // Default for contest bets
