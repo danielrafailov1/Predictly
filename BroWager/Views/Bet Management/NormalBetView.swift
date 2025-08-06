@@ -2425,6 +2425,7 @@ struct FinalizeBetView: View {
             formattedDate = nil
         }
         
+        
         print("🔄 Formatted date: \(formattedDate ?? "nil")") // Debug log
         
         // Calculate timer duration in seconds for timer and contest bets
