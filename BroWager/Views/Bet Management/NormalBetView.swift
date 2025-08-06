@@ -7,7 +7,8 @@ import SwiftUI
         navPath: .constant(NavigationPath()),
         email: "preview@example.com",
         userId: UUID(),
-        selectedCategory: BetCategoryView.BetCategory.sports
+        selectedCategory: BetCategoryView.BetCategory.sports,
+        betType: "normal"
     )
 }
 
@@ -16,6 +17,7 @@ struct NormalBetView: View {
     let email: String
     let userId: UUID?
     let selectedCategory: BetCategoryView.BetCategory?
+    let betType: String
 
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
@@ -26,6 +28,10 @@ struct NormalBetView: View {
     @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
     @State private var isOptimizingQuestion = false
+    @State private var timerDays = 0
+    @State private var timerHours = 0
+    @State private var timerMinutes = 0
+    @State private var timerSeconds = 0
     
     // Refresh cooldown states - using AppStorage for persistence
     @AppStorage("aiRefreshCount") private var refreshCount = 0
@@ -69,6 +75,176 @@ struct NormalBetView: View {
     private var canProceed: Bool {
         !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+    
+    @ViewBuilder
+    private var betTypeSpecificView: some View {
+        if betType == "normal" {
+            normalBetOptions
+        } else if betType == "timed" {
+            timedBetOptions
+        }
+    }
+    
+    private var navigationSection: some View {
+        Group {
+            NavigationLink(
+                destination: BetOptionsView(
+                    navPath: $navPath,
+                    betPrompt: betPrompt,
+                    selectedDate: isDateEnabled ? selectedDate : nil,
+                    email: email,
+                    userId: userId,
+                    optionCount: optionCount,
+                    max_selections: max_selections,
+                    selectedCategory: selectedCategory,
+                    betType: betType,
+                    timerDays: timerDays,
+                    timerHours: timerHours,
+                    timerMinutes: timerMinutes,
+                    timerSeconds: timerSeconds
+                ),
+                isActive: $isNextActive
+            ) {
+                EmptyView()
+            }
+            
+            Button(action: {
+                if canProceed {
+                    isNextActive = true
+                }
+            }) {
+                Text("Next")
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(canProceed ? Color.green : Color.gray)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+            }
+            .disabled(!canProceed)
+            
+            if !canProceed {
+                Text("Please enter a bet question to continue")
+                    .foregroundColor(.red)
+                    .font(.caption)
+                    .padding(.horizontal)
+            }
+        }
+    }
+
+    private var normalBetOptions: some View {
+        Group {
+            // Number of Options Section
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Number of options")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Spacer()
+                    
+                    // Counter/Ticker on the right
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            if optionCount > 2 {
+                                optionCount -= 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(optionCount > 2 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(optionCount <= 2)
+                        
+                        Text("\(optionCount)")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(minWidth: 30)
+                        
+                        Button(action: {
+                            if optionCount < 10 {
+                                optionCount += 1
+                            }
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(optionCount < 10 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(optionCount >= 10)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+            
+            // Maximum Selections Section
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Max selections per user")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Spacer()
+                    
+                    // Counter/Ticker on the right
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            if max_selections > 1 {
+                                max_selections -= 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(max_selections > 1 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(max_selections <= 1)
+                        
+                        Text("\(max_selections)")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(minWidth: 30)
+                        
+                        Button(action: {
+                            if max_selections < (optionCount - 1) {
+                                max_selections += 1
+                            }
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(max_selections >= (optionCount - 1))
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
+    }
+
+    private var timedBetOptions: some View {
+        VStack(alignment: .leading) {
+            Text("Set Timer")
+                .font(.title2)
+                .foregroundColor(.white)
+                .padding(.leading)
+            
+            HStack {
+                TimerSetView(title: "days", range: 0...7, binding: $timerDays)
+                TimerSetView(title: "hours", range: 0...23, binding: $timerHours)
+                TimerSetView(title: "min", range: 0...59, binding: $timerMinutes)
+                TimerSetView(title: "sec", range: 0...59, binding: $timerSeconds)
+            }
+            .frame(height: 100)
+        }
+    }
+
 
     var body: some View {
         ZStack {
@@ -293,137 +469,9 @@ struct NormalBetView: View {
                         }
                     }
                     
-                    // Number of Options Section
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Number of options")
-                                .foregroundColor(.white)
-                                .font(.system(size: 16, weight: .medium))
-                            
-                            Spacer()
-                            
-                            // Counter/Ticker on the right
-                            HStack(spacing: 16) {
-                                Button(action: {
-                                    if optionCount > 2 {
-                                        optionCount -= 1
-                                    }
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(optionCount > 2 ? .blue : .gray)
-                                        .font(.title2)
-                                }
-                                .disabled(optionCount <= 2)
-                                
-                                Text("\(optionCount)")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .frame(minWidth: 30)
-                                
-                                Button(action: {
-                                    if optionCount < 10 {
-                                        optionCount += 1
-                                    }
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(optionCount < 10 ? .blue : .gray)
-                                        .font(.title2)
-                                }
-                                .disabled(optionCount >= 10)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
+                    betTypeSpecificView
                     
-                    // Maximum Selections Section
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Max selections per user")
-                                .foregroundColor(.white)
-                                .font(.system(size: 16, weight: .medium))
-                            
-                            Spacer()
-                            
-                            // Counter/Ticker on the right
-                            HStack(spacing: 16) {
-                                Button(action: {
-                                    if max_selections > 1 {
-                                        max_selections -= 1
-                                    }
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(max_selections > 1 ? .blue : .gray)
-                                        .font(.title2)
-                                }
-                                .disabled(max_selections <= 1)
-                                
-                                Text("\(max_selections)")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .frame(minWidth: 30)
-                                
-                                Button(action: {
-                                    if max_selections < (optionCount - 1) {
-                                        max_selections += 1
-                                    }
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(max_selections < (optionCount - 1) ? .blue : .gray)
-                                        .font(.title2)
-                                }
-                                .disabled(max_selections >= (optionCount - 1))
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.05))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
-                    
-                    NavigationLink(
-                        destination: BetOptionsView(
-                            navPath: $navPath,
-                            betPrompt: betPrompt,
-                            selectedDate: isDateEnabled ? selectedDate : nil, // Pass nil if date is disabled
-                            email: email,
-                            userId: userId,
-                            optionCount: optionCount,
-                            max_selections: max_selections,
-                            selectedCategory: selectedCategory
-                        ),
-                        isActive: $isNextActive
-                    ) {
-                        EmptyView()
-                    }
-                    
-                    Button(action: {
-                        if canProceed {
-                            isNextActive = true
-                        }
-                    }) {
-                        Text("Next")
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(canProceed ? Color.green : Color.gray)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .padding(.horizontal)
-                    }
-                    .disabled(!canProceed)
-
-                    
-                    // Validation message
-                    if !canProceed {
-                        Text("Please enter a bet question to continue")
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding(.horizontal)
-                    }
+                    navigationSection
                     
                     Spacer()
                 }
@@ -685,7 +733,7 @@ struct NormalBetView: View {
             let prompt = """
             Optimize this betting question for clarity, engagement, and measurability: "\(betPrompt)"
             
-            This is a \(categoryName) category bet. Please:
+            This is a \(categoryName) category bet and a \(betType) bet type. Please:
             1. Add specific team names, player names, or event details if applicable
             2. Make the question more specific and measurable
             3. Ensure it's clear what constitutes a win/loss
@@ -732,12 +780,32 @@ struct NormalBetView: View {
         do {
             print("Attempting to fetch category-based AI suggestions...")
             
-            let result = try await AIServices.shared.generateCategoryBetSuggestions(
-                category: selectedCategory,
-                count: 5
-            )
-            print("Raw AI Response: \(result)")
-            aiSuggestions = result
+            if betType == "normal" {
+                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: "normal"
+                )
+                print("Raw AI Response: \(result)")
+                aiSuggestions = result
+            } else if betType == "timed" {
+                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: "timed"
+                )
+                print("Raw AI Response: \(result)")
+                aiSuggestions = result
+            } else if betType == "contest" {
+                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: "contest"
+                )
+                print("Raw AI Response: \(result)")
+                aiSuggestions = result
+            }
+            
         } catch {
             print("AI decoding error: \(error.localizedDescription)")
             
@@ -858,6 +926,11 @@ struct BetOptionsView: View {
     let optionCount: Int
     let max_selections: Int
     let selectedCategory: BetCategoryView.BetCategory?
+    let betType: String
+    let timerDays: Int
+    let timerHours: Int
+    let timerMinutes: Int
+    let timerSeconds: Int
 
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
@@ -877,224 +950,314 @@ struct BetOptionsView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                startPoint: .top,
-                endPoint: .bottom
-            ).ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 16) {
-                // Category and Date Display
-                HStack {
-                    if let category = selectedCategory {
-                        HStack {
-                            Image(systemName: category.icon)
-                                .foregroundColor(category.color)
-                            Text(category.rawValue)
-                                .foregroundColor(.white)
-                                .font(.headline)
-                        }
+            backgroundGradient
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    categoryAndDateSection
+                    
+                    if betType == "normal" {
+                        optionsHeaderSection
+                        optionsListSection
                     }
                     
-                    Spacer()
+                    termsHeaderSection
+                    termsEditorSection
                     
-                    // Only show date if it's set
-                    if let date = selectedDate {
-                        HStack {
-                            Image(systemName: "calendar")
-                                .foregroundColor(.blue)
-                            Text("Bet Date: \(date, style: .date)")
-                                .foregroundColor(.white.opacity(0.8))
-                                .font(.subheadline)
-                        }
-                    } else {
-                        HStack {
-                            Image(systemName: "calendar.badge.minus")
-                                .foregroundColor(.gray)
-                            Text("No specific date")
-                                .foregroundColor(.white.opacity(0.6))
-                                .font(.subheadline)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-
-                HStack {
-                    Text("Options (")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        +
-                        Text("\(filledOptionsCount)")
-                            .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
-                            .font(.headline)
-                        +
-                        Text(" filled / \(optionCount) required)")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        
-                    Spacer()
-                    Button {
-                        Task {
-                            await generateOptions(betPrompt: betPrompt, date: selectedDate)
-                        }
-                    } label: {
-                        if isGeneratingOptions {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "sparkles")
-                                .foregroundColor(.yellow)
-                                .font(.system(size: 20))
-                        }
-                    }
-                    .disabled(isGeneratingOptions)
-                }
-                .padding(.horizontal)
-
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(betOptions.indices, id: \.self) { index in
-                            HStack {
-                                Text("\(index + 1).")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 16, weight: .medium))
-                                    .frame(width: 20)
-                                
-                                TextField("Option \(index + 1)", text: $betOptions[index])
-                                    .padding()
-                                    .background(Color.gray.opacity(0.2))
-                                    .cornerRadius(8)
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                }
-                .frame(maxHeight: 250)
-
-                HStack {
-                    Text("Terms (Penalties, Prizes, Rules)")
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button {
-                        generateTerms(date: selectedDate)
-                    } label: {
-                        Image(systemName: "sparkles")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 20))
-                    }
-                }
-                .padding(.horizontal)
-
-                TextEditor(text: $betTerms)
-                    .frame(minHeight: 100)
-                    .padding(8)
-                    .background(Color.gray.opacity(0.2))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
-                    .scrollContentBackground(.hidden)
-
-                Spacer()
-                
-                // AI Optimization Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("AI Optimization")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            Task {
-                                await optimizeEverything()
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "wand.and.stars")
-                                    .foregroundColor(.purple)
-                                    .font(.system(size: 16))
-                                Text("Optimize All")
-                                    .foregroundColor(.purple)
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.purple.opacity(0.2))
-                            .cornerRadius(8)
-                        }
-                        .disabled(!canProceed || isOptimizing)
-                    }
+                    Spacer(minLength: 20)
                     
-                    if isOptimizing {
-                        HStack {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
-                                .scaleEffect(0.8)
-                            Text("Optimizing bet, options, and terms...")
-                                .foregroundColor(.purple.opacity(0.8))
-                                .font(.caption)
-                        }
-                        .padding(.horizontal)
-                    }
+                    aiOptimizationSection
+                    navigationLinksSection
+                    actionButtonSection
+                    validationMessageSection
                 }
-                .padding(.horizontal)
-                
-
-                NavigationLink(
-                    destination: FinalizeBetView(
-                        navPath: $navPath,
-                        email: email,
-                        betPrompt: betPrompt,
-                        selectedDate: selectedDate, // Pass the optional date
-                        betOptions: betOptions,
-                        betTerms: betTerms,
-                        bet_type: "normal",
-                        max_selections: max_selections,
-                        userId: userId
-                    ),
-                    isActive: $isNextActive
-                ) {
-                    EmptyView()
-                }
-                
-                Button(action: {
-                    if canProceed {
-                        isNextActive = true
-                    }
-                }) {
-                    Text("View Summary")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(canProceed ? Color.blue : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                .disabled(!canProceed)
-
-                
-                // Validation message
-                if !canProceed {
-                    Text("Please fill out all options and terms to continue")
-                        .foregroundColor(.red)
-                        .font(.caption)
-                        .padding(.horizontal)
-                }
-                
+                .padding(.top)
             }
-            .padding(.top)
         }
         .onAppear {
-            // Initialize with the specified number of empty options
-            if betOptions.isEmpty {
-                betOptions = Array(repeating: "", count: optionCount)
-                // Auto-generate options when the view appears
-                Task {
-                    await generateOptions(betPrompt: betPrompt, date: selectedDate)
+            setupInitialOptions()
+        }
+    }
+
+    // MARK: - Extracted View Components
+
+    private var backgroundGradient: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color(red: 0.1, green: 0.1, blue: 0.2),
+                Color(red: 0.15, green: 0.15, blue: 0.25)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private var categoryAndDateSection: some View {
+        HStack {
+            categoryDisplay
+            Spacer()
+            dateDisplay
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var categoryDisplay: some View {
+        if let category = selectedCategory {
+            HStack {
+                Image(systemName: category.icon)
+                    .foregroundColor(category.color)
+                Text(category.rawValue)
+                    .foregroundColor(.white)
+                    .font(.headline)
+            }
+        }
+    }
+
+    private var dateDisplay: some View {
+        Group {
+            if let date = selectedDate {
+                HStack {
+                    Image(systemName: "calendar")
+                        .foregroundColor(.blue)
+                    Text("Bet Date: \(date, style: .date)")
+                        .foregroundColor(.white.opacity(0.8))
+                        .font(.subheadline)
                 }
+            } else {
+                HStack {
+                    Image(systemName: "calendar.badge.minus")
+                        .foregroundColor(.gray)
+                    Text("No specific date")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.subheadline)
+                }
+            }
+        }
+    }
+
+    private var optionsHeaderSection: some View {
+        HStack {
+            optionsCounterText
+            Spacer()
+            generateOptionsButton
+        }
+        .padding(.horizontal)
+    }
+
+    private var optionsCounterText: some View {
+        HStack(spacing: 0) {
+            Text("Options (")
+                .foregroundColor(.white)
+                .font(.headline)
+            Text("\(filledOptionsCount)")
+                .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
+                .font(.headline)
+            Text(" filled / \(optionCount) required)")
+                .foregroundColor(.white)
+                .font(.headline)
+        }
+    }
+
+    private var generateOptionsButton: some View {
+        Button {
+            Task {
+                await generateOptions(betPrompt: betPrompt, date: selectedDate)
+            }
+        } label: {
+            Group {
+                if isGeneratingOptions {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 20))
+                }
+            }
+        }
+        .disabled(isGeneratingOptions)
+    }
+
+    private var optionsListSection: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(betOptions.indices, id: \.self) { index in
+                    optionRow(at: index)
+                }
+            }
+        }
+        .frame(maxHeight: 250)
+    }
+
+    private func optionRow(at index: Int) -> some View {
+        HStack {
+            Text("\(index + 1).")
+                .foregroundColor(.white)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 20)
+            
+            TextField("Option \(index + 1)", text: $betOptions[index])
+                .padding()
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(8)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal)
+    }
+
+    private var termsHeaderSection: some View {
+        HStack {
+            Text("Terms (Penalties, Prizes, Rules)")
+                .foregroundColor(.white)
+            Spacer()
+            generateTermsButton
+        }
+        .padding(.horizontal)
+    }
+
+    private var generateTermsButton: some View {
+        Button {
+            generateTerms(date: selectedDate)
+        } label: {
+            Image(systemName: "sparkles")
+                .foregroundColor(.yellow)
+                .font(.system(size: 20))
+        }
+    }
+
+    private var termsEditorSection: some View {
+        TextEditor(text: $betTerms)
+            .frame(minHeight: 100)
+            .padding(8)
+            .background(Color.gray.opacity(0.2))
+            .cornerRadius(10)
+            .foregroundColor(.white)
+            .padding(.horizontal)
+            .scrollContentBackground(.hidden)
+    }
+
+    private var aiOptimizationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            optimizationHeader
+            
+            if isOptimizing {
+                optimizationProgress
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var optimizationHeader: some View {
+        HStack {
+            Text("AI Optimization")
+                .foregroundColor(.white)
+                .font(.headline)
+            
+            Spacer()
+            
+            optimizeAllButton
+        }
+    }
+
+    private var optimizeAllButton: some View {
+        Button(action: {
+            Task {
+                await optimizeEverything()
+            }
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .foregroundColor(.purple)
+                    .font(.system(size: 16))
+                Text("Optimize All")
+                    .foregroundColor(.purple)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.purple.opacity(0.2))
+            .cornerRadius(8)
+        }
+        .disabled(!canProceed || isOptimizing)
+    }
+
+    private var optimizationProgress: some View {
+        HStack {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                .scaleEffect(0.8)
+            Text("Optimizing bet, options, and terms...")
+                .foregroundColor(.purple.opacity(0.8))
+                .font(.caption)
+        }
+        .padding(.horizontal)
+    }
+
+    private var navigationLinksSection: some View {
+        NavigationLink(
+            destination: finalizeBetDestination,
+            isActive: $isNextActive
+        ) {
+            EmptyView()
+        }
+        .hidden()
+    }
+
+    private var finalizeBetDestination: some View {
+        FinalizeBetView(
+            navPath: $navPath,
+            email: email,
+            betPrompt: betPrompt,
+            selectedDate: selectedDate,
+            betOptions: betOptions,
+            betTerms: betTerms,
+            betType: betType,
+            max_selections: max_selections,
+            userId: userId,
+            timerDays: timerDays,
+            timerHours: timerHours,
+            timerMinutes: timerMinutes,
+            timerSeconds: timerSeconds
+        )
+    }
+
+    private var actionButtonSection: some View {
+        Button(action: {
+            if canProceed {
+                isNextActive = true
+            }
+        }) {
+            Text("View Summary")
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(canProceed ? Color.blue : Color.gray)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+        }
+        .padding(.horizontal)
+        .disabled(!canProceed)
+    }
+
+    @ViewBuilder
+    private var validationMessageSection: some View {
+        if !canProceed {
+            Text("Please fill out all options and terms to continue")
+                .foregroundColor(.red)
+                .font(.caption)
+                .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Helper Functions
+
+    private func setupInitialOptions() {
+        if betOptions.isEmpty {
+            betOptions = Array(repeating: "", count: optionCount)
+            Task {
+                await generateOptions(betPrompt: betPrompt, date: selectedDate)
             }
         }
     }
@@ -1739,26 +1902,77 @@ struct BetOptionsView: View {
 // Extension to AIServices for category-based bet suggestions
 extension AIServices {
     @available(iOS 15.0, *)
-    func generateCategoryBetSuggestions(category: BetCategoryView.BetCategory?, count: Int) async throws -> [String] {
+    func generateCategoryBetSuggestions(category: BetCategoryView.BetCategory?, count: Int, betType: String) async throws -> [String] {
         let categoryContext = category?.aiPromptContext ?? "general everyday activities"
         let categoryName = category?.rawValue.lowercased() ?? "general"
+        let examples = getSamplePrompts(for: category)
         
-        let prompt = """
-        Generate \(count) fun and creative betting questions specifically about \(categoryContext).
-        These should be engaging \(categoryName) situations that friends can make bets about.
+        // Define the prompt based on bet type
+        let prompt: String
         
-        Focus exclusively on \(categoryContext) and make them:
-        - Realistic and achievable
-        - Fun for friends to bet on
-        - Measurable with clear outcomes
-        - Appropriate for social betting
-        - Timeless (not dependent on specific dates or events unless explicitly time-based)
-        
-        Examples of \(categoryName) bets should include scenarios like \(getSamplePrompts(for: category)).
-        
-        Return only the betting questions, one per line, without numbering or additional text.
-        Make them diverse and engaging for \(categoryName) enthusiasts.
-        """
+        switch betType.lowercased() {
+        case "normal":
+            prompt = """
+            Generate \(count) fun and creative betting questions specifically about \(categoryContext).
+            These should be engaging \(categoryName) situations that friends can make bets about.
+            
+            Focus exclusively on \(categoryContext) and make them:
+            - Realistic and achievable
+            - Fun for friends to bet on
+            - Measurable with clear outcomes
+            - Appropriate for social betting
+            - Timeless (not dependent on specific dates or events)
+            
+            Examples of \(categoryName) bets include:
+            \(examples)
+            
+            Return only the betting questions, one per line, without numbering or extra text.
+            """
+            
+        case "timed":
+            prompt = """
+            Generate \(count) fun and creative **timed** betting questions about \(categoryContext).
+            These should be challenges where the person must complete something within a limited amount of time,
+            but do **not** include any specific time durations in the question.
+
+            Let the user choose the time themselves later in the app.
+
+            Guidelines:
+            - Make it clear that the task is time-based
+            - Do **not** mention specific times like "2 minutes" or "30 seconds"
+            - Use phrases like "quickly", "as fast as you can", or "before time runs out"
+            - Keep it fun, achievable, and measurable
+            - Avoid any sensitive or unsafe suggestions
+
+            Examples:
+            - Can you finish a plate of spaghetti before time runs out?
+            - Can you build a card tower as fast as you can without it falling?
+            - Can you name 20 countries quickly without pausing?
+
+            Return only the betting questions, one per line, no numbering or extra text.
+            """
+            
+        case "contest":
+            prompt = """
+            Generate \(count) competitive **contest-style** betting questions about \(categoryContext).
+            These should be bets where multiple people compete to see **who can do something the fastest or best**.
+            
+            Focus on:
+            - Head-to-head or group competition
+            - Clear and measurable outcomes (e.g., time, quantity, quality)
+            - Fun for groups of friends
+            - Fair and achievable challenges
+            
+            Examples:
+            - Who can eat 10 hot dogs the fastest?
+            - Who can do the most push-ups in 1 minute?
+            
+            Return only the betting questions, one per line, no numbering.
+            """
+            
+        default:
+            throw NSError(domain: "AIServices", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported bet type: \(betType)"])
+        }
         
         let response = try await sendPrompt(
             prompt,
@@ -1795,6 +2009,7 @@ extension AIServices {
             return "what the weather will be like, which movie will top the box office, who will reply to texts fastest"
         }
     }
+    
 }
 
 struct FinalizeBetView: View {
@@ -1804,9 +2019,13 @@ struct FinalizeBetView: View {
     let selectedDate: Date? // Now optional
     let betOptions: [String]
     let betTerms: String
-    let bet_type: String
+    let betType: String
     let max_selections: Int
     let userId: UUID?
+    let timerDays: Int
+    let timerHours: Int
+    let timerMinutes: Int
+    let timerSeconds: Int
 
     @State private var party_name: String = ""
     @State private var privacy: String = "Open" // Set default to "Open"
@@ -1827,240 +2046,18 @@ struct FinalizeBetView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                startPoint: .top,
-                endPoint: .bottom
-            ).ignoresSafeArea()
-
+            backgroundGradient
+            
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    
-                    // Date Display (conditional)
-                    if let date = selectedDate {
-                        HStack {
-                            Image(systemName: "calendar.badge.clock")
-                                .foregroundColor(.blue)
-                                .font(.title2)
-                            VStack(alignment: .leading) {
-                                Text("Bet Date")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                                Text(date, style: .date)
-                                    .foregroundColor(.white)
-                                    .font(.headline)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                    } else {
-                        HStack {
-                            Image(systemName: "calendar.badge.minus")
-                                .foregroundColor(.gray)
-                                .font(.title2)
-                            VStack(alignment: .leading) {
-                                Text("Bet Timing")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                                Text("No specific date set")
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.headline)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                    }
-                    
-                    // Bet Summary Section
-                    // Enhanced Bet Summary Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Bet Summary")
-                            .foregroundColor(.white)
-                            .font(.title)
-                            .fontWeight(.bold)
-                        
-                        // Party Details
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Party Details", systemImage: "person.3.fill")
-                                .foregroundColor(.blue)
-                                .font(.headline)
-                            
-                            HStack {
-                                Text("Name:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.subheadline)
-                                Text(party_name.isEmpty ? "Not set" : party_name)
-                                    .foregroundColor(.white)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            HStack {
-                                Text("Privacy:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.subheadline)
-                                Text(privacy)
-                                    .foregroundColor(.blue)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            HStack {
-                                Text("Max Members:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.subheadline)
-                                Text("\(max_members)")
-                                    .foregroundColor(.green)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(12)
-                        
-                        // Bet Question
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Bet Question", systemImage: "questionmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.headline)
-                            
-                            Text(betPrompt)
-                                .foregroundColor(.white)
-                                .font(.system(size: 16))
-                                .padding()
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        
-                        // Options Summary
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Options (\(betOptions.count))", systemImage: "list.bullet")
-                                .foregroundColor(.orange)
-                                .font(.headline)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
-                                    if !option.isEmpty {
-                                        HStack {
-                                            Text("\(index + 1).")
-                                                .foregroundColor(.orange)
-                                                .font(.system(size: 14, weight: .bold))
-                                                .frame(width: 20)
-                                            Text(option)
-                                                .foregroundColor(.white)
-                                                .font(.system(size: 14))
-                                        }
-                                    }
-                                }
-                            }
-                            .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
-                            
-                            HStack {
-                                Text("Max Selections per User:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                                Text("\(max_selections) out of \(betOptions.count)")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        
-                        // Terms Summary
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Terms Summary", systemImage: "doc.text")
-                                .foregroundColor(.purple)
-                                .font(.headline)
-                            
-                            ScrollView {
-                                Text(betTerms.isEmpty ? "No terms set" : betTerms)
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 12))
-                                    .lineLimit(nil)
-                            }
-                            .frame(maxHeight: 100)
-                            .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    VStack(alignment: .leading) {
-                        Text("Enter party name")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                            .padding(.horizontal)
-                        HStack {
-                            TextField("Party Name", text: $party_name)
-                                .padding()
-                                .background(Color.gray.opacity(0.2))
-                                .cornerRadius(10)
-                                .foregroundColor(.white)
-                            Button(action: randomizePartyName) {
-                                Image(systemName: "die.face.5.fill")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 24))
-                            }
-                        }.padding(.horizontal)
-                    }
-
-                    VStack(alignment: .leading) {
-                        Text("Choose privacy option")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                            .padding(.horizontal)
-
-                        Picker("Privacy", selection: $privacy) {
-                            Text("Open").tag("Open")
-                            Text("Friends Only").tag("Friends Only")
-                            Text("Invite Only").tag("Invite Only")
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding(.horizontal)
-                    }
-
-                    Stepper(value: $max_members, in: 2...50) {
-                        Text("Max Members: \(max_members)").foregroundColor(.white)
-                    }.padding(.horizontal)
-
-                    // Show error message if any
-                    if !errorMessage.isEmpty {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .padding(.horizontal)
-                    }
-
-                    Button(action: submitBet) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(canProceed ? Color.green : Color.gray)
-                                .frame(height: 50)
-
-                            if isSubmitting {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            } else {
-                                Text("Create Bet Party")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .padding(.horizontal)
-                    .disabled(!canProceed || isSubmitting)
-
-                    // Validation message
-                    if !canProceed {
-                        Text("Please complete all required fields to create the bet party")
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding(.horizontal)
-                    }
+                    dateSection
+                    betSummarySection
+                    partyNameSection
+                    privacySection
+                    maxMembersSection
+                    errorSection
+                    submitButtonSection
+                    validationSection
                 }
                 .padding(.top)
             }
@@ -2069,7 +2066,295 @@ struct FinalizeBetView: View {
             PartyDetailsView(party_code: createdPartyCode, email: email)
         }
     }
+    
+    // MARK: - View Components
+    
+    private var backgroundGradient: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color(red: 0.1, green: 0.1, blue: 0.2),
+                Color(red: 0.15, green: 0.15, blue: 0.25)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+    
+    private var dateSection: some View {
+        Group {
+            if let date = selectedDate {
+                HStack {
+                    Image(systemName: "calendar.badge.clock")
+                        .foregroundColor(.blue)
+                        .font(.title2)
+                    VStack(alignment: .leading) {
+                        Text("Bet Date")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.caption)
+                        Text(date, style: .date)
+                            .foregroundColor(.white)
+                            .font(.headline)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+            } else {
+                HStack {
+                    Image(systemName: "calendar.badge.minus")
+                        .foregroundColor(.gray)
+                        .font(.title2)
+                    VStack(alignment: .leading) {
+                        Text("Bet Timing")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.caption)
+                        Text("No specific date set")
+                            .foregroundColor(.white.opacity(0.8))
+                            .font(.headline)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var betSummarySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Bet Summary")
+                .foregroundColor(.white)
+                .font(.title)
+                .fontWeight(.bold)
+            
+            partyDetailsCard
+            betQuestionCard
+            
+            // Show options only for "normal" bet type
+            if betType == "normal" {
+                optionsCard
+            }
+            
+            termsCard
+        }
+        .padding(.horizontal)
+    }
+    
+    private var partyDetailsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Party Details", systemImage: "person.3.fill")
+                .foregroundColor(.blue)
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Name:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text(party_name.isEmpty ? "Not set" : party_name)
+                        .foregroundColor(.white)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                HStack {
+                    Text("Privacy:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text(privacy)
+                        .foregroundColor(.blue)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                HStack {
+                    Text("Max Members:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text("\(max_members)")
+                        .foregroundColor(.green)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                HStack {
+                    Text("Bet Type:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text(betType.capitalized)
+                        .foregroundColor(.orange)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
+    }
+    
+    private var betQuestionCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Bet Question", systemImage: "questionmark.circle.fill")
+                .foregroundColor(.green)
+                .font(.headline)
+            
+            Text(betPrompt)
+                .foregroundColor(.white)
+                .font(.system(size: 16))
+                .padding()
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+        }
+    }
+    
+    private var optionsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Options (\(betOptions.count))", systemImage: "list.bullet")
+                .foregroundColor(.orange)
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
+                    if !option.isEmpty {
+                        HStack {
+                            Text("\(index + 1).")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 14, weight: .bold))
+                                .frame(width: 20)
+                            Text(option)
+                                .foregroundColor(.white)
+                                .font(.system(size: 14))
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+            
+            HStack {
+                Text("Max Selections per User:")
+                    .foregroundColor(.white.opacity(0.7))
+                    .font(.caption)
+                Text("\(max_selections) out of \(betOptions.count)")
+                    .foregroundColor(.orange)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+            }
+        }
+    }
+    
+    private var termsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Terms Summary", systemImage: "doc.text")
+                .foregroundColor(.purple)
+                .font(.headline)
+            
+            ScrollView {
+                Text(betTerms.isEmpty ? "No terms set" : betTerms)
+                    .foregroundColor(.white)
+                    .font(.system(size: 12))
+                    .lineLimit(nil)
+            }
+            .frame(maxHeight: 100)
+            .padding()
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+        }
+    }
+    
+    private var partyNameSection: some View {
+        VStack(alignment: .leading) {
+            Text("Enter party name")
+                .foregroundColor(.white)
+                .font(.headline)
+                .padding(.horizontal)
+            
+            HStack {
+                TextField("Party Name", text: $party_name)
+                    .padding()
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+                
+                Button(action: randomizePartyName) {
+                    Image(systemName: "die.face.5.fill")
+                        .foregroundColor(.white)
+                        .font(.system(size: 24))
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private var privacySection: some View {
+        VStack(alignment: .leading) {
+            Text("Choose privacy option")
+                .foregroundColor(.white)
+                .font(.headline)
+                .padding(.horizontal)
 
+            Picker("Privacy", selection: $privacy) {
+                Text("Open").tag("Open")
+                Text("Friends Only").tag("Friends Only")
+                Text("Invite Only").tag("Invite Only")
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+        }
+    }
+    
+    private var maxMembersSection: some View {
+        Stepper(value: $max_members, in: 2...50) {
+            Text("Max Members: \(max_members)")
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal)
+    }
+    
+    @ViewBuilder
+    private var errorSection: some View {
+        if !errorMessage.isEmpty {
+            Text(errorMessage)
+                .foregroundColor(.red)
+                .padding(.horizontal)
+        }
+    }
+    
+    private var submitButtonSection: some View {
+        Button(action: submitBet) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(canProceed ? Color.green : Color.gray)
+                    .frame(height: 50)
+
+                if isSubmitting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Text("Create Bet Party")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal)
+        .disabled(!canProceed || isSubmitting)
+    }
+    
+    @ViewBuilder
+    private var validationSection: some View {
+        if !canProceed {
+            Text("Please complete all required fields to create the bet party")
+                .foregroundColor(.red)
+                .font(.caption)
+                .padding(.horizontal)
+        }
+    }
+    
+    // MARK: - Functions
+    
     func randomizePartyName() {
         let suggestions = [
             "Bet Bros",
@@ -2111,11 +2396,18 @@ struct FinalizeBetView: View {
             return
         }
         
-        // Validate that we have valid bet options (filter out empty ones)
-        let validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard validOptions.count >= 2 else {
-            errorMessage = "At least 2 valid options are required"
-            return
+        // Handle bet type validation differently
+        let validOptions: [String]
+        if betType == "normal" {
+            // For normal bets, validate that we have valid bet options (filter out empty ones)
+            validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            guard validOptions.count >= 2 else {
+                errorMessage = "At least 2 valid options are required for normal bets"
+                return
+            }
+        } else {
+            // For other bet types (timer, contest), use empty array as options aren't needed
+            validOptions = []
         }
         
         isSubmitting = true
@@ -2123,17 +2415,27 @@ struct FinalizeBetView: View {
 
         let party_code = UUID().uuidString.prefix(6).uppercased()
 
-        // Handle optional date formatting - FIXED: Use nil instead of empty string
+        // Handle optional date formatting
         let formattedDate: String?
         if let date = selectedDate {
             let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
+            dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss" // Match database format
             formattedDate = dateFormatter.string(from: date)
         } else {
-            formattedDate = nil  // FIXED: Use nil instead of empty string
+            formattedDate = nil
         }
         
+        
         print("🔄 Formatted date: \(formattedDate ?? "nil")") // Debug log
+        
+        // Calculate timer duration in seconds for timer and contest bets
+        let timerDuration: Int?
+        if betType == "timed" || betType == "contest" {
+            print(timerDays, timerHours, timerMinutes, timerSeconds)
+            timerDuration = (timerDays * 24 * 60 * 60) + (timerHours * 60 * 60) + (timerMinutes * 60) + timerSeconds
+        } else {
+            timerDuration = nil
+        }
         
         struct Payload: Encodable {
             let created_by: String
@@ -2142,12 +2444,17 @@ struct FinalizeBetView: View {
             let max_members: Int
             let bet: String
             let bet_date: String?
-            let bet_type: String
+            let bet_type: String // Updated to match database column name
             let options: [String]
             let terms: String
             let status: String
             let party_code: String
-            let max_selections: Int
+            let max_selections: Int?
+            let timer_duration: Int?
+            let allow_early_finish: Bool?
+            let contest_unit: String?
+            let contest_target: Int?
+            let allow_ties: Bool?
         }
 
         let payload = Payload(
@@ -2157,19 +2464,27 @@ struct FinalizeBetView: View {
             max_members: max_members,
             bet: betPrompt,
             bet_date: formattedDate,
-            bet_type: bet_type,
+            bet_type: betType, // Using bet_type instead of betType
             options: validOptions,
             terms: betTerms,
             status: "open",
             party_code: String(party_code),
-            max_selections: max_selections
+            max_selections: betType == "normal" ? max_selections : nil,
+            timer_duration: timerDuration,
+            allow_early_finish: betType == "timed" ? true : nil, // Default for timer bets
+            contest_unit: betType == "contest" ? "points" : nil, // Default for contest bets
+            contest_target: betType == "contest" ? 100 : nil, // Default target for contest bets
+            allow_ties: betType == "contest" ? false : nil // Default for contest bets
         )
 
         Task {
             do {
-                print("🔄 Creating party with code: \(party_code) for date: \(formattedDate ?? "no date") with max selections: \(max_selections)")
+                print("🔄 Creating \(betType) party with code: \(party_code)")
+                print("🔄 Timer duration: \(timerDuration ?? 0) seconds")
+                print("🔄 Date: \(formattedDate ?? "no date")")
+                print("🔄 Max selections: \(betType == "normal" ? max_selections : 0)")
                 
-                // First, insert the party
+                // Insert the party
                 let response = try await supabaseClient
                     .from("Parties")
                     .insert(payload)
@@ -2183,7 +2498,7 @@ struct FinalizeBetView: View {
                 let decodedParty = try JSONDecoder().decode(Party.self, from: response.data)
                 print("✅ Successfully created party: \(decodedParty)")
                 
-                // Now add the creator as a member to the Party Members table
+                // Add the creator as a member to the Party Members table
                 if let partyId = decodedParty.id {
                     print("🔄 Adding creator as member to party ID: \(partyId)")
                     

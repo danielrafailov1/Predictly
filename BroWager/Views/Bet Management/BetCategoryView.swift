@@ -10,6 +10,7 @@ struct BetCategoryView: View {
     @Binding var navPath: NavigationPath
     let email: String
     let userId: UUID?
+    let betType: String
     
     @State private var selectedCategory: BetCategory? = nil
     @State private var isNavigating = false
@@ -150,7 +151,7 @@ struct BetCategoryView: View {
         }
         .navigationDestination(isPresented: $isNavigating) {
             if let category = selectedCategory {
-                NormalBetView(navPath: $navPath, email: email, userId: userId, selectedCategory: selectedCategory)
+                NormalBetView(navPath: $navPath, email: email, userId: userId, selectedCategory: selectedCategory, betType: betType)
             }
         }
     }
@@ -239,7 +240,8 @@ struct CategoryCard: View {
         BetCategoryView(
             navPath: .constant(NavigationPath()),
             email: "preview@example.com",
-            userId: UUID()
+            userId: UUID(),
+            betType: "normal"
         )
     }
 }

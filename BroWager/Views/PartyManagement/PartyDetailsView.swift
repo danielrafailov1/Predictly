@@ -52,6 +52,13 @@ struct PartyDetailsView: View {
     @State private var showEndGameConfirmation = false
     @State private var maxSelections: Int = 1
     
+    // NEW: Timer/Contest specific properties
+    @State private var timerDuration: Int = 0 // in seconds
+    @State private var allowEarlyFinish: Bool = false
+    @State private var contestUnit: String = ""
+    @State private var contestTarget: Int = 0
+    @State private var allowTies: Bool = false
+    
     // NEW: Timer for auto-updating
     @State private var updateTimer: Timer?
     
@@ -118,6 +125,10 @@ struct PartyDetailsView: View {
                                 hostCard
                                 partyCodeCard
                                 betTypeCard
+                                // NEW: Show timer/contest specific info
+                                if betType.lowercased() == "timer" || betType.lowercased() == "contest" {
+                                    timerContestInfoCard
+                                }
                                 buyInAndPotCard
                                 membersCard
                             }
@@ -205,7 +216,7 @@ struct PartyDetailsView: View {
             BetTypeTutorialSheet()
         }
         .navigationDestination(isPresented: $showPlaceBetView) {
-            if let partyId = partyId, let userId = currentUserId, !partyBets.isEmpty {
+            if let partyId = partyId, let userId = currentUserId {
                 PlaceBetView(
                     partyId: partyId,
                     userId: userId,
@@ -213,7 +224,13 @@ struct PartyDetailsView: View {
                     betPrompt: betPrompt,
                     betOptions: partyBets,
                     betTerms: betTerms,
-                    maxSelections: maxSelections,  // Add this parameter
+                    maxSelections: maxSelections,
+                    betType: betType,
+                    timerDuration: timerDuration, // NEW: Pass timer duration
+                    allowEarlyFinish: allowEarlyFinish, // NEW: Pass early finish setting
+                    contestUnit: contestUnit, // NEW: Pass contest unit
+                    contestTarget: contestTarget, // NEW: Pass contest target
+                    allowTies: allowTies, // NEW: Pass allow ties setting
                     isEditing: hasPlacedBet
                 )
             } else {
@@ -291,6 +308,86 @@ struct PartyDetailsView: View {
                 showInviteOthers = true
             }
             Button("Cancel", role: .cancel) { }
+        }
+    }
+    
+    // NEW: Timer/Contest Info Card
+    private var timerContestInfoCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: betType.lowercased() == "timer" ? "timer" : "trophy.fill")
+                    .foregroundColor(.white.opacity(0.7))
+                    .frame(width: 24)
+                Text("\(betType.capitalized) Details")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 8) {
+                if betType.lowercased() == "timer" {
+                    HStack {
+                        Text("Duration:")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                        Spacer()
+                        Text(formatDuration(timerDuration))
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    
+                    HStack {
+                        Text("Early Finish:")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                        Spacer()
+                        Text(allowEarlyFinish ? "Allowed" : "Not Allowed")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(allowEarlyFinish ? .green : .red)
+                    }
+                } else if betType.lowercased() == "contest" {
+                    HStack {
+                        Text("Target:")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                        Spacer()
+                        Text("\(contestTarget) \(contestUnit)")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    
+                    HStack {
+                        Text("Ties:")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                        Spacer()
+                        Text(allowTies ? "Allowed" : "Not Allowed")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(allowTies ? .green : .red)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    // NEW: Format duration helper
+    private func formatDuration(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
         }
     }
     
@@ -400,27 +497,19 @@ struct PartyDetailsView: View {
     
     private var mainActionsSection: some View {
         VStack(spacing: 16) {
-            // Normal bet flow buttons
-            if betType.lowercased() == "normal" {
-                // Make Bet / Edit Bet button - Only show when game is waiting
-                if gameStatus == "waiting" {
-                    makeBetButton
-                }
-                
-                // Host-only game control buttons
-                if isHost {
-                    hostControlButtons
-                }
-                
-                // Game Results button - Show for ALL users when game is ended
-                if gameStatus == "ended" {
-                    gameResultsButton
-                }
-            } else {
-                // Original Make a Bet button for non-normal bet types - Only show if game not ended
-                if gameStatus != "ended" {
-                    makeBetButton
-                }
+            // All bet types can make/edit bets when game is waiting
+            if gameStatus == "waiting" {
+                makeBetButton
+            }
+            
+            // Host-only game control buttons for all bet types
+            if isHost {
+                hostControlButtons
+            }
+            
+            // Game Results button - Show for ALL users when game is ended
+            if gameStatus == "ended" {
+                gameResultsButton
             }
         }
         .padding(.horizontal, 24)
@@ -567,16 +656,23 @@ struct PartyDetailsView: View {
     
     private var startGameButton: some View {
         Button(action: {
-            // NEW: Check if all players have bet before showing confirmation
+            // Check if all players have bet before showing confirmation (for normal bets only)
             Task {
-                let allPlayersBet = await checkAllPlayersBet()
-                if allPlayersBet {
-                    await MainActor.run {
-                        showStartGameConfirmation = true
+                if betType.lowercased() == "normal" {
+                    let allPlayersBet = await checkAllPlayersBet()
+                    if allPlayersBet {
+                        await MainActor.run {
+                            showStartGameConfirmation = true
+                        }
+                    } else {
+                        await MainActor.run {
+                            showBetWarning = true
+                        }
                     }
                 } else {
+                    // For timer/contest bets, just start the game
                     await MainActor.run {
-                        showBetWarning = true
+                        showStartGameConfirmation = true
                     }
                 }
             }
@@ -704,7 +800,7 @@ struct PartyDetailsView: View {
     private func betTypeDisplayName(_ type: String) -> String {
         switch type.lowercased() {
         case "normal": return "Normal Bet"
-        case "timed": return "Timed Bet"
+        case "timer": return "Timer Bet"
         case "contest": return "Contest Bet"
         default: return type.capitalized
         }
@@ -740,16 +836,14 @@ struct PartyDetailsView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(status.lowercased() == "open" ? .green : .orange)
                 }
-                if betType.lowercased() == "normal" {
-                    HStack {
-                        Text("Game Status:")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                        Spacer()
-                        Text(gameStatus.capitalized)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(gameStatusColor(gameStatus))
-                    }
+                HStack {
+                    Text("Game Status:")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    Text(gameStatus.capitalized)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(gameStatusColor(gameStatus))
                 }
             }
         }
@@ -803,7 +897,7 @@ struct PartyDetailsView: View {
                                 .foregroundColor(.white.opacity(0.9))
                             Spacer()
                             
-                            // Bet status indicator
+                            // Bet status indicator - only show for normal bets that aren't ended
                             if betType.lowercased() == "normal" && gameStatus != "ended" {
                                 HStack(spacing: 4) {
                                     Image(systemName: hasBet ? "checkmark.circle.fill" : "circle")
@@ -999,7 +1093,7 @@ struct PartyDetailsView: View {
         }
     }
 
-    // Update the fetchPartyDetails function to include game_status in the select query:
+    // Update the fetchPartyDetails function to include all timer/contest fields:
     private func fetchPartyDetails() async {
         await MainActor.run {
             isLoading = true
@@ -1046,10 +1140,10 @@ struct PartyDetailsView: View {
             await MainActor.run { self.currentUserId = userId }
             
             print("DEBUG: Fetching party details for code: \(party_code)")
-            // Updated to include max_selections in the select query
+            // UPDATED: Include all timer/contest fields in the select query
             let partyResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, created_by, party_name, bet_type, max_members, status, bet, terms, game_status, max_selections")
+                .select("id, created_by, party_name, bet_type, max_members, status, bet, terms, game_status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
                 .eq("party_code", value: party_code)
                 .execute()
             
@@ -1067,7 +1161,12 @@ struct PartyDetailsView: View {
                 let bet: String?
                 let terms: String?
                 let game_status: String?
-                let max_selections: Int?  // Added this field
+                let max_selections: Int?
+                let timer_duration: Int?  // NEW
+                let allow_early_finish: Bool?  // NEW
+                let contest_unit: String?  // NEW
+                let contest_target: Int?  // NEW
+                let allow_ties: Bool?  // NEW
             }
             
             let partyArray = try decoder.decode([PartyResult].self, from: partyResponse.data)
@@ -1102,7 +1201,14 @@ struct PartyDetailsView: View {
                 self.betPrompt = partyResult.bet ?? ""
                 self.betTerms = partyResult.terms ?? ""
                 self.gameStatus = partyResult.game_status ?? "waiting"
-                self.maxSelections = partyResult.max_selections ?? 1  // Set maxSelections with default of 1
+                self.maxSelections = partyResult.max_selections ?? 1
+                
+                // NEW: Set timer/contest specific properties
+                self.timerDuration = partyResult.timer_duration ?? 0
+                self.allowEarlyFinish = partyResult.allow_early_finish ?? false
+                self.contestUnit = partyResult.contest_unit ?? ""
+                self.contestTarget = partyResult.contest_target ?? 0
+                self.allowTies = partyResult.allow_ties ?? false
             }
             
             // Get party members from Party Members table
@@ -1209,7 +1315,6 @@ struct PartyDetailsView: View {
     }
 }
 
-// MARK: - Quick Action Button Component
 struct QuickActionButton: View {
     let icon: String
     let title: String
@@ -1233,14 +1338,6 @@ struct QuickActionButton: View {
         }
         .frame(maxWidth: .infinity)
     }
-}
-
-#Preview {
-    PartyDetailsView(party_code: "6FA0B4", email: "danielrafailov7@gmail.com")
-        .environmentObject(SessionManager(supabaseClient: SupabaseClient(
-            supabaseURL: URL(string: "https://example.supabase.co")!,
-            supabaseKey: "public-anon-key"
-        )))
 }
 
 struct BetTypeTutorialSheet: View {

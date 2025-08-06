@@ -99,12 +99,11 @@ struct BetTypeView: View {
             .navigationDestination(for: BetTypePath.self) { path in
                 switch path {
                 case .normal:
-                    BetCategoryView(navPath: $navPath, email: email, userId: userId)
-//                    NormalBetView(navPath: $navPath, email: email, userId: userId)
+                    BetCategoryView(navPath: $navPath, email: email, userId: userId, betType: "normal")
                 case .timed:
-                    TimedBetSettingView()
+                    BetCategoryView(navPath: $navPath, email: email, userId: userId, betType: "timed")
                 case .contest:
-                    ContestBetView(navPath: $navPath, email: email)
+                    BetCategoryView(navPath: $navPath, email: email, userId: userId, betType: "contest")
                 }
             }
             .navigationBarBackButtonHidden(true)

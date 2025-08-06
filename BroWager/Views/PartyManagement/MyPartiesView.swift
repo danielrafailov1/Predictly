@@ -587,6 +587,18 @@ struct MyPartiesView: View {
             let created_by: String?
             let privacy_option: String?
             let game_status: String?
+            let created_at: String?
+            let bet: String?
+            let terms: String?
+            let options: [String]?
+            let max_members: Int?
+            let status: String?
+            let max_selections: Int?
+            let timer_duration: Int?
+            let allow_early_finish: Bool?
+            let contest_unit: String?
+            let contest_target: Int?
+            let allow_ties: Bool?
         }
         
         struct UserPartyRow: Decodable {
@@ -606,10 +618,10 @@ struct MyPartiesView: View {
             
             var allOpenParties: [OpenPartyRow] = []
             
-            // Query for "Open" parties - including game_status
+            // Query for "Open" parties - including all required fields
             let openResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status")
+                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
                 .eq("privacy_option", value: "Open")
                 .neq("game_status", value: "ended") // Exclude ended games
                 .order("created_at", ascending: false)
@@ -619,10 +631,10 @@ struct MyPartiesView: View {
             let openParties = try JSONDecoder().decode([OpenPartyRow].self, from: openResponse.data)
             allOpenParties.append(contentsOf: openParties)
             
-            // Query for "Public" parties - including game_status
+            // Query for "Public" parties - including all required fields
             let publicResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status")
+                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
                 .eq("privacy_option", value: "Public")
                 .neq("game_status", value: "ended") // Exclude ended games
                 .order("created_at", ascending: false)
@@ -643,18 +655,22 @@ struct MyPartiesView: View {
                 
                 return Party(
                     id: partyId,
-                    party_name: p.party_name ?? "Unknown Party",
-                    party_code: p.party_code ?? "",
-                    created_by: p.created_by ?? "",
+                    party_code: p.party_code,
+                    created_by: p.created_by,
+                    party_name: p.party_name,
+                    privacy_option: p.privacy_option,
+                    max_members: p.max_members,
+                    bet: p.bet,
                     bet_type: p.bet_type,
-                    max_members: nil,
-                    status: nil,
-                    created_at: nil,
-                    bet: nil,
-                    terms: nil,
-                    options: nil,
-                    game_status: p.game_status,
-                    privacy_option: p.privacy_option
+                    options: p.options,
+                    terms: p.terms,
+                    status: p.status,
+                    max_selections: p.max_selections,
+                    timer_duration: p.timer_duration,
+                    allow_early_finish: p.allow_early_finish,
+                    contest_unit: p.contest_unit,
+                    contest_target: p.contest_target,
+                    allow_ties: p.allow_ties
                 )
             }
             
@@ -724,6 +740,19 @@ struct MyPartiesView: View {
             let bet_type: String?
             let party_code: String?
             let created_by: String?
+            let privacy_option: String?
+            let created_at: String?
+            let bet: String?
+            let terms: String?
+            let options: [String]?
+            let max_members: Int?
+            let status: String?
+            let max_selections: Int?
+            let timer_duration: Int?
+            let allow_early_finish: Bool?
+            let contest_unit: String?
+            let contest_target: Int?
+            let allow_ties: Bool?
         }
         struct WinRow: Decodable { let party_id: Int64 }
 
@@ -756,7 +785,7 @@ struct MyPartiesView: View {
             // Fetch only parties where user is a member, with pagination
             let partiesResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by")
+                .select("id, party_name, bet_type, party_code, created_by, privacy_option, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
                 .in("id", values: partyIdStrings)
                 .order("created_at", ascending: false)
                 .range(from: currentOffset, to: currentOffset + chunkSize - 1)
@@ -801,18 +830,22 @@ struct MyPartiesView: View {
                 
                 return Party(
                     id: partyId,
-                    party_name: p.party_name ?? "Unknown Party",
-                    party_code: p.party_code ?? "",
-                    created_by: p.created_by ?? "",
+                    party_code: p.party_code,
+                    created_by: p.created_by,
+                    party_name: p.party_name,
+                    privacy_option: p.privacy_option,
+                    max_members: p.max_members,
+                    bet: p.bet,
                     bet_type: p.bet_type,
-                    max_members: nil,
-                    status: nil,
-                    created_at: nil,
-                    bet: nil,
-                    terms: nil,
-                    options: nil,
-                    game_status: nil,
-                    privacy_option: nil
+                    options: p.options,
+                    terms: p.terms,
+                    status: p.status,
+                    max_selections: p.max_selections,
+                    timer_duration: p.timer_duration,
+                    allow_early_finish: p.allow_early_finish,
+                    contest_unit: p.contest_unit,
+                    contest_target: p.contest_target,
+                    allow_ties: p.allow_ties
                 )
             }
             
