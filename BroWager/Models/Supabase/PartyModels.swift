@@ -1,20 +1,23 @@
 import Foundation
 
-
-struct Party: Codable, Identifiable, Equatable {
+struct Party: Decodable {
     let id: Int64?
-    let party_name: String
-    let party_code: String
-    let created_by: String
-    let bet_type: String?
-    let max_members: Int64?
-    let status: String?
-    let created_at: String?
-    let bet: String?
-    let terms: String?
-    let options: [String]?
-    let game_status: String?
+    let party_code: String?
+    let created_by: String?
+    let party_name: String?
     let privacy_option: String?
+    let max_members: Int?
+    let bet: String?
+    let bet_type: String?
+    let options: [String]?
+    let terms: String?
+    let status: String?
+    let max_selections: Int?
+    let timer_duration: Int?
+    let allow_early_finish: Bool?
+    let contest_unit: String?
+    let contest_target: Int?
+    let allow_ties: Bool?
     
     static func == (lhs: Party, rhs: Party) -> Bool {
         return lhs.id == rhs.id

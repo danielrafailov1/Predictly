@@ -2046,243 +2046,18 @@ struct FinalizeBetView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                startPoint: .top,
-                endPoint: .bottom
-            ).ignoresSafeArea()
-
+            backgroundGradient
+            
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    
-                    // Date Display (conditional)
-                    if let date = selectedDate {
-                        HStack {
-                            Image(systemName: "calendar.badge.clock")
-                                .foregroundColor(.blue)
-                                .font(.title2)
-                            VStack(alignment: .leading) {
-                                Text("Bet Date")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                                Text(date, style: .date)
-                                    .foregroundColor(.white)
-                                    .font(.headline)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                    } else {
-                        HStack {
-                            Image(systemName: "calendar.badge.minus")
-                                .foregroundColor(.gray)
-                                .font(.title2)
-                            VStack(alignment: .leading) {
-                                Text("Bet Timing")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                                Text("No specific date set")
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.headline)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                    }
-                    
-                    // Bet Summary Section
-                    // Enhanced Bet Summary Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Bet Summary")
-                            .foregroundColor(.white)
-                            .font(.title)
-                            .fontWeight(.bold)
-                        
-                        // Party Details
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Party Details", systemImage: "person.3.fill")
-                                .foregroundColor(.blue)
-                                .font(.headline)
-                            
-                            HStack {
-                                Text("Name:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.subheadline)
-                                Text(party_name.isEmpty ? "Not set" : party_name)
-                                    .foregroundColor(.white)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            HStack {
-                                Text("Privacy:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.subheadline)
-                                Text(privacy)
-                                    .foregroundColor(.blue)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                            }
-                            
-                            HStack {
-                                Text("Max Members:")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.subheadline)
-                                Text("\(max_members)")
-                                    .foregroundColor(.green)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.05))
-                        .cornerRadius(12)
-                        
-                        // Bet Question
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Bet Question", systemImage: "questionmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.headline)
-                            
-                            Text(betPrompt)
-                                .foregroundColor(.white)
-                                .font(.system(size: 16))
-                                .padding()
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        
-                        
-                        // Options Summary (only show for normal bet type)
-                        if betType == "normal" {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Label("Options (\(betOptions.count))", systemImage: "list.bullet")
-                                    .foregroundColor(.orange)
-                                    .font(.headline)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
-                                        if !option.isEmpty {
-                                            HStack {
-                                                Text("\(index + 1).")
-                                                    .foregroundColor(.orange)
-                                                    .font(.system(size: 14, weight: .bold))
-                                                    .frame(width: 20)
-                                                Text(option)
-                                                    .foregroundColor(.white)
-                                                    .font(.system(size: 14))
-                                            }
-                                        }
-                                    }
-                                }
-                                .padding()
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                                
-                                HStack {
-                                    Text("Max Selections per User:")
-                                        .foregroundColor(.white.opacity(0.7))
-                                        .font(.caption)
-                                    Text("\(max_selections) out of \(betOptions.count)")
-                                        .foregroundColor(.orange)
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                        }
-                        
-                        // Terms Summary
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Terms Summary", systemImage: "doc.text")
-                                .foregroundColor(.purple)
-                                .font(.headline)
-                            
-                            ScrollView {
-                                Text(betTerms.isEmpty ? "No terms set" : betTerms)
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 12))
-                                    .lineLimit(nil)
-                            }
-                            .frame(maxHeight: 100)
-                            .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(8)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    VStack(alignment: .leading) {
-                        Text("Enter party name")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                            .padding(.horizontal)
-                        HStack {
-                            TextField("Party Name", text: $party_name)
-                                .padding()
-                                .background(Color.gray.opacity(0.2))
-                                .cornerRadius(10)
-                                .foregroundColor(.white)
-                            Button(action: randomizePartyName) {
-                                Image(systemName: "die.face.5.fill")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 24))
-                            }
-                        }.padding(.horizontal)
-                    }
-
-                    VStack(alignment: .leading) {
-                        Text("Choose privacy option")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                            .padding(.horizontal)
-
-                        Picker("Privacy", selection: $privacy) {
-                            Text("Open").tag("Open")
-                            Text("Friends Only").tag("Friends Only")
-                            Text("Invite Only").tag("Invite Only")
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding(.horizontal)
-                    }
-
-                    Stepper(value: $max_members, in: 2...50) {
-                        Text("Max Members: \(max_members)").foregroundColor(.white)
-                    }.padding(.horizontal)
-
-                    // Show error message if any
-                    if !errorMessage.isEmpty {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .padding(.horizontal)
-                    }
-
-                    Button(action: submitBet) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(canProceed ? Color.green : Color.gray)
-                                .frame(height: 50)
-
-                            if isSubmitting {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            } else {
-                                Text("Create Bet Party")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .padding(.horizontal)
-                    .disabled(!canProceed || isSubmitting)
-
-                    // Validation message
-                    if !canProceed {
-                        Text("Please complete all required fields to create the bet party")
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding(.horizontal)
-                    }
+                    dateSection
+                    betSummarySection
+                    partyNameSection
+                    privacySection
+                    maxMembersSection
+                    errorSection
+                    submitButtonSection
+                    validationSection
                 }
                 .padding(.top)
             }
@@ -2291,7 +2066,295 @@ struct FinalizeBetView: View {
             PartyDetailsView(party_code: createdPartyCode, email: email)
         }
     }
+    
+    // MARK: - View Components
+    
+    private var backgroundGradient: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color(red: 0.1, green: 0.1, blue: 0.2),
+                Color(red: 0.15, green: 0.15, blue: 0.25)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+    
+    private var dateSection: some View {
+        Group {
+            if let date = selectedDate {
+                HStack {
+                    Image(systemName: "calendar.badge.clock")
+                        .foregroundColor(.blue)
+                        .font(.title2)
+                    VStack(alignment: .leading) {
+                        Text("Bet Date")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.caption)
+                        Text(date, style: .date)
+                            .foregroundColor(.white)
+                            .font(.headline)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+            } else {
+                HStack {
+                    Image(systemName: "calendar.badge.minus")
+                        .foregroundColor(.gray)
+                        .font(.title2)
+                    VStack(alignment: .leading) {
+                        Text("Bet Timing")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.caption)
+                        Text("No specific date set")
+                            .foregroundColor(.white.opacity(0.8))
+                            .font(.headline)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var betSummarySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Bet Summary")
+                .foregroundColor(.white)
+                .font(.title)
+                .fontWeight(.bold)
+            
+            partyDetailsCard
+            betQuestionCard
+            
+            // Show options only for "normal" bet type
+            if betType == "normal" {
+                optionsCard
+            }
+            
+            termsCard
+        }
+        .padding(.horizontal)
+    }
+    
+    private var partyDetailsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Party Details", systemImage: "person.3.fill")
+                .foregroundColor(.blue)
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Name:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text(party_name.isEmpty ? "Not set" : party_name)
+                        .foregroundColor(.white)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                HStack {
+                    Text("Privacy:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text(privacy)
+                        .foregroundColor(.blue)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                HStack {
+                    Text("Max Members:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text("\(max_members)")
+                        .foregroundColor(.green)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                
+                HStack {
+                    Text("Bet Type:")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                    Text(betType.capitalized)
+                        .foregroundColor(.orange)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
+    }
+    
+    private var betQuestionCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Bet Question", systemImage: "questionmark.circle.fill")
+                .foregroundColor(.green)
+                .font(.headline)
+            
+            Text(betPrompt)
+                .foregroundColor(.white)
+                .font(.system(size: 16))
+                .padding()
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+        }
+    }
+    
+    private var optionsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Options (\(betOptions.count))", systemImage: "list.bullet")
+                .foregroundColor(.orange)
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(betOptions.enumerated()), id: \.offset) { index, option in
+                    if !option.isEmpty {
+                        HStack {
+                            Text("\(index + 1).")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 14, weight: .bold))
+                                .frame(width: 20)
+                            Text(option)
+                                .foregroundColor(.white)
+                                .font(.system(size: 14))
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+            
+            HStack {
+                Text("Max Selections per User:")
+                    .foregroundColor(.white.opacity(0.7))
+                    .font(.caption)
+                Text("\(max_selections) out of \(betOptions.count)")
+                    .foregroundColor(.orange)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+            }
+        }
+    }
+    
+    private var termsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Terms Summary", systemImage: "doc.text")
+                .foregroundColor(.purple)
+                .font(.headline)
+            
+            ScrollView {
+                Text(betTerms.isEmpty ? "No terms set" : betTerms)
+                    .foregroundColor(.white)
+                    .font(.system(size: 12))
+                    .lineLimit(nil)
+            }
+            .frame(maxHeight: 100)
+            .padding()
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+        }
+    }
+    
+    private var partyNameSection: some View {
+        VStack(alignment: .leading) {
+            Text("Enter party name")
+                .foregroundColor(.white)
+                .font(.headline)
+                .padding(.horizontal)
+            
+            HStack {
+                TextField("Party Name", text: $party_name)
+                    .padding()
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+                
+                Button(action: randomizePartyName) {
+                    Image(systemName: "die.face.5.fill")
+                        .foregroundColor(.white)
+                        .font(.system(size: 24))
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private var privacySection: some View {
+        VStack(alignment: .leading) {
+            Text("Choose privacy option")
+                .foregroundColor(.white)
+                .font(.headline)
+                .padding(.horizontal)
 
+            Picker("Privacy", selection: $privacy) {
+                Text("Open").tag("Open")
+                Text("Friends Only").tag("Friends Only")
+                Text("Invite Only").tag("Invite Only")
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+        }
+    }
+    
+    private var maxMembersSection: some View {
+        Stepper(value: $max_members, in: 2...50) {
+            Text("Max Members: \(max_members)")
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal)
+    }
+    
+    @ViewBuilder
+    private var errorSection: some View {
+        if !errorMessage.isEmpty {
+            Text(errorMessage)
+                .foregroundColor(.red)
+                .padding(.horizontal)
+        }
+    }
+    
+    private var submitButtonSection: some View {
+        Button(action: submitBet) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(canProceed ? Color.green : Color.gray)
+                    .frame(height: 50)
+
+                if isSubmitting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Text("Create Bet Party")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal)
+        .disabled(!canProceed || isSubmitting)
+    }
+    
+    @ViewBuilder
+    private var validationSection: some View {
+        if !canProceed {
+            Text("Please complete all required fields to create the bet party")
+                .foregroundColor(.red)
+                .font(.caption)
+                .padding(.horizontal)
+        }
+    }
+    
+    // MARK: - Functions
+    
     func randomizePartyName() {
         let suggestions = [
             "Bet Bros",
@@ -2333,11 +2396,18 @@ struct FinalizeBetView: View {
             return
         }
         
-        // Validate that we have valid bet options (filter out empty ones)
-        let validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard validOptions.count >= 2 else {
-            errorMessage = "At least 2 valid options are required"
-            return
+        // Handle bet type validation differently
+        let validOptions: [String]
+        if betType == "normal" {
+            // For normal bets, validate that we have valid bet options (filter out empty ones)
+            validOptions = betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            guard validOptions.count >= 2 else {
+                errorMessage = "At least 2 valid options are required for normal bets"
+                return
+            }
+        } else {
+            // For other bet types (timer, contest), use empty array as options aren't needed
+            validOptions = []
         }
         
         isSubmitting = true
@@ -2345,17 +2415,25 @@ struct FinalizeBetView: View {
 
         let party_code = UUID().uuidString.prefix(6).uppercased()
 
-        // Handle optional date formatting - FIXED: Use nil instead of empty string
+        // Handle optional date formatting
         let formattedDate: String?
         if let date = selectedDate {
             let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd" // Use ISO date format for database
+            dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss" // Match database format
             formattedDate = dateFormatter.string(from: date)
         } else {
-            formattedDate = nil  // FIXED: Use nil instead of empty string
+            formattedDate = nil
         }
         
         print("🔄 Formatted date: \(formattedDate ?? "nil")") // Debug log
+        
+        // Calculate timer duration in seconds for timer and contest bets
+        let timerDuration: Int?
+        if betType == "timer" || betType == "contest" {
+            timerDuration = (timerDays * 24 * 60 * 60) + (timerHours * 60 * 60) + (timerMinutes * 60) + timerSeconds
+        } else {
+            timerDuration = nil
+        }
         
         struct Payload: Encodable {
             let created_by: String
@@ -2364,12 +2442,17 @@ struct FinalizeBetView: View {
             let max_members: Int
             let bet: String
             let bet_date: String?
-            let betType: String
+            let bet_type: String // Updated to match database column name
             let options: [String]
             let terms: String
             let status: String
             let party_code: String
-            let max_selections: Int
+            let max_selections: Int?
+            let timer_duration: Int?
+            let allow_early_finish: Bool?
+            let contest_unit: String?
+            let contest_target: Int?
+            let allow_ties: Bool?
         }
 
         let payload = Payload(
@@ -2379,19 +2462,27 @@ struct FinalizeBetView: View {
             max_members: max_members,
             bet: betPrompt,
             bet_date: formattedDate,
-            betType: betType,
+            bet_type: betType, // Using bet_type instead of betType
             options: validOptions,
             terms: betTerms,
             status: "open",
             party_code: String(party_code),
-            max_selections: max_selections
+            max_selections: betType == "normal" ? max_selections : nil,
+            timer_duration: timerDuration,
+            allow_early_finish: betType == "timer" ? true : nil, // Default for timer bets
+            contest_unit: betType == "contest" ? "points" : nil, // Default for contest bets
+            contest_target: betType == "contest" ? 100 : nil, // Default target for contest bets
+            allow_ties: betType == "contest" ? false : nil // Default for contest bets
         )
 
         Task {
             do {
-                print("🔄 Creating party with code: \(party_code) for date: \(formattedDate ?? "no date") with max selections: \(max_selections)")
+                print("🔄 Creating \(betType) party with code: \(party_code)")
+                print("🔄 Timer duration: \(timerDuration ?? 0) seconds")
+                print("🔄 Date: \(formattedDate ?? "no date")")
+                print("🔄 Max selections: \(betType == "normal" ? max_selections : 0)")
                 
-                // First, insert the party
+                // Insert the party
                 let response = try await supabaseClient
                     .from("Parties")
                     .insert(payload)
@@ -2405,7 +2496,7 @@ struct FinalizeBetView: View {
                 let decodedParty = try JSONDecoder().decode(Party.self, from: response.data)
                 print("✅ Successfully created party: \(decodedParty)")
                 
-                // Now add the creator as a member to the Party Members table
+                // Add the creator as a member to the Party Members table
                 if let partyId = decodedParty.id {
                     print("🔄 Adding creator as member to party ID: \(partyId)")
                     
