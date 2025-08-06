@@ -96,7 +96,12 @@ struct NormalBetView: View {
                     userId: userId,
                     optionCount: optionCount,
                     max_selections: max_selections,
-                    selectedCategory: selectedCategory
+                    selectedCategory: selectedCategory,
+                    betType: betType,
+                    timerDays: timerDays,
+                    timerHours: timerHours,
+                    timerMinutes: timerMinutes,
+                    timerSeconds: timerSeconds
                 ),
                 isActive: $isNextActive
             ) {
@@ -921,6 +926,11 @@ struct BetOptionsView: View {
     let optionCount: Int
     let max_selections: Int
     let selectedCategory: BetCategoryView.BetCategory?
+    let betType: String
+    let timerDays: Int
+    let timerHours: Int
+    let timerMinutes: Int
+    let timerSeconds: Int
 
     @State private var betOptions: [String] = []
     @State private var betTerms: String = ""
@@ -982,57 +992,59 @@ struct BetOptionsView: View {
                 }
                 .padding(.horizontal)
 
-                HStack {
-                    Text("Options (")
-                        .foregroundColor(.white)
-                        .font(.headline)
-                    Text("\(filledOptionsCount)")
-                        .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
-                        .font(.headline)
-                    Text(" filled / \(optionCount) required)")
-                        .foregroundColor(.white)
-                        .font(.headline)
+                if betType == "normal" {
+                    HStack {
+                        Text("Options (")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        Text("\(filledOptionsCount)")
+                            .foregroundColor(filledOptionsCount == optionCount ? .green : .orange)
+                            .font(.headline)
+                        Text(" filled / \(optionCount) required)")
+                            .foregroundColor(.white)
+                            .font(.headline)
                         
-                    Spacer()
-                    Button {
-                        Task {
-                            await generateOptions(betPrompt: betPrompt, date: selectedDate)
-                        }
-                    } label: {
-                        if isGeneratingOptions {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "sparkles")
-                                .foregroundColor(.yellow)
-                                .font(.system(size: 20))
-                        }
-                    }
-                    .disabled(isGeneratingOptions)
-                }
-                .padding(.horizontal)
-
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(betOptions.indices, id: \.self) { index in
-                            HStack {
-                                Text("\(index + 1).")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 16, weight: .medium))
-                                    .frame(width: 20)
-                                
-                                TextField("Option \(index + 1)", text: $betOptions[index])
-                                    .padding()
-                                    .background(Color.gray.opacity(0.2))
-                                    .cornerRadius(8)
-                                    .foregroundColor(.white)
+                        Spacer()
+                        Button {
+                            Task {
+                                await generateOptions(betPrompt: betPrompt, date: selectedDate)
                             }
-                            .padding(.horizontal)
+                        } label: {
+                            if isGeneratingOptions {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "sparkles")
+                                    .foregroundColor(.yellow)
+                                    .font(.system(size: 20))
+                            }
+                        }
+                        .disabled(isGeneratingOptions)
+                    }
+                    .padding(.horizontal)
+                    
+                    ScrollView {
+                        VStack(spacing: 10) {
+                            ForEach(betOptions.indices, id: \.self) { index in
+                                HStack {
+                                    Text("\(index + 1).")
+                                        .foregroundColor(.white)
+                                        .font(.system(size: 16, weight: .medium))
+                                        .frame(width: 20)
+                                    
+                                    TextField("Option \(index + 1)", text: $betOptions[index])
+                                        .padding()
+                                        .background(Color.gray.opacity(0.2))
+                                        .cornerRadius(8)
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal)
+                            }
                         }
                     }
+                    .frame(maxHeight: 250)
                 }
-                .frame(maxHeight: 250)
 
                 HStack {
                     Text("Terms (Penalties, Prizes, Rules)")
