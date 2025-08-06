@@ -131,7 +131,8 @@ struct LoginSignupView: View {
                 created_at: timestamp,
                 email: email,
                 user_id: user.id.uuidString,
-                music_on: false
+                music_on: false,
+                wins: 0
             )
             try await supabaseClient
                 .from("Login Information")
@@ -152,70 +153,77 @@ struct LoginSignupView: View {
     }
     
     private func handleOAuthCallback(_ notification: Notification) {
-        print("DEBUG: receivedURL notification received")
-        print("onReceive: receivedURL notification")
         guard let url = notification.object as? URL else {
             print("onReceive: No URL in notification")
             return
         }
-        print("onReceive: Received OAuth callback URL: \(url)")
-        print("onReceive: sessionManager instance: \(Unmanaged.passUnretained(sessionManager).toOpaque())")
+        
         Task {
             do {
                 let session = try await supabaseClient.auth.session(from: url)
-                print("onReceive: Got session from OAuth: \(session)")
                 let user = session.user
-                print("onReceive: User: \(user)")
-                // 1. Ensure Login Information row exists
-                print("[OAuth] Checking Login Information for user_id: \(user.id.uuidString)")
+                
                 struct LoginInfoRow: Decodable { let user_id: String }
+                
                 let loginInfoResp = try await supabaseClient
                     .from("Login Information")
                     .select("user_id")
                     .eq("user_id", value: user.id.uuidString)
                     .limit(1)
                     .execute()
+                
                 let loginInfoRows = try JSONDecoder().decode([LoginInfoRow].self, from: loginInfoResp.data)
+                
                 if loginInfoRows.isEmpty {
+                    
                     let timestamp = ISO8601DateFormatter().string(from: Date())
                     let newLoginInfo = LoginInfo(
                         created_at: timestamp,
                         email: user.email ?? "",
                         user_id: user.id.uuidString,
-                        music_on: false
+                        music_on: false,
+                        wins: 0
                     )
-                    print("[OAuth] Inserting Login Information row for user_id: \(user.id.uuidString)")
+                    
                     _ = try await supabaseClient
                         .from("Login Information")
                         .insert(newLoginInfo)
                         .execute()
-                    print("[OAuth] Inserted Login Information row for user_id: \(user.id.uuidString)")
+                    
                 } else {
                     print("[OAuth] Login Information row already exists for user_id: \(user.id.uuidString)")
                 }
-                // 2. Check for username
-                print("[OAuth] Checking Username table for user_id: \(user.id.uuidString)")
+                
                 struct UsernameRow: Decodable { let username: String }
+                
                 let usernameResp = try await supabaseClient
                     .from("Username")
                     .select("username")
                     .eq("user_id", value: user.id.uuidString)
                     .limit(1)
                     .execute()
+                
                 let usernameRows = try JSONDecoder().decode([UsernameRow].self, from: usernameResp.data)
+                
                 if usernameRows.isEmpty {
-                    print("[OAuth] No username found for user_id: \(user.id.uuidString). Prompting for username.")
+                    
                     await MainActor.run {
                         self.newUserId = user.id.uuidString
                         self.newUserEmail = user.email ?? ""
                         self.isChooseUsernameActive = true
+                        
                     }
+                    
                 } else {
-                    print("[OAuth] Username exists for user_id: \(user.id.uuidString), refreshing session.")
+                    
                     await sessionManager.refreshSession()
+                    
                 }
+                
             } catch {
+                
                 print("onReceive: OAuth session error: \(error)")
+                
             }
         }
     }
@@ -343,7 +351,7 @@ struct LoginSignupView: View {
                                 .padding(.horizontal, 24)
                         }
                         
-                        Text("————————or sign in with————————")
+                        Text("        or sign in with         ")
                             .foregroundColor(.white.opacity(0.7))
                             .font(.system(size: 16, weight: .medium))
                             .background(Color.clear)
@@ -354,14 +362,18 @@ struct LoginSignupView: View {
                                 Task {
                                     isGoogleLoading = true
                                     do {
+                                        
                                         try await supabaseClient.auth.signInWithOAuth(
                                             provider: .google,
                                             redirectTo: URL(string: "browager://login-callback")
                                         )
+                                        
                                         await sessionManager.refreshSession()
+                                        
                                     } catch {
-                                        // Suppress error if user cancelled
+                                        
                                         let errorString = error.localizedDescription.lowercased()
+                                        
                                         if errorString.contains("cancel") || errorString.contains("canceled") || errorString.contains("cancelled") {
                                             showError = false
                                             errorMessage = nil
@@ -372,6 +384,7 @@ struct LoginSignupView: View {
                                     }
                                     isGoogleLoading = false
                                 }
+                                
                             }) {
                                 HStack {
                                     Image("GoogleLogo")
@@ -396,7 +409,7 @@ struct LoginSignupView: View {
                                 request.requestedScopes = [.email, .fullName]
                             } onCompletion: { result in
                                 Task {
-                                    // Clear previous errors before starting
+                                    
                                     self.appleSignInError = nil
                                     showError = false
                                     errorMessage = nil
@@ -417,7 +430,7 @@ struct LoginSignupView: View {
                                         )
                                         await sessionManager.refreshSession()
                                     } catch {
-                                        // Suppress error if user cancelled
+                                        
                                         let errorString = error.localizedDescription.lowercased()
                                         if errorString.contains("cancel") || errorString.contains("canceled") || errorString.contains("cancelled") {
                                             showError = false
