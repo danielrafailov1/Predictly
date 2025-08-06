@@ -51,6 +51,8 @@
 		4B6AE10E2E05CF5500656DF3 /* InviteFriendsToPartyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE10D2E05CF5500656DF3 /* InviteFriendsToPartyView.swift */; };
 		4B6AE1102E05CF5C00656DF3 /* InviteOthersToPartyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE10F2E05CF5C00656DF3 /* InviteOthersToPartyView.swift */; };
 		4B6AE1122E05CF6200656DF3 /* PartyInvitesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */; };
+		4B6E45AA2E43FACF00376E7E /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 4B6E45A92E43FACF00376E7E /* GoogleSignIn */; };
+		4B6E45AC2E43FACF00376E7E /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 4B6E45AB2E43FACF00376E7E /* GoogleSignInSwift */; };
 		4B786A1F2E3091A2004E5105 /* TimerSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A1E2E3091A2004E5105 /* TimerSetView.swift */; };
 		4B786A212E3091A7004E5105 /* TimedBetSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */; };
 		4B786A232E314C6D004E5105 /* ContestBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A222E314C20004E5105 /* ContestBetView.swift */; };
@@ -126,6 +128,7 @@
 		4B6AE10D2E05CF5500656DF3 /* InviteFriendsToPartyView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = InviteFriendsToPartyView.swift; sourceTree = "<group>"; };
 		4B6AE10F2E05CF5C00656DF3 /* InviteOthersToPartyView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = InviteOthersToPartyView.swift; sourceTree = "<group>"; };
 		4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartyInvitesView.swift; sourceTree = "<group>"; };
+		4B6E45AD2E43FC9500376E7E /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		4B786A1E2E3091A2004E5105 /* TimerSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSetView.swift; sourceTree = "<group>"; };
 		4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedBetSettingView.swift; sourceTree = "<group>"; };
 		4B786A222E314C20004E5105 /* ContestBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContestBetView.swift; sourceTree = "<group>"; };
@@ -166,9 +169,11 @@
 			files = (
 				4BF3C8882E07AC2D00872BEC /* Supabase in Frameworks */,
 				4BF3C8862E07AC2D00872BEC /* Storage in Frameworks */,
+				4B6E45AC2E43FACF00376E7E /* GoogleSignInSwift in Frameworks */,
 				4BF3C8842E07AC2D00872BEC /* PostgREST in Frameworks */,
 				4BF3C8822E07AC2D00872BEC /* Auth in Frameworks */,
 				4B47AAFC2DF10F8A00DFB76F /* OpenAISwift in Frameworks */,
+				4B6E45AA2E43FACF00376E7E /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -347,6 +352,7 @@
 		4BAB2E632DD66AE9004181C0 = {
 			isa = PBXGroup;
 			children = (
+				4B6E45AD2E43FC9500376E7E /* GoogleService-Info.plist */,
 				4BA56FF92E32BB61009A210A /* .gitignore */,
 				4B2D15C42DFCB8600068E5E4 /* BroWager */,
 				4BAB2E6D2DD66AE9004181C0 /* Products */,
@@ -455,6 +461,8 @@
 				4BF3C8832E07AC2D00872BEC /* PostgREST */,
 				4BF3C8852E07AC2D00872BEC /* Storage */,
 				4BF3C8872E07AC2D00872BEC /* Supabase */,
+				4B6E45A92E43FACF00376E7E /* GoogleSignIn */,
+				4B6E45AB2E43FACF00376E7E /* GoogleSignInSwift */,
 			);
 			productName = BroWager;
 			productReference = 4BAB2E6C2DD66AE9004181C0 /* BroWager.app */;
@@ -487,6 +495,7 @@
 			packageReferences = (
 				4B47AAFA2DF10F8A00DFB76F /* XCRemoteSwiftPackageReference "OpenAISwift" */,
 				4BF3C8802E07AC2D00872BEC /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				4B6E45A82E43FACF00376E7E /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			productRefGroup = 4BAB2E6D2DD66AE9004181C0 /* Products */;
 			projectDirPath = "";
@@ -718,6 +727,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BroWager/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs access to your microphone to send voice messages.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -750,6 +760,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BroWager/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs access to your microphone to send voice messages.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -801,6 +812,14 @@
 				minimumVersion = 1.4.1;
 			};
 		};
+		4B6E45A82E43FACF00376E7E /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
 		4BF3C8802E07AC2D00872BEC /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift";
@@ -816,6 +835,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4B47AAFA2DF10F8A00DFB76F /* XCRemoteSwiftPackageReference "OpenAISwift" */;
 			productName = OpenAISwift;
+		};
+		4B6E45A92E43FACF00376E7E /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B6E45A82E43FACF00376E7E /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		4B6E45AB2E43FACF00376E7E /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B6E45A82E43FACF00376E7E /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 		4BF3C8812E07AC2D00872BEC /* Auth */ = {
 			isa = XCSwiftPackageProductDependency;
