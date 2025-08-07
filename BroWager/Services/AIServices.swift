@@ -116,7 +116,48 @@ enum AIServiceError: Error, LocalizedError {
     }
 }
 
-// MARK: - AI Service Class for Gemini + Search
+// MARK: - Sports Entity Models
+private struct SportsEntities {
+    let teams: [String]
+    let players: [String]
+    let league: String?
+    let sport: String?
+}
+
+private struct SimpleSportsEntities {
+    let teams: [String]
+    let league: String?
+}
+
+// MARK: - Google Search Response Models
+struct GoogleSearchResponse: Codable {
+    struct Item: Codable {
+        let title: String
+        let snippet: String
+        let link: String
+        let displayLink: String?
+        
+        // Additional metadata that might be useful
+        struct PageMap: Codable {
+            struct MetaTags: Codable {
+                let description: String?
+                let keywords: String?
+            }
+            let metatags: [MetaTags]?
+        }
+        let pagemap: PageMap?
+    }
+    
+    struct SearchInformation: Codable {
+        let totalResults: String
+        let searchTime: Double
+    }
+    
+    let items: [Item]?
+    let searchInformation: SearchInformation?
+}
+
+// MARK: - AI Service Class for Gemini + Enhanced Sports Search
 public class AIServices {
     
     // MARK: - Properties
@@ -134,11 +175,9 @@ public class AIServices {
         config.timeoutIntervalForResource = 60.0
         self.session = URLSession(configuration: config)
         
-        // Load Gemini API key from Info.plist or environment
-        
         // Gemini API base URL and model
         self.baseURL = "https://generativelanguage.googleapis.com/v1beta/models/"
-        self.defaultModel = "gemini-2.5-flash" // or "gemini-pro"
+        self.defaultModel = "gemini-2.5-flash"
     }
     
     // MARK: - Gemini API Methods
@@ -213,7 +252,6 @@ public class AIServices {
         temperature: Double,
         maxTokens: Int
     ) async throws -> String {
-        // Add this line to get the API key
         guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
             throw AIServiceError.allKeysExhausted
         }
@@ -241,7 +279,7 @@ public class AIServices {
 
         let (data, _) = try await URLSession.shared.data(for: request)
 
-        // 🔥 Debug: Print the raw response from Gemini
+        // Debug: Print the raw response from Gemini
         if let raw = String(data: data, encoding: .utf8) {
             print("🔥 Raw Gemini Response:\n\(raw)")
         }
@@ -261,7 +299,6 @@ public class AIServices {
             throw AIServiceError.decodingError
         }
     }
-
     
     @available(iOS 15.0, *)
     func sendContents(_ contents: [GeminiContent],
@@ -293,7 +330,6 @@ public class AIServices {
                                model: String,
                                completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
-        // Add this guard to get the API key
         guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
             completion(.failure(.allKeysExhausted))
             return
@@ -428,7 +464,6 @@ public class AIServices {
         // Decode and return
         return try JSONDecoder().decode([String].self, from: jsonData)
     }
-
     
     /// Generate suggestions for bets (alternative)
     @available(iOS 15.0, *)
@@ -454,44 +489,559 @@ public class AIServices {
         return try JSONDecoder().decode([String].self, from: jsonData)
     }
     
-    // MARK: - Google Custom Search API Integration
+    // MARK: - Enhanced Google Custom Search API Integration
     
     @available(iOS 15.0, *)
-    func performGoogleCustomSearch(query: String, numResults: Int = 3) async throws -> String {
+    func performSportsOptimizedGoogleSearch(query: String, numResults: Int = 8, dateRange: String? = nil) async throws -> String {
         let apiKey = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CSE_API_KEY") as? String ?? ""
         let engineId = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CSE_ENGINE_ID") as? String ?? ""
+        
         if apiKey.isEmpty || engineId.isEmpty {
             throw AIServiceError.noAPIKey
         }
         
         var components = URLComponents(string: "https://www.googleapis.com/customsearch/v1")!
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "key", value: apiKey),
             URLQueryItem(name: "cx", value: engineId),
             URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "num", value: "\(numResults)")
+            URLQueryItem(name: "num", value: "\(numResults)"),
+            URLQueryItem(name: "safe", value: "off"), // Allow all content types
+            URLQueryItem(name: "lr", value: "lang_en"), // English results only
         ]
+        
+        // Add date range if provided
+        if let dateRange = dateRange {
+            queryItems.append(URLQueryItem(name: "dateRestrict", value: dateRange))
+        }
+        
+        // Prioritize sports websites
+        let sportsWebsites = [
+            "espn.com",
+            "cbssports.com",
+            "si.com",
+            "nfl.com",
+            "nba.com",
+            "mlb.com",
+            "nhl.com",
+            "foxsports.com",
+            "bleacherreport.com",
+            "sports.yahoo.com"
+        ]
+        
+        // Create site-specific search for better results
+        let siteQuery = sportsWebsites.map { "site:\($0)" }.joined(separator: " OR ")
+        let enhancedQuery = "\(query) (\(siteQuery))"
+        queryItems[2] = URLQueryItem(name: "q", value: enhancedQuery)
+        
+        components.queryItems = queryItems
         
         guard let url = components.url else {
             throw AIServiceError.invalidURL
         }
         
-        let (data, _) = try await URLSession.shared.data(from: url)
+        print("🔍 Enhanced sports search URL: \(url.absoluteString)")
         
-        struct GoogleSearchResponse: Codable {
-            struct Item: Codable {
-                let title: String
-                let snippet: String
-                let link: String
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            // Check for rate limiting
+            if let httpResponse = response as? HTTPURLResponse {
+                print("🔍 Search API response status: \(httpResponse.statusCode)")
+                
+                if httpResponse.statusCode == 429 {
+                    // Rate limited, wait and retry once
+                    print("⏳ Rate limited, waiting 2 seconds...")
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    let (retryData, _) = try await URLSession.shared.data(from: url)
+                    return try parseGoogleSearchResponse(retryData)
+                } else if httpResponse.statusCode != 200 {
+                    throw AIServiceError.apiError("Google Search API returned status: \(httpResponse.statusCode)")
+                }
             }
-            let items: [Item]?
+            
+            return try parseGoogleSearchResponse(data)
+            
+        } catch {
+            print("❌ Google Search API error: \(error)")
+            throw AIServiceError.networkError(error)
+        }
+    }
+    
+    // MARK: - Enhanced Search Response Parser
+    private func parseGoogleSearchResponse(_ data: Data) throws -> String {
+        let searchResult = try JSONDecoder().decode(GoogleSearchResponse.self, from: data)
+        
+        guard let items = searchResult.items, !items.isEmpty else {
+            return "No search results found."
         }
         
-        let searchResult = try JSONDecoder().decode(GoogleSearchResponse.self, from: data)
-        let items = searchResult.items ?? []
+        print("🔍 Found \(items.count) search results")
         
-        return items.map { "🔗 \($0.title): \($0.snippet) (\($0.link))" }
-                    .joined(separator: "\n\n")
+        // Sort results by relevance to sports content
+        let sortedItems = items.sorted { (item1, item2) in
+            let score1 = calculateSportsRelevanceScore(for: item1)
+            let score2 = calculateSportsRelevanceScore(for: item2)
+            return score1 > score2
+        }
+        
+        // Format results with enhanced information
+        var formattedResults: [String] = []
+        
+        for (index, item) in sortedItems.enumerated() {
+            let source = item.displayLink ?? extractDomain(from: item.link)
+            let relevanceScore = calculateSportsRelevanceScore(for: item)
+            
+            let formattedResult = """
+            
+            RESULT \(index + 1) - \(source.uppercased()) [Relevance: \(String(format: "%.1f", relevanceScore))]
+            Title: \(item.title)
+            Content: \(item.snippet)
+            URL: \(item.link)
+            """
+            
+            formattedResults.append(formattedResult)
+            
+            // If we have high-quality results, we don't need all of them
+            if formattedResults.count >= 6 && relevanceScore < 3.0 {
+                break
+            }
+        }
+        
+        let totalResults = searchResult.searchInformation?.totalResults ?? "unknown"
+        let searchTime = searchResult.searchInformation?.searchTime ?? 0
+        
+        let header = """
+        GOOGLE SEARCH RESULTS (Found \(totalResults) total results in \(searchTime)s)
+        Showing top \(formattedResults.count) most relevant results:
+        """
+        
+        return header + "\n" + formattedResults.joined(separator: "\n")
+    }
+    
+    // MARK: - Sports Relevance Scoring
+    private func calculateSportsRelevanceScore(for item: GoogleSearchResponse.Item) -> Double {
+        var score = 0.0
+        
+        let titleLower = item.title.lowercased()
+        let snippetLower = item.snippet.lowercased()
+        let linkLower = item.link.lowercased()
+        let combinedText = titleLower + " " + snippetLower
+        
+        // High-value sports websites
+        let premiumSites = [
+            "espn.com": 5.0,
+            "cbssports.com": 4.5,
+            "nfl.com": 4.5,
+            "nba.com": 4.5,
+            "mlb.com": 4.5,
+            "nhl.com": 4.5,
+            "si.com": 4.0,
+            "bleacherreport.com": 3.5,
+            "sports.yahoo.com": 3.5,
+            "foxsports.com": 3.5
+        ]
+        
+        for (site, value) in premiumSites {
+            if linkLower.contains(site) {
+                score += value
+                break
+            }
+        }
+        
+        // Game result indicators (high value)
+        let resultIndicators = [
+            "final score": 3.0,
+            "final": 2.5,
+            "recap": 2.5,
+            "box score": 3.0,
+            "game recap": 3.0,
+            "highlights": 2.0,
+            "won": 2.0,
+            "lost": 2.0,
+            "defeated": 2.0,
+            "beat": 1.5,
+            "victory": 1.5,
+            "wins": 1.5,
+            "loses": 1.5
+        ]
+        
+        for (indicator, value) in resultIndicators {
+            if combinedText.contains(indicator) {
+                score += value
+            }
+        }
+        
+        // Score patterns (very high value - indicates actual game results)
+        let scorePatterns = [
+            "\\b\\d{1,3}[-–]\\d{1,3}\\b", // "24-17", "105-98"
+            "\\b\\d{1,3}\\s*-\\s*\\d{1,3}\\b", // "24 - 17"
+            "\\b\\d{1,3}\\s+\\d{1,3}\\b" // "24 17" (less common)
+        ]
+        
+        for pattern in scorePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let matches = regex.matches(in: combinedText, options: [], range: NSRange(location: 0, length: combinedText.utf16.count))
+                if matches.count > 0 {
+                    score += 4.0 // Very high value for actual scores
+                    break
+                }
+            }
+        }
+        
+        // Time indicators (recent games are more likely to have results)
+        let timeIndicators = [
+            "today": 1.0,
+            "yesterday": 1.0,
+            "final": 1.5,
+            "ended": 1.5,
+            "completed": 1.0
+        ]
+        
+        for (indicator, value) in timeIndicators {
+            if combinedText.contains(indicator) {
+                score += value
+            }
+        }
+        
+        // Negative indicators (reduce score for irrelevant content)
+        let negativeIndicators = [
+            "preview": -2.0,
+            "prediction": -1.5,
+            "odds": -1.0,
+            "betting": -1.0,
+            "schedule": -1.0,
+            "upcoming": -1.5,
+            "will play": -2.0,
+            "expected": -1.0,
+            "projected": -1.0
+        ]
+        
+        for (indicator, penalty) in negativeIndicators {
+            if combinedText.contains(indicator) {
+                score += penalty
+            }
+        }
+        
+        return max(0, score) // Don't allow negative scores
+    }
+    
+    // MARK: - Enhanced Date-Aware Search
+    @available(iOS 15.0, *)
+    func performDateAwareSportsSearch(query: String, betDate: String, numResults: Int = 8) async throws -> String {
+        let dateFormatter = ISO8601DateFormatter()
+        var searchQueries: [String] = []
+        
+        // Parse the bet date
+        if let date = dateFormatter.date(from: betDate) {
+            let calendar = Calendar.current
+            let now = Date()
+            
+            // Determine search date range strategy
+            if calendar.isDate(date, inSameDayAs: now) {
+                // Today's game - search for live results
+                searchQueries.append(query)
+                searchQueries.append("\(query) live score")
+                searchQueries.append("\(query) today")
+            } else if date < now {
+                // Past game - search for final results
+                let dayFormatter = DateFormatter()
+                dayFormatter.dateFormat = "MMMM d"
+                let dateString = dayFormatter.string(from: date)
+                
+                searchQueries.append("\(query) final score")
+                searchQueries.append("\(query) \(dateString) final")
+                searchQueries.append("\(query) result")
+            } else {
+                // Future game - unlikely to have results
+                searchQueries.append(query)
+            }
+        } else {
+            // Fallback to original query
+            searchQueries.append(query)
+        }
+        
+        // Try each search query and return the best result
+        var bestResult = ""
+        var bestScore = 0.0
+        
+        for searchQuery in searchQueries {
+            do {
+                let result = try await performSportsOptimizedGoogleSearch(
+                    query: searchQuery,
+                    numResults: numResults
+                )
+                
+                let score = evaluateSearchResultQuality(result)
+                print("🔍 Query '\(searchQuery)' scored: \(score)")
+                
+                if score > bestScore {
+                    bestResult = result
+                    bestScore = score
+                }
+                
+                // If we found a very good result, no need to continue
+                if score >= 8.0 {
+                    break
+                }
+                
+            } catch {
+                print("❌ Search query '\(searchQuery)' failed: \(error)")
+                continue
+            }
+        }
+        
+        return bestResult
+    }
+    
+    // MARK: - Search Result Quality Evaluation
+    private func evaluateSearchResultQuality(_ searchResults: String) -> Double {
+        var qualityScore = 0.0
+        let resultsLower = searchResults.lowercased()
+        
+        // High-quality indicators
+        let qualityIndicators = [
+            "espn.com": 3.0,
+            "cbssports.com": 2.5,
+            "final score": 4.0,
+            "game recap": 3.0,
+            "box score": 3.5,
+            "nfl.com": 2.5,
+            "nba.com": 2.5,
+            "mlb.com": 2.5,
+            "nhl.com": 2.5
+        ]
+        
+        for (indicator, score) in qualityIndicators {
+            if resultsLower.contains(indicator) {
+                qualityScore += score
+            }
+        }
+        
+        // Check for score patterns
+        let scorePattern = "\\b\\d{1,3}[-–]\\d{1,3}\\b"
+        if let regex = try? NSRegularExpression(pattern: scorePattern, options: []) {
+            let matches = regex.matches(in: searchResults, options: [], range: NSRange(location: 0, length: searchResults.utf16.count))
+            qualityScore += Double(matches.count) * 2.0
+        }
+        
+        // Penalty for low-quality content
+        let lowQualityIndicators = [
+            "no search results found": -5.0,
+            "preview": -1.0,
+            "prediction": -1.0,
+            "upcoming": -1.0
+        ]
+        
+        for (indicator, penalty) in lowQualityIndicators {
+            if resultsLower.contains(indicator) {
+                qualityScore += penalty
+            }
+        }
+        
+        // Bonus for content length (more content usually means better results)
+        let contentLengthBonus = min(2.0, Double(searchResults.count) / 1000.0)
+        qualityScore += contentLengthBonus
+        
+        return max(0, qualityScore)
+    }
+    
+    // MARK: - Multi-Source Sports Data Aggregation
+    @available(iOS 15.0, *)
+    func aggregateSportsDataFromMultipleSources(query: String, betDate: String) async throws -> String {
+        print("🔍 Starting multi-source sports data aggregation")
+        
+        var allResults: [String] = []
+        var sources: [String] = []
+        
+        // Source 1: Enhanced Google Search
+        do {
+            let googleResults = try await performDateAwareSportsSearch(
+                query: query,
+                betDate: betDate,
+                numResults: 6
+            )
+            allResults.append(googleResults)
+            sources.append("Google Custom Search")
+            print("✅ Google search completed")
+        } catch {
+            print("❌ Google search failed: \(error)")
+        }
+        
+        // Source 2: Direct ESPN search (if we can construct a good query)
+        let entities = extractSportsEntitiesFromQuery(query)
+        if !entities.teams.isEmpty {
+            do {
+                let espnQuery = "site:espn.com \(entities.teams.joined(separator: " ")) final score"
+                let espnResults = try await performSportsOptimizedGoogleSearch(
+                    query: espnQuery,
+                    numResults: 3
+                )
+                allResults.append("ESPN SPECIFIC SEARCH:\n\(espnResults)")
+                sources.append("ESPN Direct")
+                print("✅ ESPN direct search completed")
+            } catch {
+                print("❌ ESPN direct search failed: \(error)")
+            }
+        }
+        
+        // Source 3: CBS Sports search
+        if !entities.teams.isEmpty {
+            do {
+                let cbsQuery = "site:cbssports.com \(entities.teams.joined(separator: " ")) result"
+                let cbsResults = try await performSportsOptimizedGoogleSearch(
+                    query: cbsQuery,
+                    numResults: 3
+                )
+                allResults.append("CBS SPORTS SPECIFIC SEARCH:\n\(cbsResults)")
+                sources.append("CBS Sports Direct")
+                print("✅ CBS Sports search completed")
+            } catch {
+                print("❌ CBS Sports search failed: \(error)")
+            }
+        }
+        
+        let aggregatedResult = """
+        AGGREGATED SPORTS DATA FROM \(sources.count) SOURCES:
+        Sources: \(sources.joined(separator: ", "))
+        
+        \(allResults.joined(separator: "\n\n" + String(repeating: "=", count: 50) + "\n\n"))
+        """
+        
+        print("🔍 Multi-source aggregation completed with \(sources.count) sources")
+        return aggregatedResult
+    }
+    
+    // MARK: - Sports Entity Extraction
+    private func extractSportsEntities(from betPrompt: String) -> SportsEntities {
+        var teams: [String] = []
+        var players: [String] = []
+        var league: String?
+        var sport: String?
+        
+        let prompt = betPrompt.lowercased()
+        
+        // Extract teams (look for common patterns)
+        let teamPatterns = [
+            "\\b([A-Z][a-z]+ [A-Z][a-z]+)\\b", // "Los Angeles Lakers"
+            "\\b([A-Z][a-z]+)\\s+vs\\s+([A-Z][a-z]+)", // "Lakers vs Warriors"
+            "\\b([A-Z]{2,})\\s+vs\\s+([A-Z]{2,})", // "LAL vs GSW"
+        ]
+        
+        for pattern in teamPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let matches = regex.matches(in: betPrompt, options: [], range: NSRange(location: 0, length: betPrompt.utf16.count))
+                for match in matches {
+                    for rangeIndex in 1..<match.numberOfRanges {
+                        let range = match.range(at: rangeIndex)
+                        if range.location != NSNotFound, let swiftRange = Range(range, in: betPrompt) {
+                            let team = String(betPrompt[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !team.isEmpty && !teams.contains(team) {
+                                teams.append(team)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Detect leagues
+        let leagueKeywords = [
+            ("nfl", "NFL"),
+            ("nba", "NBA"),
+            ("mlb", "MLB"),
+            ("nhl", "NHL"),
+            ("premier league", "Premier League"),
+            ("champions league", "Champions League"),
+            ("la liga", "La Liga"),
+            ("bundesliga", "Bundesliga"),
+            ("serie a", "Serie A"),
+            ("mls", "MLS"),
+            ("ncaa", "NCAA"),
+            ("college football", "NCAA Football"),
+            ("college basketball", "NCAA Basketball")
+        ]
+        
+        for (keyword, fullName) in leagueKeywords {
+            if prompt.contains(keyword) {
+                league = fullName
+                break
+            }
+        }
+        
+        // Detect sports
+        let sportKeywords = [
+            ("football", "Football"),
+            ("basketball", "Basketball"),
+            ("baseball", "Baseball"),
+            ("hockey", "Hockey"),
+            ("soccer", "Soccer"),
+            ("tennis", "Tennis"),
+            ("golf", "Golf"),
+            ("boxing", "Boxing"),
+            ("mma", "MMA")
+        ]
+        
+        for (keyword, fullName) in sportKeywords {
+            if prompt.contains(keyword) {
+                sport = fullName
+                break
+            }
+        }
+        
+        return SportsEntities(teams: teams, players: players, league: league, sport: sport)
+    }
+    
+    // MARK: - Helper function for entity extraction (simplified version)
+    private func extractSportsEntitiesFromQuery(_ query: String) -> SimpleSportsEntities {
+        var teams: [String] = []
+        var league: String?
+        
+        // Simple team extraction - look for capitalized words that might be team names
+        let words = query.components(separatedBy: .whitespaces)
+        var potentialTeam = ""
+        
+        for word in words {
+            let cleanWord = word.trimmingCharacters(in: .punctuationCharacters)
+            if cleanWord.first?.isUppercase == true {
+                potentialTeam += cleanWord + " "
+            } else if !potentialTeam.isEmpty {
+                teams.append(potentialTeam.trimmingCharacters(in: .whitespaces))
+                potentialTeam = ""
+            }
+        }
+        
+        // Don't forget the last potential team
+        if !potentialTeam.isEmpty {
+            teams.append(potentialTeam.trimmingCharacters(in: .whitespaces))
+        }
+        
+        // Simple league detection
+        let queryLower = query.lowercased()
+        if queryLower.contains("nfl") {
+            league = "NFL"
+        } else if queryLower.contains("nba") {
+            league = "NBA"
+        } else if queryLower.contains("mlb") {
+            league = "MLB"
+        } else if queryLower.contains("nhl") {
+            league = "NHL"
+        }
+        
+        return SimpleSportsEntities(teams: teams, league: league)
+    }
+    
+    // MARK: - Utility Functions
+    private func extractDomain(from url: String) -> String {
+        guard let urlObj = URL(string: url) else { return "unknown" }
+        return urlObj.host ?? "unknown"
+    }
+    
+    // MARK: - Updated performGoogleCustomSearch method (backward compatibility)
+    @available(iOS 15.0, *)
+    func performGoogleCustomSearch(query: String, numResults: Int = 3) async throws -> String {
+        // Use the enhanced sports-optimized search
+        return try await performSportsOptimizedGoogleSearch(query: query, numResults: numResults)
     }
     
     @available(iOS 15.0, *)
