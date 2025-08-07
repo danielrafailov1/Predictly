@@ -767,10 +767,10 @@ struct SocialLoginView: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            Text("        or sign in with         ")
-                .foregroundColor(.white.opacity(0.7))
-                .font(.system(size: 16, weight: .medium))
-                .background(Color.clear)
+//            Text("        or sign in with         ")
+//                .foregroundColor(.white.opacity(0.7))
+//                .font(.system(size: 16, weight: .medium))
+//                .background(Color.clear)
             
             GoogleSignInButton(
                 isLoading: $isGoogleLoading,

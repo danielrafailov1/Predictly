@@ -70,6 +70,14 @@ struct PartyDetailsView: View {
     @State private var showActionSheet = false
     @State private var showInviteActionSheet = false
     
+    // NEW: Member management states
+    @State private var selectedMemberIndex: Int?
+    @State private var showMemberActionSheet = false
+    @State private var showKickConfirmation = false
+    @State private var showPromoteConfirmation = false
+    @State private var memberToKick: (userId: String, username: String)?
+    @State private var memberToPromote: (userId: String, username: String)?
+    
     // Computed property to check if current user is host
     private var isHost: Bool {
         return currentUserId == hostUserId
@@ -288,6 +296,35 @@ struct PartyDetailsView: View {
         } message: {
             Text("The following players haven't placed their bets yet:\n\n\(playersWithoutBets.joined(separator: ", "))\n\nAre you sure you want to start the game?")
         }
+        // NEW: Member management alerts
+        .alert("Kick Member", isPresented: $showKickConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Kick", role: .destructive) {
+                Task {
+                    if let member = memberToKick {
+                        await kickMember(userId: member.userId)
+                    }
+                }
+            }
+        } message: {
+            if let member = memberToKick {
+                Text("Are you sure you want to kick \(member.username) from the party? This action cannot be undone.")
+            }
+        }
+        .alert("Promote to Host", isPresented: $showPromoteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Promote") {
+                Task {
+                    if let member = memberToPromote {
+                        await promoteMemberToHost(userId: member.userId)
+                    }
+                }
+            }
+        } message: {
+            if let member = memberToPromote {
+                Text("Are you sure you want to promote \(member.username) to party host? You will become a regular member.")
+            }
+        }
         .confirmationDialog("More Options", isPresented: $showActionSheet, titleVisibility: .visible) {
             Button("Party Chat") {
                 showPartyChat = true
@@ -308,6 +345,100 @@ struct PartyDetailsView: View {
                 showInviteOthers = true
             }
             Button("Cancel", role: .cancel) { }
+        }
+        // NEW: Member action sheet
+        .confirmationDialog("Member Actions", isPresented: $showMemberActionSheet, titleVisibility: .visible) {
+            if let index = selectedMemberIndex, index < memberUsernames.count {
+                let username = memberUsernames[index]
+                let userId = index < memberUserIds.count ? memberUserIds[index] : ""
+                
+                // Don't show actions for the host themselves
+                if userId != hostUserId {
+                    Button("Kick \(username)") {
+                        memberToKick = (userId: userId, username: username)
+                        showKickConfirmation = true
+                    }
+                    
+                    Button("Promote \(username) to Host") {
+                        memberToPromote = (userId: userId, username: username)
+                        showPromoteConfirmation = true
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+    }
+    
+    // MARK: - Member Management Functions
+    
+    private func kickMember(userId: String) async {
+        guard let partyId = partyId else { return }
+        
+        do {
+            // Remove from Party Members table
+            _ = try await supabaseClient
+                .from("Party Members")
+                .delete()
+                .eq("party_id", value: Int(partyId))
+                .eq("user_id", value: userId)
+                .execute()
+            
+            // Also remove any bets this user has placed
+            _ = try await supabaseClient
+                .from("User Bets")
+                .delete()
+                .eq("party_id", value: Int(partyId))
+                .eq("user_id", value: userId)
+                .execute()
+            
+            // Remove from local arrays
+            await MainActor.run {
+                if let index = memberUserIds.firstIndex(of: userId) {
+                    memberUserIds.remove(at: index)
+                    if index < memberUsernames.count {
+                        memberUsernames.remove(at: index)
+                    }
+                }
+                memberBetStatus.removeValue(forKey: userId)
+            }
+            
+            print("Successfully kicked member: \(userId)")
+            
+        } catch {
+            print("Error kicking member: \(error)")
+            await MainActor.run {
+                errorMessage = "Failed to kick member: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func promoteMemberToHost(userId: String) async {
+        guard let partyId = partyId else { return }
+        
+        do {
+            // Update the party's created_by field to the new host
+            _ = try await supabaseClient
+                .from("Parties")
+                .update(["created_by": userId])
+                .eq("id", value: Int(partyId))
+                .execute()
+            
+            // Update local state
+            await MainActor.run {
+                hostUserId = userId
+                if let index = memberUserIds.firstIndex(of: userId),
+                   index < memberUsernames.count {
+                    hostUsername = memberUsernames[index]
+                }
+            }
+            
+            print("Successfully promoted member to host: \(userId)")
+            
+        } catch {
+            print("Error promoting member to host: \(error)")
+            await MainActor.run {
+                errorMessage = "Failed to promote member: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -866,7 +997,7 @@ struct PartyDetailsView: View {
         }
     }
 
-    // Members card with bet status
+    // NEW: Enhanced Members card with clickable member names for hosts
     private var membersCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -888,13 +1019,38 @@ struct PartyDetailsView: View {
                     ForEach(Array(zip(memberUsernames.indices, memberUsernames)), id: \.0) { index, username in
                         let userId = index < memberUserIds.count ? memberUserIds[index] : ""
                         let hasBet = memberBetStatus[userId] ?? false
+                        let isHostMember = userId == hostUserId
                         
                         HStack(spacing: 8) {
-                            Image(systemName: "person.fill")
-                                .foregroundColor(.white.opacity(0.7))
-                            Text(username)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.9))
+                            // Show crown icon for host
+                            Image(systemName: isHostMember ? "crown.fill" : "person.fill")
+                                .foregroundColor(isHostMember ? .yellow : .white.opacity(0.7))
+                            
+                            // Member name - clickable for hosts if it's not themselves
+                            if isHost && !isHostMember {
+                                Button(action: {
+                                    selectedMemberIndex = index
+                                    showMemberActionSheet = true
+                                }) {
+                                    Text(username)
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .underline()
+                                }
+                            } else {
+                                Text(username)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.9))
+                            }
+                            
+                            // Host label
+                            if isHostMember {
+                                Text("(Host)")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.yellow.opacity(0.8))
+                                    .italic()
+                            }
+                            
                             Spacer()
                             
                             // Bet status indicator - only show for normal bets that aren't ended
@@ -913,6 +1069,15 @@ struct PartyDetailsView: View {
                     }
                 }
                 .padding(.top, 8)
+                
+                // Show instructions for hosts
+                if isHost && memberUsernames.count > 1 {
+                    Text("Tap member names to manage them")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                        .italic()
+                        .padding(.top, 8)
+                }
             }
         }
         .padding(16)
