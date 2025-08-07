@@ -42,13 +42,34 @@ struct MyPartiesView: View {
     
     // Track loaded party IDs to avoid duplicates
     @State private var loadedPartyIds: Set<Int64> = []
+    
+    // Add loading state tracking to prevent concurrent operations
+    @State private var isCurrentlyLoading = false
 
     enum PartyFilter: String, CaseIterable, Identifiable {
         case active = "Active"
         case wins = "Wins"
         case losses = "Losses"
-        case open = "Open Parties"
+        case open = "Open"
         var id: String { rawValue }
+        
+        var displayName: String {
+            switch self {
+            case .active: return "Active"
+            case .wins: return "Wins"
+            case .losses: return "Losses"
+            case .open: return "Open"
+            }
+        }
+        
+        var fullName: String {
+            switch self {
+            case .active: return "Active"
+            case .wins: return "Wins"
+            case .losses: return "Losses"
+            case .open: return "Open Parties"
+            }
+        }
     }
 
     var filteredParties: [Party] {
@@ -200,7 +221,7 @@ struct MyPartiesView: View {
                 Image(systemName: partyFilter == .open ? "globe" : "person.3.fill")
                     .font(.system(size: 48))
                     .foregroundColor(.white.opacity(0.5))
-                Text(partyFilter == .open ? "No open parties" : "No \(partyFilter.rawValue.lowercased()) parties")
+                Text(partyFilter == .open ? "No open parties" : "No \(partyFilter.fullName.lowercased()) parties")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 if partyFilter == .active {
@@ -247,11 +268,11 @@ struct MyPartiesView: View {
 
                     Picker("Party Filter", selection: $partyFilter) {
                         ForEach(PartyFilter.allCases) { filter in
-                            Text(filter.rawValue).tag(filter)
+                            Text(filter.displayName).tag(filter)
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20) // Slightly reduced padding to give more space
                     .onChange(of: partyFilter) { _, newValue in
                         Task {
                             await handleFilterChange(newValue)
@@ -346,6 +367,14 @@ struct MyPartiesView: View {
     
     /// Handle filter change with proper reset
     private func handleFilterChange(_ newFilter: PartyFilter) async {
+        // Prevent concurrent loading operations
+        guard !isCurrentlyLoading else { return }
+        
+        // Clear error message when changing filters
+        DispatchQueue.main.async {
+            self.errorMessage = nil
+        }
+        
         if newFilter == .open {
             await loadOpenParties()
         } else {
@@ -365,6 +394,12 @@ struct MyPartiesView: View {
     
     /// Reset and load parties from scratch
     private func resetAndLoadParties() async {
+        // Prevent concurrent loading operations
+        guard !isCurrentlyLoading else {
+            print("⚠️ Skipping reload - already loading")
+            return
+        }
+        
         resetPaginationState()
         if partyFilter == .open {
             await loadOpenParties()
@@ -385,19 +420,21 @@ struct MyPartiesView: View {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
             print("⏳ Auto-refreshing parties...")
             Task {
-                // For timer refreshes, only refresh the first chunk to avoid disrupting user's scroll position
-                if partyFilter == .open {
-                    await loadOpenParties()
-                } else {
-                    await loadPartiesChunked(isInitialLoad: false, silentRefresh: true)
+                // Only refresh if not currently loading and user is still on the same filter
+                guard !self.isCurrentlyLoading else {
+                    print("⚠️ Skipping auto-refresh - already loading")
+                    return
                 }
+                
+                // Do a complete refresh to ensure data consistency
+                await self.resetAndLoadParties()
             }
         }
     }
     
     /// Load more parties for pagination
     private func loadMoreParties() async {
-        guard !isLoadingMore && hasMoreParties && partyFilter != .open else { return }
+        guard !isLoadingMore && hasMoreParties && partyFilter != .open && !isCurrentlyLoading else { return }
         
         DispatchQueue.main.async {
             self.isLoadingMore = true
@@ -579,6 +616,10 @@ struct MyPartiesView: View {
             return
         }
         
+        // Set loading state to prevent concurrent operations
+        isCurrentlyLoading = true
+        defer { isCurrentlyLoading = false }
+        
         struct OpenPartyRow: Decodable {
             let id: Int64?
             let party_name: String?
@@ -718,6 +759,15 @@ struct MyPartiesView: View {
     }
 
     func loadPartiesChunked(isInitialLoad: Bool, silentRefresh: Bool = false) async {
+        // Prevent concurrent loading operations
+        if isCurrentlyLoading {
+            print("⚠️ Skipping loadPartiesChunked - already loading")
+            return
+        }
+        
+        isCurrentlyLoading = true
+        defer { isCurrentlyLoading = false }
+        
         if isInitialLoad && !silentRefresh {
             DispatchQueue.main.async {
                 self.isLoading = true
@@ -782,51 +832,50 @@ struct MyPartiesView: View {
             // Convert userPartyIds to strings for the IN filter
             let partyIdStrings = userPartyIds.map { String($0) }
             
+            // For initial loads, fetch ALL parties to ensure we have complete data
+            let rangeEnd = isInitialLoad ? 999 : currentOffset + chunkSize - 1
+            
             // Fetch only parties where user is a member, with pagination
             let partiesResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, party_name, bet_type, party_code, created_by, privacy_option, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
                 .in("id", values: partyIdStrings)
                 .order("created_at", ascending: false)
-                .range(from: currentOffset, to: currentOffset + chunkSize - 1)
+                .range(from: isInitialLoad ? 0 : currentOffset, to: rangeEnd)
                 .execute()
             
             let partiesChunk = try JSONDecoder().decode([PartyRow].self, from: partiesResponse.data)
             
-            // Load win/loss data if this is initial load or silent refresh
-            var winPartyIds: Set<Int64> = []
-            var lossPartyIds: Set<Int64> = []
+            // Always load win/loss data for complete state
+            async let winsTask = supabaseClient
+                .from("User Bets")
+                .select("party_id")
+                .eq("user_id", value: userId)
+                .eq("is_winner", value: true)
+                .execute()
             
-            if isInitialLoad || silentRefresh {
-                // Fetch wins and losses
-                async let winsTask = supabaseClient
-                    .from("User Bets")
-                    .select("party_id")
-                    .eq("user_id", value: userId)
-                    .eq("is_winner", value: true)
-                    .execute()
-                
-                async let lossesTask = supabaseClient
-                    .from("User Bets")
-                    .select("party_id")
-                    .eq("user_id", value: userId)
-                    .eq("is_winner", value: false)
-                    .execute()
-                
-                let (winsResponse, lossesResponse) = try await (winsTask, lossesTask)
-                
-                let winRows = try JSONDecoder().decode([WinRow].self, from: winsResponse.data)
-                let lossRows = try JSONDecoder().decode([WinRow].self, from: lossesResponse.data)
-                
-                winPartyIds = Set(winRows.map { $0.party_id })
-                lossPartyIds = Set(lossRows.map { $0.party_id })
-            }
+            async let lossesTask = supabaseClient
+                .from("User Bets")
+                .select("party_id")
+                .eq("user_id", value: userId)
+                .eq("is_winner", value: false)
+                .execute()
+            
+            let (winsResponse, lossesResponse) = try await (winsTask, lossesTask)
+            
+            let winRows = try JSONDecoder().decode([WinRow].self, from: winsResponse.data)
+            let lossRows = try JSONDecoder().decode([WinRow].self, from: lossesResponse.data)
+            
+            let winPartyIds = Set(winRows.map { $0.party_id })
+            let lossPartyIds = Set(lossRows.map { $0.party_id })
             
             let newParties = partiesChunk.compactMap { p -> Party? in
                 guard let partyId = p.id else { return nil }
                 
-                // Avoid duplicates
-                guard !loadedPartyIds.contains(partyId) else { return nil }
+                // For pagination, avoid duplicates
+                if !isInitialLoad && loadedPartyIds.contains(partyId) {
+                    return nil
+                }
                 
                 return Party(
                     id: partyId,
@@ -860,6 +909,10 @@ struct MyPartiesView: View {
             }
             
             DispatchQueue.main.async {
+                // Always update win/loss data
+                self.wonPartyIds = winPartyIds
+                self.lostPartyIds = lossPartyIds
+                
                 // Track loaded party IDs
                 for party in newParties {
                     if let partyId = party.id {
@@ -867,21 +920,22 @@ struct MyPartiesView: View {
                     }
                 }
                 
-                if isInitialLoad || silentRefresh {
+                if isInitialLoad {
+                    // For initial loads, replace all data
                     self.parties = newParties
-                    self.wonPartyIds = winPartyIds
-                    self.lostPartyIds = lossPartyIds
                     self.currentOffset = newParties.count
+                    self.hasMoreParties = newParties.count == self.chunkSize && !silentRefresh
                 } else {
                     // Append for pagination
                     self.parties.append(contentsOf: newParties)
                     self.currentOffset += newParties.count
+                    self.hasMoreParties = newParties.count == self.chunkSize
                 }
                 
-                // Check if there are more parties to load
-                self.hasMoreParties = newParties.count == self.chunkSize
-                
                 if isInitialLoad { self.isLoading = false }
+                
+                print("✅ Loaded \(newParties.count) parties. Total: \(self.parties.count)")
+                print("   Active: \(self.filteredParties.count) (after filtering)")
             }
             
         } catch {
@@ -889,7 +943,7 @@ struct MyPartiesView: View {
                 self.errorMessage = "Error loading parties: \(error.localizedDescription)"
                 if isInitialLoad { self.isLoading = false }
             }
-            print("Error loading parties: \(error)")
+            print("❌ Error loading parties: \(error)")
         }
     }
     
