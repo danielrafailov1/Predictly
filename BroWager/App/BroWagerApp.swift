@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Supabase
+import GoogleSignIn  // Add this import
 
 extension Notification.Name {
     static let receivedURL = Notification.Name("ReceivedURL")
@@ -34,6 +35,14 @@ struct BroWagerApp: App {
 
     init() {
         _sessionManager = StateObject(wrappedValue: SessionManager(supabaseClient: BroWagerApp.client))
+        
+        // Configure Google Sign-In
+        if let clientId = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String {
+            GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientId)
+            print("✅ Google Sign-In configured with client ID: \(clientId)")
+        } else {
+            print("❌ Failed to configure Google Sign-In: GIDClientID not found in Info.plist")
+        }
     }
 
     var body: some Scene {
@@ -61,8 +70,27 @@ struct BroWagerApp: App {
                 }
             }
             .onOpenURL { url in
-                print("onOpenURL called with: \(url)")
+                print("\n🔴 =================================")
+                print("🔴 onOpenURL called!")
+                print("🔴 =================================")
+                print("🔴 URL: \(url)")
+                print("🔴 URL scheme: \(url.scheme ?? "nil")")
+                print("🔴 URL host: \(url.host ?? "nil")")
+                print("🔴 URL path: \(url.path)")
+                print("🔴 URL query: \(url.query ?? "nil")")
+                
+                // Handle Google Sign-In URLs first
+                if GIDSignIn.sharedInstance.handle(url) {
+                    print("✅ URL handled by Google Sign-In SDK")
+                    return
+                } else {
+                    print("🟡 URL not handled by Google Sign-In SDK")
+                }
+                
+                // Handle custom OAuth callback URLs
+                print("🔴 Posting notification for custom URL handling...")
                 NotificationCenter.default.post(name: .receivedURL, object: url)
+                print("🔴 onOpenURL completed\n")
             }
         }
     }

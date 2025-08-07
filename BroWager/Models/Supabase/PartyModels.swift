@@ -103,6 +103,7 @@ struct LoginInfo: Codable {
     let email: String?
     let user_id: String
     let music_on: Bool?
+    let wins: Int?
 }
 
 struct PartyInvite: Codable {

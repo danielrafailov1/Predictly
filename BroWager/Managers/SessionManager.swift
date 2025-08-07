@@ -42,7 +42,8 @@ class SessionManager: ObservableObject {
                         created_at: timestamp,
                         email: user.email ?? "",
                         user_id: user.id.uuidString,
-                        music_on: false
+                        music_on: false,
+                        wins: 0
                     )
                     print("[SessionManager] Inserting Login Information row for user_id: \(user.id.uuidString)")
                     _ = try await supabaseClient
