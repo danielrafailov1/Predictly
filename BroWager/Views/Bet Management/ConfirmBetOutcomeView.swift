@@ -475,25 +475,44 @@ struct ConfirmBetOutcomeView: View {
         do {
             let response = try await supabaseClient
                 .from("Parties")
-                .select("bet_date")
+                .select("bet_date, created_at") // Also fetch created_at as fallback
                 .eq("id", value: Int(partyId))
                 .single()
                 .execute()
             
             struct PartyDateResponse: Codable {
-                let bet_date: String
+                let bet_date: String?  // Made optional
+                let created_at: String? // Fallback option
             }
             
             let partyDateResponse = try JSONDecoder().decode(PartyDateResponse.self, from: response.data)
             
             let dateFormatter = ISO8601DateFormatter()
-            if let parsedDate = dateFormatter.date(from: partyDateResponse.bet_date) {
-                await MainActor.run {
-                    self.betDate = parsedDate
-                }
+            
+            // Try bet_date first, then created_at as fallback
+            var parsedDate: Date?
+            
+            if let betDateString = partyDateResponse.bet_date {
+                parsedDate = dateFormatter.date(from: betDateString)
+            } else if let createdAtString = partyDateResponse.created_at {
+                parsedDate = dateFormatter.date(from: createdAtString)
+                print("⚠️ Using created_at as fallback for bet_date")
             }
+            
+            await MainActor.run {
+                self.betDate = parsedDate
+            }
+            
+            if parsedDate == nil {
+                print("⚠️ Could not parse any date from bet_date or created_at")
+            }
+            
         } catch {
             print("Error loading bet date: \(error)")
+            // Set to current date as ultimate fallback
+            await MainActor.run {
+                self.betDate = Date()
+            }
         }
     }
     
@@ -511,49 +530,72 @@ struct ConfirmBetOutcomeView: View {
         }
         
         do {
-            // Get bet date with better validation
+            // Get bet date with better validation and fallback options
             let partyResponse = try await supabaseClient
                 .from("Parties")
-                .select("bet_date")
+                .select("bet_date, created_at, bet")
                 .eq("id", value: Int(partyId))
                 .single()
                 .execute()
             
-            struct PartyDate: Codable {
-                let bet_date: String
+            struct PartyInfo: Codable {
+                let bet_date: String?
+                let created_at: String?
+                let bet: String?
             }
             
-            let partyDate = try JSONDecoder().decode(PartyDate.self, from: partyResponse.data)
+            let partyInfo = try JSONDecoder().decode(PartyInfo.self, from: partyResponse.data)
+            
+            // Determine which date to use
+            var effectiveDate: Date
+            var dateSource: String
+            
+            let dateFormatter = ISO8601DateFormatter()
+            
+            if let betDateString = partyInfo.bet_date,
+               let betDate = dateFormatter.date(from: betDateString) {
+                effectiveDate = betDate
+                dateSource = "bet_date"
+                print("✅ Using bet_date: \(betDateString)")
+            } else if let createdAtString = partyInfo.created_at,
+                      let createdAtDate = dateFormatter.date(from: createdAtString) {
+                effectiveDate = createdAtDate
+                dateSource = "created_at (fallback)"
+                print("⚠️ bet_date is null, using created_at: \(createdAtString)")
+            } else {
+                effectiveDate = Date()
+                dateSource = "current date (ultimate fallback)"
+                print("⚠️ Both bet_date and created_at are null or invalid, using current date")
+            }
+            
+            print("🔍 Effective date: \(effectiveDate), Source: \(dateSource)")
             
             // Enhanced date checking with timezone consideration
-            let dateFormatter = ISO8601DateFormatter()
-            if let betDateObj = dateFormatter.date(from: partyDate.bet_date) {
-                let now = Date()
-                let calendar = Calendar.current
+            let now = Date()
+            let calendar = Calendar.current
+            
+            // Check if bet date is today or in the past (more lenient)
+            let betDateComponents = calendar.dateComponents([.year, .month, .day], from: effectiveDate)
+            let nowComponents = calendar.dateComponents([.year, .month, .day], from: now)
+            
+            if let betDateOnly = calendar.date(from: betDateComponents),
+               let currentDateOnly = calendar.date(from: nowComponents) {
                 
-                // Check if bet date is today or in the past (more lenient)
-                let betDateComponents = calendar.dateComponents([.year, .month, .day], from: betDateObj)
-                let nowComponents = calendar.dateComponents([.year, .month, .day], from: now)
-                
-                if let betDate = calendar.date(from: betDateComponents),
-                   let currentDate = calendar.date(from: nowComponents) {
+                if betDateOnly > currentDateOnly {
+                    print("⚠️ Effective date is in the future: \(effectiveDate)")
                     
-                    if betDate > currentDate {
-                        print("⚠️ Bet date is in the future: \(partyDate.bet_date)")
-                        
-                        await MainActor.run {
-                            self.aiVerificationResult = "This bet is for a future date (\(betDate.formatted(date: .abbreviated, time: .omitted))). Game results are not yet available."
-                            for option in self.betOptions {
-                                self.aiVerificationStatus[option] = .uncertain
-                            }
-                            self.isAIVerifying = false
+                    await MainActor.run {
+                        self.aiVerificationResult = "This bet is for a future date (\(effectiveDate.formatted(date: .abbreviated, time: .omitted))). Game results are not yet available."
+                        for option in self.betOptions {
+                            self.aiVerificationStatus[option] = .uncertain
                         }
-                        return
-                    } else if betDate == currentDate {
-                        print("✅ Bet date is today - results may be available")
-                    } else {
-                        print("✅ Bet date is in the past - results should be available")
+                        self.isAIVerifying = false
                     }
+                    return
+                } else if betDateOnly == currentDateOnly {
+                    print("✅ Effective date is today - results may be available")
+                } else {
+                    print("✅ Effective date is in the past - results should be available")
                 }
             }
             
@@ -563,7 +605,8 @@ struct ConfirmBetOutcomeView: View {
             var searchAttempts = 0
             let maxAttempts = 3
             
-            let searchStrategies = generateMultipleSearchStrategies(betPrompt: betPrompt, betDate: partyDate.bet_date)
+            let effectiveDateString = dateFormatter.string(from: effectiveDate)
+            let searchStrategies = generateMultipleSearchStrategies(betPrompt: betPrompt, betDate: effectiveDateString)
             
             for strategy in searchStrategies {
                 searchAttempts += 1
@@ -580,7 +623,7 @@ struct ConfirmBetOutcomeView: View {
                     )
                     
                     // Check if results are relevant
-                    if isSearchResultRelevant(results, for: betPrompt, date: partyDate.bet_date) {
+                    if isSearchResultRelevant(results, for: betPrompt, date: effectiveDateString) {
                         searchResults = results
                         finalSearchQuery = strategy
                         print("✅ Found relevant results with strategy \(searchAttempts)")
@@ -608,7 +651,7 @@ struct ConfirmBetOutcomeView: View {
             let analysisPrompt = createEnhancedAnalysisPrompt(
                 betPrompt: betPrompt,
                 betOptions: betOptions,
-                betDate: partyDate.bet_date,
+                betDate: effectiveDateString,
                 searchResults: searchResults,
                 searchQuery: finalSearchQuery
             )
@@ -637,11 +680,32 @@ struct ConfirmBetOutcomeView: View {
             
         } catch {
             print("❌ Enhanced AI Verification Error: \(error)")
+            
+            // Provide more specific error information
+            let errorDescription: String
+            if let decodingError = error as? DecodingError {
+                switch decodingError {
+                case .valueNotFound(let type, let context):
+                    errorDescription = "Missing field '\(context.codingPath.first?.stringValue ?? "unknown")' in database. This field might be null or not exist."
+                case .keyNotFound(let key, _):
+                    errorDescription = "Database field '\(key.stringValue)' not found in table."
+                default:
+                    errorDescription = "Database structure mismatch: \(decodingError.localizedDescription)"
+                }
+            } else {
+                errorDescription = error.localizedDescription
+            }
+            
             await MainActor.run {
-                let errorMsg = "Enhanced Verification Error: \(error.localizedDescription)"
-                self.aiVerificationResult = errorMsg
+                let errorMsg = "AI Verification temporarily unavailable: \(errorDescription)"
+                self.aiVerificationResult = "AI verification could not complete due to missing bet date information. You can still manually select the winning options below."
                 self.errorMessage = errorMsg
                 self.isAIVerifying = false
+                
+                // Set all options to uncertain since we can't verify
+                for option in self.betOptions {
+                    self.aiVerificationStatus[option] = .uncertain
+                }
             }
         }
         

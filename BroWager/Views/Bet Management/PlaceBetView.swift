@@ -41,6 +41,12 @@ struct PlaceBetView: View {
     @State private var elapsedTime: Int = 0
     @State private var elapsedTimer: Timer?
     
+    private struct BetCompletionUpdate: Encodable {
+        let completed_in_time: Bool
+        let score: Int
+        let end_time: String?
+    }
+
     private var isTimerBet: Bool {
         let normalizedBetType = betType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         print("🔍 Checking if timer bet - original: '\(betType)', normalized: '\(normalizedBetType)'")
@@ -108,11 +114,11 @@ struct PlaceBetView: View {
                                         print("🔍 Timer/Contest section is showing for betType: \(betType)")
                                     }
                             } else {
-                                Text("Debug: betType is '\(betType)' - not showing timer")
-                                    .foregroundColor(.yellow)
-                                    .onAppear {
-                                        print("🔍 Timer section NOT showing - betType: '\(betType)'")
-                                    }
+//                                Text("Debug: betType is '\(betType)' - not showing timer")
+//                                    .foregroundColor(.yellow)
+//                                    .onAppear {
+//                                        print("🔍 Timer section NOT showing - betType: '\(betType)'")
+//                                    }
                             }
                             
                             // Bet Prompt
@@ -275,7 +281,7 @@ struct PlaceBetView: View {
                         Button(action: finishEarly) {
                             HStack(spacing: 4) {
                                 Image(systemName: "checkmark.circle.fill")
-                                Text("Finish")
+                                Text("Finish") // Changed from "Finish Early"
                             }
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
@@ -329,15 +335,17 @@ struct PlaceBetView: View {
             
             // Timer Status
             if isTimerFinished {
+                let completedInTime = endTime != nil && startTime != nil &&
+                                     endTime!.timeIntervalSince(startTime!) < Double(timerDuration)
                 HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Timer Complete!")
+                    Image(systemName: completedInTime ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(completedInTime ? .green : .red)
+                    Text(completedInTime ? "Task Completed in Time!" : "Time Expired")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.green)
+                        .foregroundColor(completedInTime ? .green : .red)
                 }
                 .padding()
-                .background(Color.green.opacity(0.1))
+                .background((completedInTime ? Color.green : Color.red).opacity(0.1))
                 .cornerRadius(8)
             } else if hasTimerStarted {
                 HStack {
@@ -706,15 +714,25 @@ struct PlaceBetView: View {
     }
     
     private func finishTimer() {
-        timer?.invalidate()
-        timer = nil
-        timerRunning = false
+        stopAllTimers()
         isTimerFinished = true
-        endTime = Date()
+        endTime = Date() // Record when timer finished
+        
+        // For automatic timer completion (time ran out), user loses
+        Task {
+            await markBetCompleted(completedInTime: false, score: 0)
+        }
     }
     
     private func finishEarly() {
-        finishTimer()
+        stopAllTimers()
+        isTimerFinished = true
+        endTime = Date() // Record when user finished early
+        
+        // For manual finish (user completed task), user wins
+        Task {
+            await markBetCompleted(completedInTime: true, score: 1)
+        }
     }
     
     private func getTimerColor() -> Color {
@@ -752,6 +770,13 @@ struct PlaceBetView: View {
         endTime = Date()
         elapsedTimer?.invalidate()
         elapsedTimer = nil
+        
+        // For contest bets, determine if they won based on reaching the target
+        let achievedTarget = contestScore >= contestTarget
+        
+        Task {
+            await markBetCompleted(completedInTime: achievedTarget, score: contestScore)
+        }
     }
     
     private func resetContest() {
@@ -1051,6 +1076,29 @@ struct PlaceBetView: View {
         // For timer bets, user must have at least started the timer to submit
         return hasTimerStarted
     }
+    
+    // MARK: - Record Completion in Database
+    private func markBetCompleted(completedInTime: Bool, score: Int) async {
+        do {
+            let updateData = BetCompletionUpdate(
+                completed_in_time: completedInTime,
+                score: score,
+                end_time: endTime?.ISO8601Format()
+            )
+            
+            _ = try await supabaseClient
+                .from("User Bets")
+                .update(updateData)
+                .eq("party_id", value: Int(partyId))
+                .eq("user_id", value: userId)
+                .execute()
+            
+            print("✅ Bet marked completed - In Time: \(completedInTime), Score: \(score)")
+        } catch {
+            print("❌ Failed to mark bet completed: \(error)")
+        }
+    }
+
 }
 
 #Preview {

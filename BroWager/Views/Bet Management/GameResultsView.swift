@@ -40,7 +40,7 @@ struct GameResultsView: View {
         }
         
         // Custom initializer to handle the parsing and scoring
-        init(user_id: String, username: String, bet_selection_text: String, winningOptions: [String]) {
+        init(user_id: String, username: String, bet_selection_text: String, winningOptions: [String], isWinnerFromDB: Bool? = nil) {
             self.user_id = user_id
             self.username = username
             self.bet_selection = bet_selection_text.components(separatedBy: ", ").filter { !$0.isEmpty }
@@ -53,8 +53,8 @@ struct GameResultsView: View {
                 }
             }.count
             
-            // Will be determined later based on highest score
-            self.is_winner = false
+            // Use database value if provided, otherwise will be determined later based on highest score
+            self.is_winner = isWinnerFromDB ?? false
         }
     }
 
@@ -298,74 +298,28 @@ struct GameResultsView: View {
         }
         
         do {
-            // Debug: Print raw response data
             print("🔍 Fetching party details for party ID: \(partyId)")
             
-            // Fetch party details including winning options, bet prompt, AND game status
+            // Fetch party details including winning options, bet prompt, game status, and bet type
             let partyResponse = try await supabaseClient
                 .from("Parties")
-                .select("winning_options, bet, game_status")
+                .select("winning_options, bet, game_status, bet_type")
                 .eq("id", value: Int(partyId))
                 .limit(1)
                 .execute()
             
-            // Debug: Print raw party response
             if let rawData = String(data: partyResponse.data, encoding: .utf8) {
                 print("🔍 Raw party response: \(rawData)")
             }
             
-            // Try flexible decoding for party data
             struct PartyResult: Codable {
                 let winning_options: [String]?
                 let bet: String?
                 let game_status: String?
+                let bet_type: String
             }
             
-            let partyResults: [PartyResult]
-            do {
-                partyResults = try JSONDecoder().decode([PartyResult].self, from: partyResponse.data)
-            } catch {
-                print("❌ Error decoding party data: \(error)")
-                // Try alternative decoding where winning_options might be stored differently
-                struct AlternativePartyResult: Codable {
-                    let winning_options: String? // Maybe it's stored as a string?
-                    let bet: String?
-                    let game_status: String?
-                }
-                
-                let altResults = try JSONDecoder().decode([AlternativePartyResult].self, from: partyResponse.data)
-                partyResults = altResults.map { altResult in
-                    let winningOptionsArray: [String]
-                    if let winningOptionsString = altResult.winning_options {
-                        // Try to parse as comma-separated string or JSON array string
-                        if winningOptionsString.hasPrefix("[") && winningOptionsString.hasSuffix("]") {
-                            // It's a JSON array string, try to decode it
-                            if let data = winningOptionsString.data(using: .utf8),
-                               let jsonArray = try? JSONDecoder().decode([String].self, from: data) {
-                                winningOptionsArray = jsonArray
-                            } else {
-                                // Fallback: parse as comma-separated after removing brackets
-                                let cleanString = winningOptionsString
-                                    .replacingOccurrences(of: "[", with: "")
-                                    .replacingOccurrences(of: "]", with: "")
-                                    .replacingOccurrences(of: "\"", with: "")
-                                winningOptionsArray = cleanString.components(separatedBy: ", ").filter { !$0.isEmpty }
-                            }
-                        } else {
-                            // It's a regular comma-separated string
-                            winningOptionsArray = winningOptionsString.components(separatedBy: ", ").filter { !$0.isEmpty }
-                        }
-                    } else {
-                        winningOptionsArray = []
-                    }
-                    
-                    return PartyResult(
-                        winning_options: winningOptionsArray,
-                        bet: altResult.bet,
-                        game_status: altResult.game_status
-                    )
-                }
-            }
+            let partyResults: [PartyResult] = try JSONDecoder().decode([PartyResult].self, from: partyResponse.data)
             
             guard let partyResult = partyResults.first else {
                 await MainActor.run {
@@ -374,6 +328,8 @@ struct GameResultsView: View {
                 }
                 return
             }
+            
+            let lowerBetType = partyResult.bet_type.lowercased()
             
             // CHECK 1: Verify the game has ended before showing results
             let gameStatus = partyResult.game_status ?? ""
@@ -385,17 +341,19 @@ struct GameResultsView: View {
                 return
             }
             
-            // CHECK 2: Ensure there are winning options
-            guard let rawWinningOptions = partyResult.winning_options, !rawWinningOptions.isEmpty else {
-                await MainActor.run {
-                    self.errorMessage = "Game results are not available yet. No winning options have been set."
-                    self.isLoading = false
+            // CHECK 2: Only enforce winning options for non-timed/contest bets
+            if lowerBetType != "timed" && lowerBetType != "contest" {
+                guard let rawWinningOptions = partyResult.winning_options, !rawWinningOptions.isEmpty else {
+                    await MainActor.run {
+                        self.errorMessage = "Game results are not available yet. No winning options have been set."
+                        self.isLoading = false
+                    }
+                    return
                 }
-                return
             }
             
             // Clean the winning options to remove any formatting artifacts
-            let cleanedWinningOptions = cleanWinningOptions(rawWinningOptions)
+            let cleanedWinningOptions = cleanWinningOptions(partyResult.winning_options ?? [])
             
             await MainActor.run {
                 self.winningOptions = cleanedWinningOptions
@@ -403,37 +361,28 @@ struct GameResultsView: View {
             }
             
             print("🔍 Game status: \(gameStatus)")
-            print("🔍 Raw winning options: \(rawWinningOptions)")
+            print("🔍 Raw winning options: \(partyResult.winning_options ?? [])")
             print("🔍 Cleaned winning options: \(cleanedWinningOptions)")
             print("🔍 Fetching user bets for party ID: \(partyId)")
             
-            // Fetch user bet results with proper data type handling
+            // Fetch user bet results
             let userBetsResponse = try await supabaseClient
                 .from("User Bets")
-                .select("user_id, bet_selection")
+                .select("user_id, bet_selection, is_winner")
                 .eq("party_id", value: Int(partyId))
                 .execute()
             
-            // Debug: Print raw user bets response
             if let rawData = String(data: userBetsResponse.data, encoding: .utf8) {
                 print("🔍 Raw user bets response: \(rawData)")
             }
             
             struct UserBetData: Codable {
                 let user_id: String
-                let bet_selection: String // This is text in the database
+                let bet_selection: String
+                let is_winner: Bool? // Add this field
             }
             
-            let userBetsData: [UserBetData]
-            do {
-                userBetsData = try JSONDecoder().decode([UserBetData].self, from: userBetsResponse.data)
-                print("✅ Successfully decoded \(userBetsData.count) user bets")
-            } catch {
-                print("❌ Error decoding user bets: \(error)")
-                throw error
-            }
-            
-            // Skip username fetching if no user bets
+            let userBetsData: [UserBetData] = try JSONDecoder().decode([UserBetData].self, from: userBetsResponse.data)
             guard !userBetsData.isEmpty else {
                 await MainActor.run {
                     self.winners = []
@@ -443,17 +392,15 @@ struct GameResultsView: View {
                 return
             }
             
-            // Fetch usernames for all users
             let userIds = userBetsData.map { $0.user_id }
-            print("🔍 Fetching usernames for user IDs: \(userIds)")
             
+            // Fetch usernames
             let usernamesResponse = try await supabaseClient
                 .from("Username")
                 .select("user_id, username")
                 .in("user_id", values: userIds)
                 .execute()
             
-            // Debug: Print raw usernames response
             if let rawData = String(data: usernamesResponse.data, encoding: .utf8) {
                 print("🔍 Raw usernames response: \(rawData)")
             }
@@ -463,69 +410,70 @@ struct GameResultsView: View {
                 let username: String
             }
             
-            let usernamesData: [UsernameData]
-            do {
-                usernamesData = try JSONDecoder().decode([UsernameData].self, from: usernamesResponse.data)
-                print("✅ Successfully decoded \(usernamesData.count) usernames")
-            } catch {
-                print("❌ Error decoding usernames: \(error)")
-                // Continue with user IDs as fallback
-                usernamesData = []
-            }
-            
+            let usernamesData: [UsernameData] = try JSONDecoder().decode([UsernameData].self, from: usernamesResponse.data)
             let userIdToUsername = Dictionary(uniqueKeysWithValues: usernamesData.map { ($0.user_id, $0.username) })
             
-            // Create UserResult objects with scores using cleaned winning options
+            // Build results
             var allResults: [UserResult] = []
-            
             for userBet in userBetsData {
                 let username = userIdToUsername[userBet.user_id] ?? userBet.user_id
                 let userResult = UserResult(
                     user_id: userBet.user_id,
                     username: username,
                     bet_selection_text: userBet.bet_selection,
-                    winningOptions: cleanedWinningOptions
+                    winningOptions: cleanedWinningOptions,
+                    isWinnerFromDB: userBet.is_winner
                 )
-                
                 allResults.append(userResult)
-                print("🔍 User \(username) selected: \(userBet.bet_selection), score: \(userResult.score)")
             }
             
-            // Find the highest score
             let maxScore = allResults.map { $0.score }.max() ?? 0
-            
-            // Separate winners (highest score) and losers (everyone else)
             var winnersArray: [UserResult] = []
             var losersArray: [UserResult] = []
-            
-            for result in allResults {
-                if result.score == maxScore && maxScore > 0 {
-                    // Create a new UserResult with is_winner set to true
-                    let winnerResult = UserResult(
-                        user_id: result.user_id,
-                        username: result.username,
-                        bet_selection_text: result.bet_selection.joined(separator: ", "),
-                        winningOptions: cleanedWinningOptions
-                    )
-                    var mutableWinner = winnerResult
-                    // We need to manually set is_winner since the initializer sets it to false
-                    winnersArray.append(UserResult(
-                        user_id: result.user_id,
-                        username: result.username,
-                        bet_selection_text: result.bet_selection.joined(separator: ", "),
-                        winningOptions: cleanedWinningOptions
-                    ))
-                } else {
-                    losersArray.append(result)
+
+            if lowerBetType == "timed" || lowerBetType == "contest" {
+                // For timed/contest bets, use the is_winner field from database
+                winnersArray = allResults.filter { result in
+                    return result.is_winner == true
+                }
+                losersArray = allResults.filter { result in
+                    return result.is_winner != true
+                }
+            } else {
+                // For normal bets, use scoring logic and update is_winner accordingly
+                for result in allResults {
+                    var updatedResult = result
+                    if result.score == maxScore && maxScore > 0 {
+                        // Create a new UserResult with updated is_winner status
+                        let newResult = UserResult(
+                            user_id: result.user_id,
+                            username: result.username,
+                            bet_selection_text: result.bet_selection.joined(separator: ", "),
+                            winningOptions: cleanedWinningOptions,
+                            isWinnerFromDB: true
+                        )
+                        winnersArray.append(newResult)
+                    } else {
+                        // Create a new UserResult with updated is_winner status
+                        let newResult = UserResult(
+                            user_id: result.user_id,
+                            username: result.username,
+                            bet_selection_text: result.bet_selection.joined(separator: ", "),
+                            winningOptions: cleanedWinningOptions,
+                            isWinnerFromDB: false
+                        )
+                        losersArray.append(newResult)
+                    }
                 }
             }
             
-            print("✅ Final results: \(winnersArray.count) winners with score \(maxScore), \(losersArray.count) losers")
+            print("✅ Final results: \(winnersArray.count) winners, \(losersArray.count) losers")
             
-            // Update database with winner/loser status
-            await updateWinnerStatusInDatabase(winners: winnersArray, losers: losersArray)
+            // Only update winner status in database for non-timed/contest bets
+            if lowerBetType != "timed" && lowerBetType != "contest" {
+                await updateWinnerStatusInDatabase(winners: winnersArray, losers: losersArray)
+            }
             
-            // Update wins count for winners if not already done
             if !winnersArray.isEmpty && !hasUpdatedWins {
                 await updateWinsForWinners(winnersArray)
                 await MainActor.run {
@@ -548,6 +496,7 @@ struct GameResultsView: View {
             }
         }
     }
+
     
     private func updateWinnerStatusInDatabase(winners: [UserResult], losers: [UserResult]) async {
         print("📝 Updating winner status in database")
