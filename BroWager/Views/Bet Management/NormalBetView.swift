@@ -1648,7 +1648,9 @@ struct BetOptionsView: View {
             timerDays: timerDays,
             timerHours: timerHours,
             timerMinutes: timerMinutes,
-            timerSeconds: timerSeconds
+            timerSeconds: timerSeconds,
+            target: target,
+            isContestAmountPickerEnabled: isContestAmountPickerEnabled
         )
     }
 
@@ -2514,6 +2516,8 @@ struct FinalizeBetView: View {
     let timerHours: Int
     let timerMinutes: Int
     let timerSeconds: Int
+    let target: Int
+    let isContestAmountPickerEnabled: Bool
 
     @State private var party_name: String = ""
     @State private var privacy: String = "Open" // Set default to "Open"
@@ -2692,6 +2696,18 @@ struct FinalizeBetView: View {
                         .foregroundColor(.orange)
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                }
+                
+                if isContestAmountPickerEnabled {
+                    HStack {
+                        Text("Target Score:")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.subheadline)
+                        Text("\(target)")
+                            .foregroundColor(.yellow)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
                 }
             }
         }
