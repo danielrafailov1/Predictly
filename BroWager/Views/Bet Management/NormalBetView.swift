@@ -2908,26 +2908,21 @@ struct FinalizeBetView: View {
     // MARK: - Functions
     
     func randomizePartyName() {
-        let suggestions = [
-            "Bet Bros",
-            "Wager Warriors",
-            "Game Day Squad",
-            "Prediction Party",
-            "Lock & Load",
-            "Sure Things",
-            "Betting Brigade",
-            "Odds Squad",
-            "Props & Profits",
-            "Smart Money",
-            "The Predictors",
-            "Bet Busters",
-            "Wager Wizards",
-            "Lucky Legends",
-            "Risk Takers"
-        ]
-
-        party_name = suggestions.randomElement() ?? "My Betting Party"
+        if let fileURL = Bundle.main.url(forResource: "party_names", withExtension: "txt") {
+            do {
+                let contents = try String(contentsOf: fileURL)
+                let suggestions = contents.components(separatedBy: .newlines).filter { !$0.isEmpty }
+                party_name = suggestions.randomElement() ?? "My Betting Party"
+            } catch {
+                print("Error reading party names: \(error)")
+                party_name = "My Betting Party"
+            }
+        } else {
+            print("party_names.txt not found")
+            party_name = "My Betting Party"
+        }
     }
+
 
     func submitBet() {
         guard let userId = userId else {

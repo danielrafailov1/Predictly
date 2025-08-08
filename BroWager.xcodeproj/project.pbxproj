@@ -53,6 +53,7 @@
 		4B6AE1122E05CF6200656DF3 /* PartyInvitesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */; };
 		4B6E45AA2E43FACF00376E7E /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 4B6E45A92E43FACF00376E7E /* GoogleSignIn */; };
 		4B6E45AC2E43FACF00376E7E /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 4B6E45AB2E43FACF00376E7E /* GoogleSignInSwift */; };
+		4B6E45B22E46946300376E7E /* party_names.txt in Resources */ = {isa = PBXBuildFile; fileRef = 4B6E45B12E46946300376E7E /* party_names.txt */; };
 		4B786A1F2E3091A2004E5105 /* TimerSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A1E2E3091A2004E5105 /* TimerSetView.swift */; };
 		4B786A212E3091A7004E5105 /* TimedBetSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */; };
 		4B786A232E314C6D004E5105 /* ContestBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A222E314C20004E5105 /* ContestBetView.swift */; };
@@ -129,6 +130,7 @@
 		4B6AE10F2E05CF5C00656DF3 /* InviteOthersToPartyView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = InviteOthersToPartyView.swift; sourceTree = "<group>"; };
 		4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartyInvitesView.swift; sourceTree = "<group>"; };
 		4B6E45AD2E43FC9500376E7E /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		4B6E45B12E46946300376E7E /* party_names.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = party_names.txt; sourceTree = "<group>"; };
 		4B786A1E2E3091A2004E5105 /* TimerSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSetView.swift; sourceTree = "<group>"; };
 		4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedBetSettingView.swift; sourceTree = "<group>"; };
 		4B786A222E314C20004E5105 /* ContestBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContestBetView.swift; sourceTree = "<group>"; };
@@ -317,6 +319,7 @@
 		4B2D15C42DFCB8600068E5E4 /* BroWager */ = {
 			isa = PBXGroup;
 			children = (
+				4B6E45AE2E4693EC00376E7E /* Resources */,
 				843A115A2E30084C00EA08F0 /* Services */,
 				4BF3C88D2E088BAA00872BEC /* Info.plist */,
 				4B5D5CDD2E0C9DA7000B05AC /* BroWager.entitlements */,
@@ -338,6 +341,14 @@
 				4B5D5CDF2E0CB5A4000B05AC /* SupabaseEnvironmentKey.swift */,
 			);
 			path = "Environment Variables";
+			sourceTree = "<group>";
+		};
+		4B6E45AE2E4693EC00376E7E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4B6E45B12E46946300376E7E /* party_names.txt */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		4B786A182E309176004E5105 /* TimedBet */ = {
@@ -513,6 +524,7 @@
 			files = (
 				4B2D15892DFCB3C60068E5E4 /* Preview Assets.xcassets in Resources */,
 				4B2D15792DFCB3B50068E5E4 /* Assets.xcassets in Resources */,
+				4B6E45B22E46946300376E7E /* party_names.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
