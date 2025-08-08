@@ -20,10 +20,10 @@ struct GameResultsView: View {
     @State private var winners: [UserResult] = []
     @State private var losers: [UserResult] = []
     @State private var betPrompt: String = ""
-    @State private var hasUpdatedWins = false // Track if wins have been updated
-    @State private var highestScore = 0 // Track the highest score achieved
+    @State private var hasUpdatedWins = false
+    @State private var highestScore = 0
+    @State private var betType: String = "" // NEW: Track bet type
     
-    // New state for user selection detail modal
     @State private var selectedUser: UserResult?
     @State private var showingUserDetail = false
     
@@ -31,34 +31,43 @@ struct GameResultsView: View {
         let id = UUID()
         let user_id: String
         let username: String
-        let bet_selection: [String] // This will be parsed from the text field
+        let bet_selection: [String]
         let is_winner: Bool
-        let score: Int // Number of correct options
+        let score: Int
+        let elapsed_time: Int? // NEW: For contest timing
+        let completed_in_time: Bool? // NEW: For contest/timer completion status
+        let final_score: Int? // NEW: For contest final score
         
         enum CodingKeys: String, CodingKey {
-            case user_id, username, bet_selection, is_winner, score
+            case user_id, username, bet_selection, is_winner, score, elapsed_time, completed_in_time, final_score
         }
         
-        // Custom initializer to handle the parsing and scoring
-        init(user_id: String, username: String, bet_selection_text: String, winningOptions: [String], isWinnerFromDB: Bool? = nil) {
+        init(user_id: String, username: String, bet_selection_text: String, winningOptions: [String], isWinnerFromDB: Bool? = nil, elapsed_time: Int? = nil, completed_in_time: Bool? = nil, final_score: Int? = nil, betType: String) {
             self.user_id = user_id
             self.username = username
-            self.bet_selection = bet_selection_text.components(separatedBy: ", ").filter { !$0.isEmpty }
+            self.elapsed_time = elapsed_time
+            self.completed_in_time = completed_in_time
+            self.final_score = final_score
             
-            // Calculate score based on how many winning options they selected
-            self.score = self.bet_selection.filter { selection in
-                winningOptions.contains { winningOption in
-                    selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ==
-                    winningOption.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                }
-            }.count
+            if betType.lowercased() == "contest" || betType.lowercased() == "timed" {
+                // For contest/timer bets, bet_selection is a description, not options to parse
+                self.bet_selection = [bet_selection_text]
+                self.score = final_score ?? 0
+            } else {
+                // For normal bets, parse selections and calculate score
+                self.bet_selection = bet_selection_text.components(separatedBy: ", ").filter { !$0.isEmpty }
+                self.score = self.bet_selection.filter { selection in
+                    winningOptions.contains { winningOption in
+                        selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ==
+                        winningOption.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    }
+                }.count
+            }
             
-            // Use database value if provided, otherwise will be determined later based on highest score
             self.is_winner = isWinnerFromDB ?? false
         }
     }
 
-    
     var body: some View {
         NavigationView {
             ZStack {
@@ -114,8 +123,18 @@ struct GameResultsView: View {
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundColor(.white.opacity(0.8))
                                 
-                                // Show highest score achieved
-                                if highestScore > 0 {
+                                // Show different scoring info based on bet type
+                                if betType.lowercased() == "contest" {
+                                    if let fastestWinner = winners.first {
+                                        Text("Winner completed target in \(formatTime(fastestWinner.elapsed_time ?? 0))")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.yellow)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 4)
+                                            .background(Color.yellow.opacity(0.2))
+                                            .cornerRadius(8)
+                                    }
+                                } else if betType.lowercased() != "timed" && highestScore > 0 {
                                     Text("Winning Score: \(highestScore)/\(winningOptions.count)")
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.yellow)
@@ -144,8 +163,8 @@ struct GameResultsView: View {
                                 .padding(.horizontal, 24)
                             }
                             
-                            // Winning Options
-                            if !winningOptions.isEmpty {
+                            // Winning Options (only for normal bets)
+                            if !winningOptions.isEmpty && betType.lowercased() == "normal" {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("Correct Answer(s):")
                                         .font(.system(size: 18, weight: .semibold))
@@ -183,7 +202,7 @@ struct GameResultsView: View {
                                         Image(systemName: "party.popper.fill")
                                             .foregroundColor(.green)
                                             .font(.system(size: 24))
-                                        Text("🎉 Winners! (Score: \(highestScore))")
+                                        Text(getWinnersTitle())
                                             .font(.system(size: 24, weight: .bold))
                                             .foregroundColor(.green)
                                         Spacer()
@@ -195,6 +214,7 @@ struct GameResultsView: View {
                                             ForEach(winners) { winner in
                                                 WinnerCard(
                                                     userResult: winner,
+                                                    betType: betType,
                                                     onTap: {
                                                         selectedUser = winner
                                                         showingUserDetail = true
@@ -223,9 +243,10 @@ struct GameResultsView: View {
                                     
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 12) {
-                                            ForEach(losers.sorted { $0.score > $1.score }) { loser in
+                                            ForEach(getSortedLosers()) { loser in
                                                 LoserCard(
                                                     userResult: loser,
+                                                    betType: betType,
                                                     onTap: {
                                                         selectedUser = loser
                                                         showingUserDetail = true
@@ -238,9 +259,8 @@ struct GameResultsView: View {
                                 }
                             }
                             
-                            // Play Again Button (placeholder for future feature)
+                            // Back Button
                             Button(action: {
-                                // Future: Navigate to create new party or similar
                                 dismiss()
                             }) {
                                 HStack {
@@ -266,7 +286,8 @@ struct GameResultsView: View {
                     UserSelectionDetailView(
                         userResult: user,
                         winningOptions: winningOptions,
-                        betPrompt: betPrompt
+                        betPrompt: betPrompt,
+                        betType: betType
                     )
                 }
             }
@@ -278,10 +299,51 @@ struct GameResultsView: View {
         }
     }
     
-    // Helper function to clean winning options from array format
+    private func getWinnersTitle() -> String {
+        switch betType.lowercased() {
+        case "contest":
+            return "🎉 Winners! (Fastest to Target)"
+        case "timed":
+            return "🎉 Winners! (Completed in Time)"
+        default:
+            return "🎉 Winners! (Score: \(highestScore))"
+        }
+    }
+    
+    private func getSortedLosers() -> [UserResult] {
+        switch betType.lowercased() {
+        case "contest":
+            // Sort by final score descending, then by time ascending
+            return losers.sorted { first, second in
+                if let firstScore = first.final_score, let secondScore = second.final_score {
+                    if firstScore != secondScore {
+                        return firstScore > secondScore
+                    }
+                }
+                // If scores are equal or nil, sort by time
+                let firstTime = first.elapsed_time ?? Int.max
+                let secondTime = second.elapsed_time ?? Int.max
+                return firstTime < secondTime
+            }
+        default:
+            return losers.sorted { $0.score > $1.score }
+        }
+    }
+    
+    private func formatTime(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
+        }
+    }
+    
     private func cleanWinningOptions(_ options: [String]) -> [String] {
         return options.map { option in
-            // Remove quotes, brackets, and extra whitespace
             option
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .replacingOccurrences(of: "\"", with: "")
@@ -300,17 +362,13 @@ struct GameResultsView: View {
         do {
             print("🔍 Fetching party details for party ID: \(partyId)")
             
-            // Fetch party details including winning options, bet prompt, game status, and bet type
+            // Fetch party details
             let partyResponse = try await supabaseClient
                 .from("Parties")
                 .select("winning_options, bet, game_status, bet_type")
                 .eq("id", value: Int(partyId))
                 .limit(1)
                 .execute()
-            
-            if let rawData = String(data: partyResponse.data, encoding: .utf8) {
-                print("🔍 Raw party response: \(rawData)")
-            }
             
             struct PartyResult: Codable {
                 let winning_options: [String]?
@@ -331,7 +389,12 @@ struct GameResultsView: View {
             
             let lowerBetType = partyResult.bet_type.lowercased()
             
-            // CHECK 1: Verify the game has ended before showing results
+            // Store bet type
+            await MainActor.run {
+                self.betType = partyResult.bet_type
+            }
+            
+            // Verify the game has ended
             let gameStatus = partyResult.game_status
             if gameStatus != "ended" {
                 await MainActor.run {
@@ -341,7 +404,7 @@ struct GameResultsView: View {
                 return
             }
             
-            // CHECK 2: Only enforce winning options for non-timed/contest bets
+            // Only enforce winning options for normal bets
             if lowerBetType != "timed" && lowerBetType != "contest" {
                 guard let rawWinningOptions = partyResult.winning_options, !rawWinningOptions.isEmpty else {
                     await MainActor.run {
@@ -352,7 +415,6 @@ struct GameResultsView: View {
                 }
             }
             
-            // Clean the winning options to remove any formatting artifacts
             let cleanedWinningOptions = cleanWinningOptions(partyResult.winning_options ?? [])
             
             await MainActor.run {
@@ -361,25 +423,22 @@ struct GameResultsView: View {
             }
             
             print("🔍 Game status: \(gameStatus)")
-            print("🔍 Raw winning options: \(partyResult.winning_options ?? [])")
-            print("🔍 Cleaned winning options: \(cleanedWinningOptions)")
-            print("🔍 Fetching user bets for party ID: \(partyId)")
+            print("🔍 Bet type: \(lowerBetType)")
             
-            // Fetch user bet results
+            // Fetch user bet results with additional fields for contest/timer bets
             let userBetsResponse = try await supabaseClient
                 .from("User Bets")
-                .select("user_id, bet_selection, is_winner")
+                .select("user_id, bet_selection, is_winner, elapsed_time, completed_in_time, final_score")
                 .eq("party_id", value: Int(partyId))
                 .execute()
-            
-            if let rawData = String(data: userBetsResponse.data, encoding: .utf8) {
-                print("🔍 Raw user bets response: \(rawData)")
-            }
             
             struct UserBetData: Codable {
                 let user_id: String
                 let bet_selection: String
-                let is_winner: Bool? // Add this field
+                let is_winner: Bool?
+                let elapsed_time: Int?
+                let completed_in_time: Bool?
+                let final_score: Int?
             }
             
             let userBetsData: [UserBetData] = try JSONDecoder().decode([UserBetData].self, from: userBetsResponse.data)
@@ -401,10 +460,6 @@ struct GameResultsView: View {
                 .in("user_id", values: userIds)
                 .execute()
             
-            if let rawData = String(data: usernamesResponse.data, encoding: .utf8) {
-                print("🔍 Raw usernames response: \(rawData)")
-            }
-            
             struct UsernameData: Codable {
                 let user_id: String
                 let username: String
@@ -413,7 +468,7 @@ struct GameResultsView: View {
             let usernamesData: [UsernameData] = try JSONDecoder().decode([UsernameData].self, from: usernamesResponse.data)
             let userIdToUsername = Dictionary(uniqueKeysWithValues: usernamesData.map { ($0.user_id, $0.username) })
             
-            // Build results
+            // Build results based on bet type
             var allResults: [UserResult] = []
             for userBet in userBetsData {
                 let username = userIdToUsername[userBet.user_id] ?? userBet.user_id
@@ -422,58 +477,66 @@ struct GameResultsView: View {
                     username: username,
                     bet_selection_text: userBet.bet_selection,
                     winningOptions: cleanedWinningOptions,
-                    isWinnerFromDB: userBet.is_winner
+                    isWinnerFromDB: userBet.is_winner,
+                    elapsed_time: userBet.elapsed_time,
+                    completed_in_time: userBet.completed_in_time,
+                    final_score: userBet.final_score,
+                    betType: partyResult.bet_type
                 )
                 allResults.append(userResult)
             }
             
-            let maxScore = allResults.map { $0.score }.max() ?? 0
             var winnersArray: [UserResult] = []
             var losersArray: [UserResult] = []
-
-            if lowerBetType == "timed" || lowerBetType == "contest" {
-                // For timed/contest bets, use the is_winner field from database
-                winnersArray = allResults.filter { result in
-                    return result.is_winner == true
+            
+            if lowerBetType == "contest" {
+                // For contest bets: winners are those who completed target in fastest time
+                let completedTargetUsers = allResults.filter { result in
+                    (result.completed_in_time == true) && (result.final_score ?? 0) >= 0
                 }
-                losersArray = allResults.filter { result in
-                    return result.is_winner != true
-                }
-            } else {
-                // For normal bets, use scoring logic and update is_winner accordingly
-                for result in allResults {
-                    var updatedResult = result
-                    if result.score == maxScore && maxScore > 0 {
-                        // Create a new UserResult with updated is_winner status
-                        let newResult = UserResult(
-                            user_id: result.user_id,
-                            username: result.username,
-                            bet_selection_text: result.bet_selection.joined(separator: ", "),
-                            winningOptions: cleanedWinningOptions,
-                            isWinnerFromDB: true
-                        )
-                        winnersArray.append(newResult)
-                    } else {
-                        // Create a new UserResult with updated is_winner status
-                        let newResult = UserResult(
-                            user_id: result.user_id,
-                            username: result.username,
-                            bet_selection_text: result.bet_selection.joined(separator: ", "),
-                            winningOptions: cleanedWinningOptions,
-                            isWinnerFromDB: false
-                        )
-                        losersArray.append(newResult)
+                
+                if !completedTargetUsers.isEmpty {
+                    // Find the fastest time among those who completed the target
+                    let fastestTime = completedTargetUsers.compactMap { $0.elapsed_time }.min() ?? Int.max
+                    
+                    // All users who completed in the fastest time are winners
+                    let fastestUsers = completedTargetUsers.filter { ($0.elapsed_time ?? Int.max) == fastestTime }
+                    
+                    winnersArray = fastestUsers
+                    losersArray = allResults.filter { result in
+                        !fastestUsers.contains { $0.user_id == result.user_id }
                     }
+                    
+                    // Update winner status in database for contest bets
+                    await updateContestWinnerStatus(winners: winnersArray, losers: losersArray)
+                } else {
+                    // No one completed the target
+                    losersArray = allResults
+                }
+                
+            } else if lowerBetType == "timed" {
+                // For timed bets: use the existing is_winner field from database
+                winnersArray = allResults.filter { $0.is_winner == true }
+                losersArray = allResults.filter { $0.is_winner != true }
+                
+            } else {
+                // For normal bets: use scoring logic
+                let maxScore = allResults.map { $0.score }.max() ?? 0
+                
+                winnersArray = allResults.filter { $0.score == maxScore && maxScore > 0 }
+                losersArray = allResults.filter { $0.score != maxScore || maxScore == 0 }
+                
+                // Update winner status in database for normal bets
+                await updateNormalBetWinnerStatus(winners: winnersArray, losers: losersArray)
+                
+                await MainActor.run {
+                    self.highestScore = maxScore
                 }
             }
             
             print("✅ Final results: \(winnersArray.count) winners, \(losersArray.count) losers")
             
-            // Only update winner status in database for non-timed/contest bets
-            if lowerBetType != "timed" && lowerBetType != "contest" {
-                await updateWinnerStatusInDatabase(winners: winnersArray, losers: losersArray)
-            }
-            
+            // Update wins count for winners (only once)
             if !winnersArray.isEmpty && !hasUpdatedWins {
                 await updateWinsForWinners(winnersArray)
                 await MainActor.run {
@@ -484,52 +547,86 @@ struct GameResultsView: View {
             await MainActor.run {
                 self.winners = winnersArray
                 self.losers = losersArray
-                self.highestScore = maxScore
                 self.isLoading = false
             }
             
         } catch {
-            print("❌ Complete error details: \(error)")
+            print("❌ Error fetching results: \(error)")
             await MainActor.run {
                 self.errorMessage = "Error loading results: \(error.localizedDescription)"
                 self.isLoading = false
             }
         }
     }
-
     
-    private func updateWinnerStatusInDatabase(winners: [UserResult], losers: [UserResult]) async {
-        print("📝 Updating winner status in database")
+    private func updateContestWinnerStatus(winners: [UserResult], losers: [UserResult]) async {
+        print("📝 Updating contest winner status in database")
         
         // Update winners
         for winner in winners {
             do {
-                let _ = try await supabaseClient
+                _ = try await supabaseClient
                     .from("User Bets")
                     .update(["is_winner": true])
                     .eq("party_id", value: Int(partyId))
                     .eq("user_id", value: winner.user_id)
                     .execute()
                 
-                print("✅ Updated winner status for user: \(winner.username)")
+                print("✅ Updated contest winner status for user: \(winner.username)")
             } catch {
-                print("❌ Failed to update winner status for user \(winner.username): \(error)")
+                print("❌ Failed to update contest winner status for user \(winner.username): \(error)")
             }
         }
         
         // Update losers
         for loser in losers {
             do {
-                let _ = try await supabaseClient
+                _ = try await supabaseClient
                     .from("User Bets")
                     .update(["is_winner": false])
                     .eq("party_id", value: Int(partyId))
                     .eq("user_id", value: loser.user_id)
                     .execute()
                 
-                print("✅ Updated loser status for user: \(loser.username)")
+                print("✅ Updated contest loser status for user: \(loser.username)")
             } catch {
-                print("❌ Failed to update loser status for user \(loser.username): \(error)")
+                print("❌ Failed to update contest loser status for user \(loser.username): \(error)")
+            }
+        }
+    }
+    
+    private func updateNormalBetWinnerStatus(winners: [UserResult], losers: [UserResult]) async {
+        print("📝 Updating normal bet winner status in database")
+        
+        // Update winners
+        for winner in winners {
+            do {
+                _ = try await supabaseClient
+                    .from("User Bets")
+                    .update(["is_winner": true])
+                    .eq("party_id", value: Int(partyId))
+                    .eq("user_id", value: winner.user_id)
+                    .execute()
+                
+                print("✅ Updated normal bet winner status for user: \(winner.username)")
+            } catch {
+                print("❌ Failed to update normal bet winner status for user \(winner.username): \(error)")
+            }
+        }
+        
+        // Update losers
+        for loser in losers {
+            do {
+                _ = try await supabaseClient
+                    .from("User Bets")
+                    .update(["is_winner": false])
+                    .eq("party_id", value: Int(partyId))
+                    .eq("user_id", value: loser.user_id)
+                    .execute()
+                
+                print("✅ Updated normal bet loser status for user: \(loser.username)")
+            } catch {
+                print("❌ Failed to update normal bet loser status for user \(loser.username): \(error)")
             }
         }
     }
@@ -539,15 +636,13 @@ struct GameResultsView: View {
         
         for winner in winners {
             do {
-                // Use PostgreSQL function to increment wins atomically
-                let _ = try await supabaseClient
+                _ = try await supabaseClient
                     .rpc("increment_user_wins", params: ["user_id_param": winner.user_id])
                     .execute()
                 
                 print("✅ Successfully incremented wins for user: \(winner.username)")
             } catch {
                 print("❌ Failed to increment wins for user \(winner.username): \(error)")
-                // Continue with other users even if one fails
             }
         }
     }
@@ -558,13 +653,13 @@ struct UserSelectionDetailView: View {
     let userResult: GameResultsView.UserResult
     let winningOptions: [String]
     let betPrompt: String
+    let betType: String
     
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Background gradient
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(red: 0.1, green: 0.1, blue: 0.2),
@@ -579,8 +674,7 @@ struct UserSelectionDetailView: View {
                     VStack(spacing: 24) {
                         // User Header
                         VStack(spacing: 12) {
-                            // User icon based on winner/loser status
-                            Image(systemName: userResult.is_winner || userResult.score > 0 ? "person.circle.fill" : "person.circle")
+                            Image(systemName: userResult.is_winner ? "person.circle.fill" : "person.circle")
                                 .font(.system(size: 60))
                                 .foregroundColor(userResult.is_winner ? .green : .orange)
                             
@@ -588,18 +682,85 @@ struct UserSelectionDetailView: View {
                                 .font(.system(size: 24, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
                             
-                            // Score badge
-                            HStack {
-                                Image(systemName: "star.fill")
-                                    .foregroundColor(.yellow)
-                                Text("Score: \(userResult.score)/\(winningOptions.count)")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
+                            // Show different info based on bet type
+                            if betType.lowercased() == "contest" {
+                                VStack(spacing: 8) {
+                                    if let finalScore = userResult.final_score {
+                                        HStack {
+                                            Image(systemName: "target")
+                                                .foregroundColor(.blue)
+                                            Text("Final Score: \(finalScore)")
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    
+                                    if let elapsedTime = userResult.elapsed_time {
+                                        HStack {
+                                            Image(systemName: "timer")
+                                                .foregroundColor(.orange)
+                                            Text("Time: \(formatTime(elapsedTime))")
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    
+                                    if let completed = userResult.completed_in_time {
+                                        HStack {
+                                            Image(systemName: completed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                                .foregroundColor(completed ? .green : .red)
+                                            Text(completed ? "Target Achieved" : "Target Not Reached")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(completed ? .green : .red)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(12)
+                                
+                            } else if betType.lowercased() == "timed" {
+                                VStack(spacing: 8) {
+                                    if let elapsedTime = userResult.elapsed_time {
+                                        HStack {
+                                            Image(systemName: "timer")
+                                                .foregroundColor(.orange)
+                                            Text("Time: \(formatTime(elapsedTime))")
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    
+                                    if let completed = userResult.completed_in_time {
+                                        HStack {
+                                            Image(systemName: completed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                                .foregroundColor(completed ? .green : .red)
+                                            Text(completed ? "Completed in Time" : "Time Expired")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(completed ? .green : .red)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(12)
+                                
+                            } else {
+                                // Normal bet - show score
+                                HStack {
+                                    Image(systemName: "star.fill")
+                                        .foregroundColor(.yellow)
+                                    Text("Score: \(userResult.score)/\(winningOptions.count)")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.yellow.opacity(0.2))
+                                .cornerRadius(20)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.yellow.opacity(0.2))
-                            .cornerRadius(20)
                         }
                         .padding(.top, 20)
                         
@@ -620,53 +781,79 @@ struct UserSelectionDetailView: View {
                             .padding(.horizontal, 24)
                         }
                         
-                        // User's Selections
+                        // User's Response/Selections
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("\(userResult.username)'s Selections:")
+                            Text("\(userResult.username)'s Response:")
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 24)
                             
-                            ForEach(userResult.bet_selection, id: \.self) { selection in
-                                let isCorrect = winningOptions.contains { winningOption in
-                                    selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ==
-                                    winningOption.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                                }
-                                
-                                HStack {
-                                    Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                        .foregroundColor(isCorrect ? .green : .red)
-                                        .font(.system(size: 20))
-                                    
-                                    Text(selection)
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white)
-                                    
-                                    Spacer()
-                                    
-                                    if isCorrect {
-                                        Text("✓ Correct")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.green)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.green.opacity(0.2))
-                                            .cornerRadius(8)
+                            if betType.lowercased() == "contest" || betType.lowercased() == "timed" {
+                                // For contest/timer bets, show the description
+                                ForEach(userResult.bet_selection, id: \.self) { response in
+                                    HStack {
+                                        Image(systemName: "info.circle.fill")
+                                            .foregroundColor(.blue)
+                                            .font(.system(size: 20))
+                                        
+                                        Text(response)
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.white)
+                                        
+                                        Spacer()
                                     }
+                                    .padding()
+                                    .background(Color.blue.opacity(0.2))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.blue, lineWidth: 1)
+                                    )
+                                    .padding(.horizontal, 24)
                                 }
-                                .padding()
-                                .background(isCorrect ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
-                                .cornerRadius(12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(isCorrect ? Color.green : Color.red, lineWidth: 1)
-                                )
-                                .padding(.horizontal, 24)
+                            } else {
+                                // For normal bets, show selections with correct/incorrect indicators
+                                ForEach(userResult.bet_selection, id: \.self) { selection in
+                                    let isCorrect = winningOptions.contains { winningOption in
+                                        selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ==
+                                        winningOption.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                                    }
+                                    
+                                    HStack {
+                                        Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                            .foregroundColor(isCorrect ? .green : .red)
+                                            .font(.system(size: 20))
+                                        
+                                        Text(selection)
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.white)
+                                        
+                                        Spacer()
+                                        
+                                        if isCorrect {
+                                            Text("✓ Correct")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundColor(.green)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.green.opacity(0.2))
+                                                .cornerRadius(8)
+                                        }
+                                    }
+                                    .padding()
+                                    .background(isCorrect ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(isCorrect ? Color.green : Color.red, lineWidth: 1)
+                                    )
+                                    .padding(.horizontal, 24)
+                                }
                             }
                         }
                         
-                        // Correct Answers Section
-                        if !winningOptions.isEmpty {
+                        // Correct Answers Section (only for normal bets)
+                        if !winningOptions.isEmpty && betType.lowercased() == "normal" {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Correct Answers:")
                                     .font(.system(size: 18, weight: .semibold))
@@ -711,10 +898,23 @@ struct UserSelectionDetailView: View {
             }
         }
     }
+    
+    private func formatTime(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
+        }
+    }
 }
 
 struct WinnerCard: View {
     let userResult: GameResultsView.UserResult
+    let betType: String
     let onTap: () -> Void
     
     var body: some View {
@@ -724,14 +924,34 @@ struct WinnerCard: View {
                 .font(.system(size: 24))
                 .foregroundColor(.yellow)
             
-            // Score badge
-            Text("\(userResult.score) pts")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.yellow)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(Color.yellow.opacity(0.2))
-                .cornerRadius(10)
+            // Score/info badge based on bet type
+            if betType.lowercased() == "contest" {
+                if let elapsedTime = userResult.elapsed_time {
+                    Text("\(formatTime(elapsedTime))")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.yellow)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.yellow.opacity(0.2))
+                        .cornerRadius(10)
+                }
+            } else if betType.lowercased() == "timed" {
+                Text("✓ Done")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(10)
+            } else {
+                Text("\(userResult.score) pts")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.yellow)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.yellow.opacity(0.2))
+                    .cornerRadius(10)
+            }
             
             // Username - tappable
             Button(action: onTap) {
@@ -742,31 +962,41 @@ struct WinnerCard: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            // Their bet selection preview
+            // Response preview
             VStack(spacing: 4) {
-                Text("Selected:")
+                Text("Response:")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 
-                // Show only first 2 selections with "..." if more
-                ForEach(Array(userResult.bet_selection.prefix(2)), id: \.self) { selection in
-                    Text(selection)
+                if betType.lowercased() == "contest" || betType.lowercased() == "timed" {
+                    Text(userResult.bet_selection.first ?? "")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(Color.green.opacity(0.3))
                         .cornerRadius(6)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                } else {
+                    ForEach(Array(userResult.bet_selection.prefix(2)), id: \.self) { selection in
+                        Text(selection)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.3))
+                            .cornerRadius(6)
+                            .lineLimit(1)
+                    }
+                    
+                    if userResult.bet_selection.count > 2 {
+                        Text("...")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
                 
-                if userResult.bet_selection.count > 2 {
-                    Text("...")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                Text("Tap to view all")
+                Text("Tap to view details")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.white.opacity(0.6))
                     .italic()
@@ -784,10 +1014,17 @@ struct WinnerCard: View {
             onTap()
         }
     }
+    
+    private func formatTime(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%d:%02d", minutes, secs)
+    }
 }
 
 struct LoserCard: View {
     let userResult: GameResultsView.UserResult
+    let betType: String
     let onTap: () -> Void
     
     var body: some View {
@@ -797,14 +1034,41 @@ struct LoserCard: View {
                 .font(.system(size: 24))
                 .foregroundColor(.orange)
             
-            // Score badge
-            Text("\(userResult.score) pts")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.orange)
+            // Score/info badge based on bet type
+            if betType.lowercased() == "contest" {
+                VStack(spacing: 2) {
+                    if let finalScore = userResult.final_score {
+                        Text("\(finalScore) pts")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.orange)
+                    }
+                    if let elapsedTime = userResult.elapsed_time {
+                        Text("\(formatTime(elapsedTime))")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.orange.opacity(0.8))
+                    }
+                }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
                 .background(Color.orange.opacity(0.2))
                 .cornerRadius(10)
+            } else if betType.lowercased() == "timed" {
+                Text("X Failed")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.2))
+                    .cornerRadius(10)
+            } else {
+                Text("\(userResult.score) pts")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.2))
+                    .cornerRadius(10)
+            }
             
             // Username - tappable
             Button(action: onTap) {
@@ -815,31 +1079,41 @@ struct LoserCard: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            // Their bet selection preview
+            // Response preview
             VStack(spacing: 4) {
-                Text("Selected:")
+                Text("Response:")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 
-                // Show only first 2 selections with "..." if more
-                ForEach(Array(userResult.bet_selection.prefix(2)), id: \.self) { selection in
-                    Text(selection)
+                if betType.lowercased() == "contest" || betType.lowercased() == "timed" {
+                    Text(userResult.bet_selection.first ?? "")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(Color.red.opacity(0.3))
                         .cornerRadius(6)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                } else {
+                    ForEach(Array(userResult.bet_selection.prefix(2)), id: \.self) { selection in
+                        Text(selection)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.3))
+                            .cornerRadius(6)
+                            .lineLimit(1)
+                    }
+                    
+                    if userResult.bet_selection.count > 2 {
+                        Text("...")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
                 
-                if userResult.bet_selection.count > 2 {
-                    Text("...")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                Text("Tap to view all")
+                Text("Tap to view details")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.white.opacity(0.6))
                     .italic()
@@ -857,12 +1131,10 @@ struct LoserCard: View {
             onTap()
         }
     }
-}
-
-#Preview {
-    GameResultsView(partyId: 1, partyName: "Test Party")
-        .environmentObject(SessionManager(supabaseClient: SupabaseClient(
-            supabaseURL: URL(string: "https://example.supabase.co")!,
-            supabaseKey: "public-anon-key"
-        )))
+    
+    private func formatTime(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%d:%02d", minutes, secs)
+    }
 }
