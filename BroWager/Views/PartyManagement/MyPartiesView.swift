@@ -76,18 +76,15 @@ struct MyPartiesView: View {
         switch partyFilter {
         case .active:
             return parties.filter { party in
-                // Party is active if:
-                // 1. Game status is "waiting" (not started yet), OR
-                // 2. Game status is not "ended" AND not in wins/losses
-                print("The party status is\(party.game_status)")
-                
-                if party.game_status == "waiting" {
-                    return true
-                }
-                
-                // For other statuses, check if it's not in wins or losses
                 guard let partyId = party.id else { return false }
-                return !wonPartyIds.contains(partyId) && !lostPartyIds.contains(partyId)
+                
+                let isWinner = wonPartyIds.contains(partyId)
+                let isLoser = lostPartyIds.contains(partyId)
+                
+                // Party is active only if:
+                // 1. User hasn't won or lost AND
+                // 2. Game is either waiting or not ended
+                return !isWinner && !isLoser && party.game_status != "ended"
             }
         case .wins:
             return parties.filter { party in
