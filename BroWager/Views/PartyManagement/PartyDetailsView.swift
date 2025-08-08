@@ -763,21 +763,28 @@ struct PartyDetailsView: View {
     // MARK: - Computed Properties for Buttons
     
     private var makeBetButton: some View {
-        Button(action: {
-            showPlaceBetView = true
-        }) {
-            HStack {
-                Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                Text(hasPlacedBet ? "Edit Bet" : "Make a Bet")
-                    .font(.system(size: 18, weight: .bold))
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Color.orange.opacity(0.9))
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        // Only show button if: no bet placed, OR bet is placed but it's a normal type (editable)
+        if !hasPlacedBet || (hasPlacedBet && betType.lowercased() == "normal") {
+            AnyView(
+                Button(action: {
+                    showPlaceBetView = true
+                }) {
+                    HStack {
+                        Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text(hasPlacedBet ? "Edit Bet" : "Make a Bet")
+                            .font(.system(size: 18, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.orange.opacity(0.9))
+                    .cornerRadius(16)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+            )
+        } else {
+            AnyView(EmptyView())
         }
     }
     

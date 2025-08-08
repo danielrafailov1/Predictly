@@ -1,6 +1,9 @@
 import SwiftUI
 import Supabase
 
+import SwiftUI
+import Supabase
+
 struct PlaceBetView: View {
     let partyId: Int64
     let userId: String
@@ -114,11 +117,7 @@ struct PlaceBetView: View {
                                         print("🔍 Timer/Contest section is showing for betType: \(betType)")
                                     }
                             } else {
-//                                Text("Debug: betType is '\(betType)' - not showing timer")
-//                                    .foregroundColor(.yellow)
-//                                    .onAppear {
-//                                        print("🔍 Timer section NOT showing - betType: '\(betType)'")
-//                                    }
+
                             }
                             
                             // Bet Prompt
@@ -165,15 +164,7 @@ struct PlaceBetView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        stopAllTimers()
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
-            }
+    
         }
         .onAppear {
             // Set navigation bar appearance
@@ -438,7 +429,7 @@ struct PlaceBetView: View {
                     Button(action: finishContest) {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                            Text("Finish Contest")
+                            Text("Quit and Accept Loss")
                         }
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
@@ -446,20 +437,6 @@ struct PlaceBetView: View {
                         .padding()
                         .background(Color.blue.opacity(0.8))
                         .cornerRadius(12)
-                    }
-                }
-                
-                if contestStarted && !contestFinished {
-                    Button(action: resetContest) {
-                        HStack {
-                            Image(systemName: "arrow.clockwise.circle.fill")
-                            Text("Reset Contest")
-                        }
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.gray.opacity(0.8))
-                        .cornerRadius(8)
                     }
                 }
             }
@@ -762,6 +739,27 @@ struct PlaceBetView: View {
         let newScore = contestScore + change
         if newScore >= 0 {
             contestScore = newScore
+            
+            // AUTO-COMPLETE: Check if target reached
+            if contestScore >= contestTarget && !contestFinished {
+                // Automatically complete the contest when target is reached
+                autoCompleteContest()
+            }
+        }
+    }
+    
+    // NEW: Auto-complete function for when target is reached
+    private func autoCompleteContest() {
+        contestFinished = true
+        endTime = Date()
+        elapsedTimer?.invalidate()
+        elapsedTimer = nil
+        
+        print("🎉 Contest auto-completed! Target reached: \(contestScore)/\(contestTarget)")
+        
+        // User achieved the target, so they win
+        Task {
+            await markBetCompleted(completedInTime: true, score: contestScore)
         }
     }
     
@@ -771,23 +769,12 @@ struct PlaceBetView: View {
         elapsedTimer?.invalidate()
         elapsedTimer = nil
         
-        // For contest bets, determine if they won based on reaching the target
+        // For manual contest finish (quit early), determine if they won based on reaching the target
         let achievedTarget = contestScore >= contestTarget
         
         Task {
             await markBetCompleted(completedInTime: achievedTarget, score: contestScore)
         }
-    }
-    
-    private func resetContest() {
-        contestScore = 0
-        elapsedTime = 0
-        contestStarted = false
-        contestFinished = false
-        startTime = nil
-        endTime = nil
-        elapsedTimer?.invalidate()
-        elapsedTimer = nil
     }
     
     // MARK: - Helper Functions
@@ -855,12 +842,6 @@ struct PlaceBetView: View {
                 // Parse the bet_selection back into an array for normal bets
                 if betType.lowercased() == "normal" {
                     let optionsArray = existingBet.bet_selection.components(separatedBy: ", ")
-                    await MainActor.run {
-                        self.existingBetId = existingBet.id
-                        self.selectedOptions = Set(optionsArray)
-                        self.isLoading = false
-                    }
-                } else {
                     await MainActor.run {
                         self.existingBetId = existingBet.id
                         self.isLoading = false
@@ -1099,27 +1080,4 @@ struct PlaceBetView: View {
         }
     }
 
-}
-
-#Preview {
-    PlaceBetView(
-        partyId: 1,
-        userId: "user123",
-        partyName: "Test Party",
-        betPrompt: "Complete this challenge within the time limit",
-        betOptions: ["Option A", "Option B", "Option C"],
-        betTerms: "Complete the task within the given timeframe",
-        maxSelections: 1,
-        betType: "timed",
-        timerDuration: 300, // 5 minutes
-        allowEarlyFinish: true,
-        contestUnit: "points",
-        contestTarget: 100,
-        allowTies: false,
-        isEditing: false
-    )
-    .environmentObject(SessionManager(supabaseClient: SupabaseClient(
-        supabaseURL: URL(string: "https://example.supabase.co")!,
-        supabaseKey: "public-anon-key"
-    )))
 }
