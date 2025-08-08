@@ -1192,11 +1192,12 @@ struct PartyDetailsView: View {
             struct GameStatusResult: Codable { let game_status: String? }
             let results = try JSONDecoder().decode([GameStatusResult].self, from: response.data)
             
-            if let result = results.first {
+            if let result = results.first, let gameStatus = result.game_status {
                 await MainActor.run {
-                    self.gameStatus = result.game_status ?? "waiting"
+                    self.gameStatus = gameStatus
                 }
             }
+
         } catch {
             print("Error fetching game status: \(error)")
             // Default to waiting if there's an error
@@ -1434,13 +1435,13 @@ struct PartyDetailsView: View {
                 let status: String?
                 let bet: String?
                 let terms: String?
-                let game_status: String?
+                let game_status: String
                 let max_selections: Int?
-                let timer_duration: Int?  // NEW
-                let allow_early_finish: Bool?  // NEW
-                let contest_unit: String?  // NEW
-                let contest_target: Int?  // NEW
-                let allow_ties: Bool?  // NEW
+                let timer_duration: Int?
+                let allow_early_finish: Bool?
+                let contest_unit: String?
+                let contest_target: Int?
+                let allow_ties: Bool?
             }
             
             let partyArray = try decoder.decode([PartyResult].self, from: partyResponse.data)
@@ -1474,7 +1475,7 @@ struct PartyDetailsView: View {
                 self.status = partyResult.status ?? "open"
                 self.betPrompt = partyResult.bet ?? ""
                 self.betTerms = partyResult.terms ?? ""
-                self.gameStatus = partyResult.game_status ?? "waiting"
+                self.gameStatus = partyResult.game_status
                 self.maxSelections = partyResult.max_selections ?? 1
                 
                 // NEW: Set timer/contest specific properties

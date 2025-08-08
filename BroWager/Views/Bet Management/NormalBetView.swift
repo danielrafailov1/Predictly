@@ -2997,7 +2997,7 @@ struct FinalizeBetView: View {
             let max_members: Int
             let bet: String
             let bet_date: String?
-            let bet_type: String // Updated to match database column name
+            let bet_type: String
             let options: [String]
             let terms: String
             let status: String
@@ -3026,7 +3026,7 @@ struct FinalizeBetView: View {
             timer_duration: timerDuration,
             allow_early_finish: betType == "timed" ? true : nil, // Default for timer bets
             contest_unit: betType == "contest" ? "points" : nil, // Default for contest bets
-            contest_target: betType == "contest" ? 100 : nil, // Default target for contest bets
+            contest_target: betType == "contest" ? target : nil, // Default target for contest bets
             allow_ties: betType == "contest" ? false : nil // Default for contest bets
         )
 

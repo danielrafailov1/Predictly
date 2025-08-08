@@ -315,7 +315,7 @@ struct GameResultsView: View {
             struct PartyResult: Codable {
                 let winning_options: [String]?
                 let bet: String?
-                let game_status: String?
+                let game_status: String
                 let bet_type: String
             }
             
@@ -332,7 +332,7 @@ struct GameResultsView: View {
             let lowerBetType = partyResult.bet_type.lowercased()
             
             // CHECK 1: Verify the game has ended before showing results
-            let gameStatus = partyResult.game_status ?? ""
+            let gameStatus = partyResult.game_status
             if gameStatus != "ended" {
                 await MainActor.run {
                     self.errorMessage = "Game results are not available yet. The host is still determining the outcome."

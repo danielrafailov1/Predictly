@@ -75,11 +75,36 @@ struct MyPartiesView: View {
     var filteredParties: [Party] {
         switch partyFilter {
         case .active:
-            return parties.filter { !wonPartyIds.contains($0.id ?? -1) && !lostPartyIds.contains($0.id ?? -1) }
+            return parties.filter { party in
+                // Party is active if:
+                // 1. Game status is "waiting" (not started yet), OR
+                // 2. Game status is not "ended" AND not in wins/losses
+                print("The party status is\(party.game_status)")
+                
+                if party.game_status == "waiting" {
+                    return true
+                }
+                
+                // For other statuses, check if it's not in wins or losses
+                guard let partyId = party.id else { return false }
+                return !wonPartyIds.contains(partyId) && !lostPartyIds.contains(partyId)
+            }
         case .wins:
-            return parties.filter { wonPartyIds.contains($0.id ?? -1) }
+            return parties.filter { party in
+                guard let partyId = party.id else { return false }
+                // Only show as win if game is actually ended and marked as win
+                let isWinner = wonPartyIds.contains(partyId)
+                let gameEnded = party.status != "Waiting"
+                return isWinner && gameEnded
+            }
         case .losses:
-            return parties.filter { lostPartyIds.contains($0.id ?? -1) }
+            return parties.filter { party in
+                guard let partyId = party.id else { return false }
+                // Only show as loss if game is actually ended and marked as loss
+                let isLoser = lostPartyIds.contains(partyId)
+                let gameEnded = party.status != "Waiting"
+                return isLoser && gameEnded
+            }
         case .open:
             return openParties
         }
@@ -627,7 +652,7 @@ struct MyPartiesView: View {
             let party_code: String?
             let created_by: String?
             let privacy_option: String?
-            let game_status: String?
+            let game_status: String
             let created_at: String?
             let bet: String?
             let terms: String?
@@ -706,6 +731,7 @@ struct MyPartiesView: View {
                     options: p.options,
                     terms: p.terms,
                     status: p.status,
+                    game_status: p.game_status,
                     max_selections: p.max_selections,
                     timer_duration: p.timer_duration,
                     allow_early_finish: p.allow_early_finish,
@@ -797,6 +823,7 @@ struct MyPartiesView: View {
             let options: [String]?
             let max_members: Int?
             let status: String?
+            let game_status: String
             let max_selections: Int?
             let timer_duration: Int?
             let allow_early_finish: Bool?
@@ -838,7 +865,7 @@ struct MyPartiesView: View {
             // Fetch only parties where user is a member, with pagination
             let partiesResponse = try await supabaseClient
                 .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
+                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
                 .in("id", values: partyIdStrings)
                 .order("created_at", ascending: false)
                 .range(from: isInitialLoad ? 0 : currentOffset, to: rangeEnd)
@@ -889,6 +916,7 @@ struct MyPartiesView: View {
                     options: p.options,
                     terms: p.terms,
                     status: p.status,
+                    game_status: p.game_status,
                     max_selections: p.max_selections,
                     timer_duration: p.timer_duration,
                     allow_early_finish: p.allow_early_finish,
