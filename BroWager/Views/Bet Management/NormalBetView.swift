@@ -38,7 +38,7 @@ struct NormalBetView: View {
     @State private var selectedDate = Date()
     @State private var isDateEnabled = false // New toggle state
     @State private var isNextActive = false
-    @State private var optionCount = 4
+    @State private var optionCount = 2
     @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
     @State private var isOptimizingQuestion = false
@@ -268,7 +268,7 @@ struct NormalBetView: View {
             .padding(.horizontal)
         }
     }
-
+    
     private var timedBetOptions: some View {
         VStack(alignment: .leading) {
             Text("Set Timer")
@@ -1189,7 +1189,7 @@ extension AIServices {
 struct BetOptionsView: View {
     @Binding var navPath: NavigationPath
     let betPrompt: String
-    let selectedDate: Date? // Now optional
+    let selectedDate: Date?
     let email: String
     let userId: UUID?
     let optionCount: Int
@@ -1206,6 +1206,7 @@ struct BetOptionsView: View {
     @State private var isNextActive = false
     @State private var isGeneratingOptions = false
     @State private var isOptimizing = false
+    @State private var target = 1
     
     private var filledOptionsCount: Int {
         betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
@@ -1246,6 +1247,10 @@ struct BetOptionsView: View {
                         optionsListSection
                     }
                     
+                    if betType == "contest" {
+                        ContestAmountPicker
+                    }
+                    
                     termsHeaderSection
                     termsEditorSection
                     
@@ -1265,6 +1270,54 @@ struct BetOptionsView: View {
     }
 
     // MARK: - Extracted View Components
+    
+    private var ContestAmountPicker: some View {
+        Group {
+            // Number of Options Section
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Target Goal")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Spacer()
+                    
+                    // Counter/Ticker on the right
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            if target > 1 {
+                                target = target - 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(target > 1 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(target <= 1)
+                        
+                        Text("\(target)")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(minWidth: 30)
+                        
+                        Button(action: {
+                            target += 1
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
+    }
+
 
     private var backgroundGradient: some View {
         LinearGradient(
