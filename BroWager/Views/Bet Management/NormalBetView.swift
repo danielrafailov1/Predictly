@@ -1207,6 +1207,7 @@ struct BetOptionsView: View {
     @State private var isGeneratingOptions = false
     @State private var isOptimizing = false
     @State private var target = 1
+    @State private var isContestAmountPickerEnabled = false
     
     private var filledOptionsCount: Int {
         betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
@@ -1248,7 +1249,17 @@ struct BetOptionsView: View {
                     }
                     
                     if betType == "contest" {
-                        ContestAmountPicker
+                        HStack {
+                            Text(isContestAmountPickerEnabled ? "Disable Target Score": "Enable Target Score")
+                            Spacer()
+                            Toggle("", isOn: $isContestAmountPickerEnabled)
+                                .toggleStyle(SwitchToggleStyle(tint: .blue))
+                        }
+                        .padding(.horizontal)
+                        
+                        if isContestAmountPickerEnabled {
+                            ContestAmountPicker
+                        }
                     }
                     
                     termsHeaderSection
