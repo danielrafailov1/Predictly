@@ -57,7 +57,6 @@
 		4B786A252E314C79004E5105 /* NormalBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A242E314C72004E5105 /* NormalBetView.swift */; };
 		4B7C5B842DFFB05400AE8600 /* BetTypeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7C5B832DFFB05400AE8600 /* BetTypeView.swift */; };
 		4B7C5B862DFFB50000AE8600 /* CustomBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */; };
-		4BDD17862E01F13F00CD117D /* SportSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD17852E01F13F00CD117D /* SportSelectionView.swift */; };
 		4BDD178A2E01F37200CD117D /* MyPartiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD17892E01F37200CD117D /* MyPartiesView.swift */; };
 		4BDD178C2E01F3F400CD117D /* LoginSignupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD178B2E01F3F400CD117D /* LoginSignupView.swift */; };
 		4BDD17902E01F53F00CD117D /* GameEventView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD178F2E01F53F00CD117D /* GameEventView.swift */; };
@@ -133,7 +132,6 @@
 		4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CustomBetView.swift; sourceTree = "<group>"; };
 		4BA56FF92E32BB61009A210A /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		4BAB2E6C2DD66AE9004181C0 /* BroWager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BroWager.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		4BDD17852E01F13F00CD117D /* SportSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportSelectionView.swift; sourceTree = "<group>"; };
 		4BDD17892E01F37200CD117D /* MyPartiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyPartiesView.swift; sourceTree = "<group>"; };
 		4BDD178B2E01F3F400CD117D /* LoginSignupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginSignupView.swift; sourceTree = "<group>"; };
 		4BDD178F2E01F53F00CD117D /* GameEventView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEventView.swift; sourceTree = "<group>"; };
@@ -238,7 +236,6 @@
 				4B7C5B852DFFB50000AE8600 /* CustomBetView.swift */,
 				4B7C5B832DFFB05400AE8600 /* BetTypeView.swift */,
 				4BE606D12E36F22F009E0EBC /* GameResultsView.swift */,
-				4BDD17852E01F13F00CD117D /* SportSelectionView.swift */,
 				4BDD178F2E01F53F00CD117D /* GameEventView.swift */,
 			);
 			path = "Bet Management";
@@ -302,6 +299,8 @@
 		4B2D15C42DFCB8600068E5E4 /* BroWager */ = {
 			isa = PBXGroup;
 			children = (
+				4B5D5CDD2E0C9DA7000B05AC /* BroWager.entitlements */,
+				4BF3C88D2E088BAA00872BEC /* Info.plist */,
 				4BFA57042DFCB36400D69E6C /* App */,
 				4B2D15782DFCB3B50068E5E4 /* Assets */,
 				4B6E45CA2E47C5E800376E7E /* Environment */,
@@ -327,8 +326,6 @@
 		4B6E45CA2E47C5E800376E7E /* Environment */ = {
 			isa = PBXGroup;
 			children = (
-				4B5D5CDD2E0C9DA7000B05AC /* BroWager.entitlements */,
-				4BF3C88D2E088BAA00872BEC /* Info.plist */,
 				4B5D5CDF2E0CB5A4000B05AC /* SupabaseEnvironmentKey.swift */,
 			);
 			path = Environment;
@@ -573,7 +570,6 @@
 				4B56EEF22E15ECBA0088E513 /* PartyChatView.swift in Sources */,
 				4B56EEEE2E15B2140088E513 /* HostBetGenerationView.swift in Sources */,
 				4B5D5CE62E0CD758000B05AC /* SessionManager.swift in Sources */,
-				4BDD17862E01F13F00CD117D /* SportSelectionView.swift in Sources */,
 				4BF3C89C2E0A451A00872BEC /* ProfileIconOverlay.swift in Sources */,
 				4B6AE1102E05CF5C00656DF3 /* InviteOthersToPartyView.swift in Sources */,
 				4B5D5CEA2E0E56D5000B05AC /* BetType.swift in Sources */,
