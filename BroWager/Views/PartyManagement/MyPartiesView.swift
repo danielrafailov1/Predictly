@@ -76,31 +76,20 @@ struct MyPartiesView: View {
         switch partyFilter {
         case .active:
             return parties.filter { party in
-                guard let partyId = party.id else { return false }
-                
-                let isWinner = wonPartyIds.contains(partyId)
-                let isLoser = lostPartyIds.contains(partyId)
-                
-                // Party is active only if:
-                // 1. User hasn't won or lost AND
-                // 2. Game is either waiting or not ended
-                return !isWinner && !isLoser && party.game_status != "ended"
+                // If game status is 'waiting', always show in Active regardless of win/loss status
+                return party.game_status == "waiting"
             }
         case .wins:
             return parties.filter { party in
                 guard let partyId = party.id else { return false }
-                // Only show as win if game is actually ended and marked as win
-                let isWinner = wonPartyIds.contains(partyId)
-                let gameEnded = party.status != "Waiting"
-                return isWinner && gameEnded
+                // Show parties where user is marked as winner AND game is not waiting
+                return wonPartyIds.contains(partyId) && party.game_status != "waiting"
             }
         case .losses:
             return parties.filter { party in
                 guard let partyId = party.id else { return false }
-                // Only show as loss if game is actually ended and marked as loss
-                let isLoser = lostPartyIds.contains(partyId)
-                let gameEnded = party.status != "Waiting"
-                return isLoser && gameEnded
+                // Show parties where user is marked as loser AND game is not waiting
+                return lostPartyIds.contains(partyId) && party.game_status != "waiting"
             }
         case .open:
             return openParties
@@ -122,6 +111,12 @@ struct MyPartiesView: View {
     private func cardBackgroundColor(for party: Party) -> Color {
         guard let partyId = party.id else { return Color.white.opacity(0.08) }
 
+        // Don't color waiting parties - keep them neutral
+        if party.game_status == "waiting" {
+            return Color.white.opacity(0.08)
+        }
+        
+        // Color completed parties based on win/loss status
         if wonPartyIds.contains(partyId) {
             return Color.green.opacity(0.2)
         } else if lostPartyIds.contains(partyId) {

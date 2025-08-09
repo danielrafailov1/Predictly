@@ -228,7 +228,7 @@ struct PlaceBetView: View {
                         .background(Color.green.opacity(0.8))
                         .cornerRadius(10)
                     }
-                } else if timerRunning && !isTimerFinished {
+                } else if timerRunning && !isTimerFinished && timeRemaining > 0 {
                     Button(action: pauseTimer) {
                         HStack(spacing: 4) {
                             Image(systemName: "pause.circle.fill")
@@ -269,7 +269,7 @@ struct PlaceBetView: View {
                         .background(Color.gray.opacity(0.8))
                         .cornerRadius(10)
                     }
-                } else if !timerRunning && hasTimerStarted && !isTimerFinished {
+                } else if !timerRunning && hasTimerStarted && !isTimerFinished && timeRemaining > 0 {
                     Button(action: resumeTimer) {
                         HStack(spacing: 6) {
                             Image(systemName: "play.circle.fill")
@@ -294,6 +294,42 @@ struct PlaceBetView: View {
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.8))
                         .cornerRadius(10)
+                    }
+                }
+                else if timeRemaining <= 0 && !isTimerFinished {
+                    VStack(spacing: 8) {
+                        Text("Time's up! Did you complete the task?")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                        
+                        HStack(spacing: 12) {
+                            Button(action: markTaskCompleted) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text("Yes, Completed")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.8))
+                                .cornerRadius(8)
+                            }
+                            
+                            Button(action: markTaskNotCompleted) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "xmark.circle.fill")
+                                    Text("No, Did Not Complete")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.8))
+                                .cornerRadius(8)
+                            }
+                        }
                     }
                 }
             }
@@ -677,8 +713,23 @@ struct PlaceBetView: View {
         stopAllTimers()
         isTimerFinished = true
         endTime = Date()
+    }
+    
+    private func markTaskCompleted() {
+        stopAllTimers()
+        isTimerFinished = true
+        endTime = Date()
         
-        // Don't update win/loss status here - only store completion data
+        Task {
+            await storeBetCompletion(completedInTime: true, score: 1)
+        }
+    }
+    
+    private func markTaskNotCompleted() {
+        stopAllTimers()
+        isTimerFinished = true
+        endTime = Date()
+        
         Task {
             await storeBetCompletion(completedInTime: false, score: 0)
         }
