@@ -2,30 +2,6 @@
 
 import SwiftUI
 
-#Preview {
-    NormalBetView(
-        navPath: .constant(NavigationPath()),
-        email: "preview@example.com",
-        userId: UUID(),
-        selectedCategory: BetCategoryView.BetCategory.sports,
-        betType: "normal"
-    )
-}
-
-// Updated Bet Creation Flow with Word Limit for Bet Prompt
-
-import SwiftUI
-
-#Preview {
-    NormalBetView(
-        navPath: .constant(NavigationPath()),
-        email: "preview@example.com",
-        userId: UUID(),
-        selectedCategory: BetCategoryView.BetCategory.sports,
-        betType: "normal"
-    )
-}
-
 struct NormalBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
@@ -609,6 +585,11 @@ struct NormalBetView: View {
                 }
             }
         }
+        .navigationBarHidden(true)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .tabBar)
+        .preferredColorScheme(.dark)
+        .statusBarHidden(false) // Keep status bar visible but dark themed
         .alert("Date Selection Info", isPresented: $showDateInfo) {
             Button("Got it!", role: .cancel) { }
         } message: {
