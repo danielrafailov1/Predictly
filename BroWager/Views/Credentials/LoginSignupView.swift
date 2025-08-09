@@ -104,7 +104,7 @@ struct LoginSignupView: View {
         }
         .alert(isPresented: $showWelcome) {
             Alert(
-                title: Text("Welcome to BroWager!"),
+                title: Text("Welcome to Bet Titan!"),
                 message: Text("Your account has been created. Good luck!"),
                 dismissButton: .default(Text("OK")) {
                     self.showWelcome = false
@@ -687,7 +687,7 @@ struct HeaderView: View {
                 .foregroundColor(.white)
                 .padding(.bottom, 8)
             
-            Text("BroWager")
+            Text("Bet Titan")
                 .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
             

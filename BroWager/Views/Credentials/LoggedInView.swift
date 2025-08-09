@@ -43,7 +43,7 @@ struct LoggedInView: View {
                 // Header with tab indicators
                 VStack(spacing: 16) {
                     HStack {
-                        Text("BroWager")
+                        Text("Bet Titan")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         Spacer()
