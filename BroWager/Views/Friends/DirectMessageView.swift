@@ -21,6 +21,7 @@ struct DirectMessageView: View {
     @State private var pendingMessages: [DirectMessage] = [] // For optimistic updates
     @State private var lastMessageCount = 0
     @State private var hasInitiallyScrolled = false
+    @State private var lastKnownMessageCount = 0
     
     var allMessages: [DirectMessage] {
         (messages + pendingMessages).sorted { ($0.created_at ?? "") < ($1.created_at ?? "") }
@@ -187,7 +188,30 @@ struct DirectMessageView: View {
             
             await MainActor.run {
                 let previousCount = self.messages.count
+                
+                // Check for new messages from the other person
+                if !showLoading && msgs.count > self.lastKnownMessageCount {
+                    let newMessages = Array(msgs.suffix(msgs.count - self.lastKnownMessageCount))
+                    let newMessagesFromFriend = newMessages.filter { $0.sender_id == friend.user_id }
+                    
+                    // Show notification for new messages from friend
+                    for message in newMessagesFromFriend {
+                        let notificationBody: String
+                        if let mediaType = message.media_type {
+                            notificationBody = mediaType == "image" ? "📷 Sent a photo" : "🎵 Sent an audio message"
+                        } else {
+                            notificationBody = message.message ?? "New message"
+                        }
+                        
+                        NotificationManager.shared.scheduleLocalNotification(
+                            title: friend.username,
+                            body: notificationBody
+                        )
+                    }
+                }
+                
                 self.messages = msgs
+                self.lastKnownMessageCount = msgs.count
                 
                 // Remove pending messages that are now confirmed
                 self.pendingMessages.removeAll { pending in
