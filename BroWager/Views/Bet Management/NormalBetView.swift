@@ -12,6 +12,20 @@ import SwiftUI
     )
 }
 
+// Updated Bet Creation Flow with Word Limit for Bet Prompt
+
+import SwiftUI
+
+#Preview {
+    NormalBetView(
+        navPath: .constant(NavigationPath()),
+        email: "preview@example.com",
+        userId: UUID(),
+        selectedCategory: BetCategoryView.BetCategory.sports,
+        betType: "normal"
+    )
+}
+
 struct NormalBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
@@ -24,7 +38,7 @@ struct NormalBetView: View {
     @State private var selectedDate = Date()
     @State private var isDateEnabled = false // New toggle state
     @State private var isNextActive = false
-    @State private var optionCount = 4
+    @State private var optionCount = 2
     @State private var max_selections = 1
     @State private var showDateInfo = false // New state for showing date info
     @State private var isOptimizingQuestion = false
@@ -47,6 +61,8 @@ struct NormalBetView: View {
     @State private var isProcessingDate = false
     @State private var detectedDateText: String = ""
     
+    // Word limit constants for bet prompt
+    private let maxWordsInBetPrompt = 100 // Adjust this value as needed
     
     private let months = Array(1...12)
     private let currentYear = Calendar.current.component(.year, from: Date())
@@ -71,9 +87,24 @@ struct NormalBetView: View {
         return Array(1...range.count)
     }
     
+    // Word count helper for bet prompt
+    private func wordCount(in text: String) -> Int {
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return words.count
+    }
+    
+    private var currentBetPromptWordCount: Int {
+        wordCount(in: betPrompt)
+    }
+    
+    private var isBetPromptOverWordLimit: Bool {
+        currentBetPromptWordCount > maxWordsInBetPrompt
+    }
+    
     // Validation computed property
     private var canProceed: Bool {
-        !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isBetPromptOverWordLimit
     }
     
     @ViewBuilder
@@ -124,10 +155,20 @@ struct NormalBetView: View {
             .disabled(!canProceed)
             
             if !canProceed {
-                Text("Please enter a bet question to continue")
-                    .foregroundColor(.red)
-                    .font(.caption)
-                    .padding(.horizontal)
+                VStack(spacing: 4) {
+                    if betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Please enter a bet question to continue")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+                    
+                    if isBetPromptOverWordLimit {
+                        Text("Bet question exceeds \(maxWordsInBetPrompt) word limit (\(currentBetPromptWordCount) words)")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+                }
+                .padding(.horizontal)
             }
         }
     }
@@ -227,7 +268,7 @@ struct NormalBetView: View {
             .padding(.horizontal)
         }
     }
-
+    
     private var timedBetOptions: some View {
         VStack(alignment: .leading) {
             Text("Set Timer")
@@ -245,6 +286,26 @@ struct NormalBetView: View {
         }
     }
 
+    // Function to enforce word limit for bet prompt
+    private func enforceBetPromptWordLimit(_ newValue: String) {
+        let words = newValue.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        
+        // If over the limit, truncate to the word limit
+        if words.count > maxWordsInBetPrompt {
+            let truncatedWords = Array(words.prefix(maxWordsInBetPrompt))
+            let truncatedText = truncatedWords.joined(separator: " ")
+            
+            // Use a dispatch to avoid binding update conflicts
+            DispatchQueue.main.async {
+                self.betPrompt = truncatedText
+            }
+            
+            // Provide haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -330,7 +391,16 @@ struct NormalBetView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(aiSuggestions, id: \.self) { suggestion in
                                 Button(action: {
-                                    betPrompt = suggestion
+                                    // Apply word limit when selecting AI suggestion
+                                    let suggestionWords = suggestion.components(separatedBy: .whitespacesAndNewlines)
+                                        .filter { !$0.isEmpty }
+                                    
+                                    if suggestionWords.count > maxWordsInBetPrompt {
+                                        let truncatedWords = Array(suggestionWords.prefix(maxWordsInBetPrompt))
+                                        betPrompt = truncatedWords.joined(separator: " ")
+                                    } else {
+                                        betPrompt = suggestion
+                                    }
                                 }) {
                                     Text(suggestion)
                                         .padding(.horizontal, 20)
@@ -376,6 +446,27 @@ struct NormalBetView: View {
                         }
                         .padding(.vertical)
                         
+                        // Word count indicator for bet prompt
+                        HStack {
+                            Text("Word count: \(currentBetPromptWordCount) / \(maxWordsInBetPrompt)")
+                                .font(.caption)
+                                .foregroundColor(isBetPromptOverWordLimit ? .red : (currentBetPromptWordCount > maxWordsInBetPrompt * 3/4 ? .orange : .gray))
+                            
+                            Spacer()
+                            
+                            if isBetPromptOverWordLimit {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                    Text("Exceeds limit")
+                                        .font(.caption2)
+                                        .foregroundColor(.red)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        
                         TextEditor(text: $betPrompt)
                             .scrollContentBackground(.hidden)
                             .frame(height: 130)
@@ -383,11 +474,45 @@ struct NormalBetView: View {
                             .cornerRadius(10)
                             .foregroundColor(.white)
                             .font(.system(size: 18))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(isBetPromptOverWordLimit ? Color.red : Color.clear, lineWidth: 2)
+                            )
                             .onChange(of: betPrompt) { newValue in
+                                // Enforce word limit
+                                enforceBetPromptWordLimit(newValue)
+                                
+                                // Detect and process date
                                 Task {
                                     await detectAndProcessDate(from: newValue)
                                 }
                             }
+                        
+                        // Word limit warning for bet prompt
+                        if isBetPromptOverWordLimit {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                                
+                                Text("Bet question exceeds \(maxWordsInBetPrompt) word limit. Text has been automatically truncated.")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(.horizontal)
+                        } else if currentBetPromptWordCount > maxWordsInBetPrompt * 3/4 {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                                
+                                Text("Approaching word limit. Consider keeping the bet question concise.")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(.horizontal)
+                        }
                     }
                     .padding(.horizontal)
                     
@@ -739,6 +864,7 @@ struct NormalBetView: View {
             3. Ensure it's clear what constitutes a win/loss
             4. Add relevant context or details that make it more engaging
             5. Keep the core intent but make it better for betting
+            6. IMPORTANT: Keep the response under \(maxWordsInBetPrompt) words
             
             Context: \(categoryContext)
             
@@ -752,7 +878,18 @@ struct NormalBetView: View {
                 maxTokens: 200
             )
             
-            betPrompt = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanedQuestion = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Apply word limit to AI-optimized question
+            let questionWords = cleanedQuestion.components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+            
+            if questionWords.count > maxWordsInBetPrompt {
+                let truncatedWords = Array(questionWords.prefix(maxWordsInBetPrompt))
+                betPrompt = truncatedWords.joined(separator: " ")
+            } else {
+                betPrompt = cleanedQuestion
+            }
             
         } catch {
             print("Failed to optimize bet question: \(error)")
@@ -784,7 +921,8 @@ struct NormalBetView: View {
                 let result = try await AIServices.shared.generateCategoryBetSuggestions(
                     category: selectedCategory,
                     count: 5,
-                    betType: "normal"
+                    betType: "normal",
+                    wordLimit: maxWordsInBetPrompt
                 )
                 print("Raw AI Response: \(result)")
                 aiSuggestions = result
@@ -792,7 +930,8 @@ struct NormalBetView: View {
                 let result = try await AIServices.shared.generateCategoryBetSuggestions(
                     category: selectedCategory,
                     count: 5,
-                    betType: "timed"
+                    betType: "timed",
+                    wordLimit: maxWordsInBetPrompt
                 )
                 print("Raw AI Response: \(result)")
                 aiSuggestions = result
@@ -800,7 +939,8 @@ struct NormalBetView: View {
                 let result = try await AIServices.shared.generateCategoryBetSuggestions(
                     category: selectedCategory,
                     count: 5,
-                    betType: "contest"
+                    betType: "contest",
+                    wordLimit: maxWordsInBetPrompt
                 )
                 print("Raw AI Response: \(result)")
                 aiSuggestions = result
@@ -917,10 +1057,139 @@ struct DatePickerView: View {
     }
 }
 
+// Extension to AIServices for category-based bet suggestions with word limit
+extension AIServices {
+    @available(iOS 15.0, *)
+    func generateCategoryBetSuggestions(category: BetCategoryView.BetCategory?, count: Int, betType: String, wordLimit: Int = 100) async throws -> [String] {
+        let categoryContext = category?.aiPromptContext ?? "general everyday activities"
+        let categoryName = category?.rawValue.lowercased() ?? "general"
+        let examples = getSamplePrompts(for: category)
+        
+        // Define the prompt based on bet type
+        let prompt: String
+        
+        switch betType.lowercased() {
+        case "normal":
+            prompt = """
+            Generate \(count) fun and creative betting questions specifically about \(categoryContext).
+            These should be engaging \(categoryName) situations that friends can make bets about.
+            
+            Focus exclusively on \(categoryContext) and make them:
+            - Realistic and achievable
+            - Fun for friends to bet on
+            - Measurable with clear outcomes
+            - Appropriate for social betting
+            - Timeless (not dependent on specific dates or events)
+            - IMPORTANT: Each question must be under \(wordLimit) words
+            
+            Examples of \(categoryName) bets include:
+            \(examples)
+            
+            Return only the betting questions, one per line, without numbering or extra text.
+            Keep each question concise and under \(wordLimit) words.
+            """
+            
+        case "timed":
+            prompt = """
+            Generate \(count) fun and creative **timed** betting questions about \(categoryContext).
+            These should be challenges where the person must complete something within a limited amount of time,
+            but do **not** include any specific time durations in the question.
+
+            Let the user choose the time themselves later in the app.
+
+            Guidelines:
+            - Make it clear that the task is time-based
+            - Do **not** mention specific times like "2 minutes" or "30 seconds"
+            - Use phrases like "quickly", "as fast as you can", or "before time runs out"
+            - Keep it fun, achievable, and measurable
+            - Avoid any sensitive or unsafe suggestions
+            - IMPORTANT: Each question must be under \(wordLimit) words
+
+            Examples:
+            - Can you finish a plate of spaghetti before time runs out?
+            - Can you build a card tower as fast as you can without it falling?
+            - Can you name 20 countries quickly without pausing?
+
+            Return only the betting questions, one per line, no numbering or extra text.
+            Keep each question concise and under \(wordLimit) words.
+            """
+            
+        case "contest":
+            prompt = """
+            Generate \(count) competitive **contest-style** betting questions about \(categoryContext).
+            These should be bets where multiple people compete to see **who can do something the fastest or best**.
+            
+            Focus on:
+            - Head-to-head or group competition
+            - Clear and measurable outcomes (e.g., time, quantity, quality)
+            - Fun for groups of friends
+            - Fair and achievable challenges
+            - IMPORTANT: Each question must be under \(wordLimit) words
+            
+            Examples:
+            - Who can eat 10 hot dogs the fastest?
+            - Who can do the most push-ups in 1 minute?
+            
+            Return only the betting questions, one per line, no numbering.
+            Keep each question concise and under \(wordLimit) words.
+            """
+            
+        default:
+            throw NSError(domain: "AIServices", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unsupported bet type: \(betType)"])
+        }
+        
+        let response = try await sendPrompt(
+            prompt,
+            model: "gemini-2.5-flash-lite",
+            temperature: 0.8,
+            maxTokens: 400
+        )
+        
+        // Apply word limit to each suggestion
+        let suggestions = response
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0.count > 15 }
+            .map { suggestion in
+                let words = suggestion.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+                if words.count > wordLimit {
+                    let truncatedWords = Array(words.prefix(wordLimit))
+                    return truncatedWords.joined(separator: " ")
+                }
+                return suggestion
+            }
+            .prefix(count)
+            .map { String($0) }
+        
+        return Array(suggestions)
+    }
+    
+    private func getSamplePrompts(for category: BetCategoryView.BetCategory?) -> String {
+        guard let category = category else {
+            return "everyday random events, social situations, or general predictions"
+        }
+        
+        switch category {
+        case .sports:
+            return "which team will score first, who will have the most assists, what the final score margin will be"
+        case .food:
+            return "which restaurant will have the longest wait, who can finish the spiciest dish, what the most popular menu item will be"
+        case .lifeEvents:
+            return "who will get engaged first, which friend will move cities, who will get promoted this year"
+        case .politics:
+            return "which candidate will win, what the voter turnout will be, which policy will pass first"
+        case .entertainment:
+            return "which movie will be released first, who will win an award, what the most popular song will be"
+        case .other:
+            return "what the weather will be like, which movie will top the box office, who will reply to texts fastest"
+        }
+    }
+}
+
 struct BetOptionsView: View {
     @Binding var navPath: NavigationPath
     let betPrompt: String
-    let selectedDate: Date? // Now optional
+    let selectedDate: Date?
     let email: String
     let userId: UUID?
     let optionCount: Int
@@ -937,6 +1206,8 @@ struct BetOptionsView: View {
     @State private var isNextActive = false
     @State private var isGeneratingOptions = false
     @State private var isOptimizing = false
+    @State private var target = 1
+    @State private var isContestAmountPickerEnabled = false
     
     private var filledOptionsCount: Int {
         betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
@@ -946,6 +1217,22 @@ struct BetOptionsView: View {
     private var canProceed: Bool {
         betOptions.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } &&
         !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    private let maxWordsInTerms = 300
+        
+    private func wordCount(in text: String) -> Int {
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return words.count
+    }
+    
+    private var currentWordCount: Int {
+        wordCount(in: betTerms)
+    }
+    
+    private var isOverWordLimit: Bool {
+        currentWordCount > maxWordsInTerms
     }
 
     var body: some View {
@@ -959,6 +1246,20 @@ struct BetOptionsView: View {
                     if betType == "normal" {
                         optionsHeaderSection
                         optionsListSection
+                    }
+                    
+                    if betType == "contest" {
+                        HStack {
+                            Text(isContestAmountPickerEnabled ? "Disable Target Score": "Enable Target Score")
+                            Spacer()
+                            Toggle("", isOn: $isContestAmountPickerEnabled)
+                                .toggleStyle(SwitchToggleStyle(tint: .blue))
+                        }
+                        .padding(.horizontal)
+                        
+                        if isContestAmountPickerEnabled {
+                            ContestAmountPicker
+                        }
                     }
                     
                     termsHeaderSection
@@ -980,6 +1281,54 @@ struct BetOptionsView: View {
     }
 
     // MARK: - Extracted View Components
+    
+    private var ContestAmountPicker: some View {
+        Group {
+            // Number of Options Section
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Target Goal")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Spacer()
+                    
+                    // Counter/Ticker on the right
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            if target > 1 {
+                                target = target - 1
+                            }
+                        }) {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(target > 1 ? .blue : .gray)
+                                .font(.title2)
+                        }
+                        .disabled(target <= 1)
+                        
+                        Text("\(target)")
+                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(minWidth: 30)
+                        
+                        Button(action: {
+                            target += 1
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                                .font(.title2)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
+    }
+
 
     private var backgroundGradient: some View {
         LinearGradient(
@@ -1109,11 +1458,33 @@ struct BetOptionsView: View {
     }
 
     private var termsHeaderSection: some View {
-        HStack {
-            Text("Terms (Penalties, Prizes, Rules)")
-                .foregroundColor(.white)
-            Spacer()
-            generateTermsButton
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Terms (Penalties, Prizes, Rules)")
+                    .foregroundColor(.white)
+                Spacer()
+                generateTermsButton
+            }
+            
+            // Word count indicator
+            HStack {
+                Text("Word count: \(currentWordCount) / \(maxWordsInTerms)")
+                    .font(.caption)
+                    .foregroundColor(isOverWordLimit ? .red : (currentWordCount > maxWordsInTerms * 3/4 ? .orange : .gray))
+                
+                Spacer()
+                
+                if isOverWordLimit {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                        Text("Exceeds limit")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
         }
         .padding(.horizontal)
     }
@@ -1129,15 +1500,72 @@ struct BetOptionsView: View {
     }
 
     private var termsEditorSection: some View {
-        TextEditor(text: $betTerms)
-            .frame(minHeight: 100)
-            .padding(8)
-            .background(Color.gray.opacity(0.2))
-            .cornerRadius(10)
-            .foregroundColor(.white)
-            .padding(.horizontal)
-            .scrollContentBackground(.hidden)
+        VStack(alignment: .leading, spacing: 8) {
+            // Text Editor with word limit enforcement
+            TextEditor(text: $betTerms)
+                .frame(minHeight: 100)
+                .padding(8)
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(10)
+                .foregroundColor(.white)
+                .scrollContentBackground(.hidden)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isOverWordLimit ? Color.red : Color.clear, lineWidth: 2)
+                )
+                .onChange(of: betTerms) { newValue in
+                    enforceWordLimit(newValue)
+                }
+            
+            // Word limit warning
+            if isOverWordLimit {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                    
+                    Text("Terms exceed \(maxWordsInTerms) word limit. Text has been automatically truncated.")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.leading)
+                }
+                .padding(.horizontal, 4)
+            } else if currentWordCount > maxWordsInTerms * 3/4 {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                    
+                    Text("Approaching word limit. Consider keeping terms concise.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+        .padding(.horizontal)
     }
+    
+    private func enforceWordLimit(_ newValue: String) {
+            let words = newValue.components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+            
+            // If over the limit, truncate to the word limit
+            if words.count > maxWordsInTerms {
+                let truncatedWords = Array(words.prefix(maxWordsInTerms))
+                let truncatedText = truncatedWords.joined(separator: " ")
+                
+                // Use a dispatch to avoid binding update conflicts
+                DispatchQueue.main.async {
+                    self.betTerms = truncatedText
+                }
+                
+                // Provide haptic feedback
+                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                impactFeedback.impactOccurred()
+            }
+        }
+
 
     private var aiOptimizationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1220,7 +1648,9 @@ struct BetOptionsView: View {
             timerDays: timerDays,
             timerHours: timerHours,
             timerMinutes: timerMinutes,
-            timerSeconds: timerSeconds
+            timerSeconds: timerSeconds,
+            target: target,
+            isContestAmountPickerEnabled: isContestAmountPickerEnabled
         )
     }
 
@@ -1244,10 +1674,26 @@ struct BetOptionsView: View {
     @ViewBuilder
     private var validationMessageSection: some View {
         if !canProceed {
-            Text("Please fill out all options and terms to continue")
-                .foregroundColor(.red)
-                .font(.caption)
-                .padding(.horizontal)
+            VStack(alignment: .leading, spacing: 4) {
+                if betType == "normal" && betOptions.contains(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+                    Text("• Please fill out all bet options")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                if betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("• Please add terms and conditions")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                if isOverWordLimit {
+                    Text("• Terms exceed \(maxWordsInTerms) word limit (\(currentWordCount) words)")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal)
         }
     }
 
@@ -1659,49 +2105,114 @@ struct BetOptionsView: View {
                 }
                 
                 let prompt = """
-                Generate well-organized, user-friendly terms and conditions for a \(categoryName) bet \(dateContext) 
-                involving these options: \(betDescription). 
+                Generate concise, well-structured terms and conditions for a \(categoryName) bet \(dateContext) 
+                involving these options: \(betDescription).
                 
-                CRITICAL REQUIREMENT: Each participant can select a maximum of \(max_selections) option(s) out of \(betOptions.count) total options.
-                This selection limit must be PROMINENTLY featured and clearly emphasized in the terms.
+                CRITICAL REQUIREMENTS:
+                - Each participant can select MAXIMUM \(max_selections) option(s) from \(betOptions.count) total options
+                - Keep response under \(maxWordsInTerms) words total (STRICT LIMIT)
+                - Use clear, simple language (no legal jargon)
+                - Make selection limits impossible to miss
                 
-                Format the response with clear sections and use formatting like:
-                - **Bold text** for important rules
-                - CAPITAL LETTERS for critical information
-                - Bullet points for easy reading
-                - Clear section headers
+                REQUIRED STRUCTURE (use these exact section headers):
                 
-                Structure the terms with these sections:
-                1. **SELECTION RULES** (Make this section very prominent with the max selection limit)
-                2. **BET DETAILS** (What the bet is about and timeline)
-                3. **DETERMINATION OF RESULTS** (How winners are decided)
-                4. **DISPUTE RESOLUTION** (What happens if there are disagreements)
-                5. **CONSEQUENCES & REWARDS** (What happens to winners/losers)
+                ## 🎯 SELECTION RULES
+                [Prominently emphasize the \(max_selections) selection limit using bold text and caps]
                 
-                This bet is specifically about \(categoryContext), so include relevant rules and considerations for this type of bet.
-                Use simple language suitable for users, avoid legal jargon, do not use placeholders like [Your Company], 
-                and keep the response under 400 words but well-formatted.
+                ## 📋 BET OVERVIEW  
+                [Brief description of what this bet covers and timeline]
                 
-                Make the selection limit rule impossible to miss by using multiple formatting techniques.
+                ## 🏆 WINNING CONDITIONS
+                [How winners are determined - keep to 2-3 sentences max]
+                
+                ## ⚖️ DISPUTE RESOLUTION
+                [Simple process for disagreements - 1-2 sentences]
+                
+                ## 🎉 OUTCOMES
+                [What happens to winners/losers - keep brief]
+                
+                FORMATTING REQUIREMENTS:
+                - Use **bold** for critical rules
+                - Use CAPITAL LETTERS for the selection limit
+                - Use bullet points where helpful
+                - Include emojis for section headers as shown
+                - Keep each section to 2-4 sentences maximum
+                
+                Context: This is a \(categoryContext) bet. Include relevant considerations for this category.
+                
+                WORD LIMIT: Absolute maximum \(maxWordsInTerms) words. Be extremely concise but comprehensive.
                 """
                 
                 let responseText = try await AIServices.shared.sendPrompt(
                     prompt,
-                    model: "gemini-2.5-flash-lite",
-                    temperature: 0.7,
-                    maxTokens: 800
+                    model: "gemini-2.5-flash",
+                    temperature: 0.6,
+                    maxTokens: 400  // Further reduced to encourage brevity
                 )
                 
-                betTerms = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let cleanedTerms = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Double-check word count and truncate if necessary
+                let generatedWordCount = wordCount(in: cleanedTerms)
+                if generatedWordCount > maxWordsInTerms {
+                    let words = cleanedTerms.components(separatedBy: .whitespacesAndNewlines)
+                        .filter { !$0.isEmpty }
+                    let truncatedWords = Array(words.prefix(maxWordsInTerms))
+                    betTerms = truncatedWords.joined(separator: " ")
+                } else {
+                    betTerms = cleanedTerms
+                }
                 
             } catch {
                 print("Failed to generate bet terms: \(error)")
                 
-                // Category-specific fallback terms with improved formatting
-                let categorySpecificTerms = getCategoryFallbackTerms(date: date)
-                betTerms = categorySpecificTerms
+                // Improved category-specific fallback terms with word limit consideration
+                let categorySpecificTerms = getStructuredFallbackTerms(date: date)
+                let fallbackWordCount = wordCount(in: categorySpecificTerms)
+                
+                if fallbackWordCount > maxWordsInTerms {
+                    let words = categorySpecificTerms.components(separatedBy: .whitespacesAndNewlines)
+                        .filter { !$0.isEmpty }
+                    let truncatedWords = Array(words.prefix(maxWordsInTerms))
+                    betTerms = truncatedWords.joined(separator: " ")
+                } else {
+                    betTerms = categorySpecificTerms
+                }
             }
         }
+    }
+    
+    private func getStructuredFallbackTerms(date: Date?) -> String {
+        let dateContext: String
+        if let date = date {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .medium
+            let formattedDate = dateFormatter.string(from: date)
+            dateContext = "for \(formattedDate)"
+        } else {
+            dateContext = ""
+        }
+        
+        let categoryName = selectedCategory?.rawValue ?? "General"
+        let maxSelections = max_selections
+        let totalOptions = betOptions.count
+        
+        return """
+        ## 🎯 SELECTION RULES
+        **MAXIMUM \(maxSelections) SELECTION(S) ALLOWED** - Each participant must choose exactly \(maxSelections) option(s) from the \(totalOptions) available choices. **NO MORE, NO LESS.**
+        
+        ## 📋 BET OVERVIEW
+        This is a \(categoryName.lowercased()) bet \(dateContext). All participants agree to the outcome determination process and accept the results as final.
+        
+        ## 🏆 WINNING CONDITIONS  
+        Winners are determined by which selected option(s) prove correct based on official results or group consensus. Partial credit may apply for multiple-selection bets.
+        
+        ## ⚖️ DISPUTE RESOLUTION
+        Disagreements will be resolved by group vote or reference to official sources. The majority decision is binding.
+        
+        ## 🎉 OUTCOMES
+        Winners receive bragging rights and any agreed-upon rewards. Losers accept the results gracefully and fulfill any agreed consequences.
+        """
     }
     
     private func getCategoryFallbackTerms(date: Date?) -> String {
@@ -1989,27 +2500,6 @@ extension AIServices {
             .map { String($0) }
     }
     
-    private func getSamplePrompts(for category: BetCategoryView.BetCategory?) -> String {
-        guard let category = category else {
-            return "everyday random events, social situations, or general predictions"
-        }
-        
-        switch category {
-        case .sports:
-            return "which team will score first, who will have the most assists, what the final score margin will be"
-        case .food:
-            return "which restaurant will have the longest wait, who can finish the spiciest dish, what the most popular menu item will be"
-        case .lifeEvents:
-            return "who will get engaged first, which friend will move cities, who will get promoted this year"
-        case .politics:
-            return "which candidate will win, what the voter turnout will be, which policy will pass first"
-        case .entertainment:
-            return "which movie will be released first, who will win an award, what the most popular song will be"
-        case .other:
-            return "what the weather will be like, which movie will top the box office, who will reply to texts fastest"
-        }
-    }
-    
 }
 
 struct FinalizeBetView: View {
@@ -2026,6 +2516,8 @@ struct FinalizeBetView: View {
     let timerHours: Int
     let timerMinutes: Int
     let timerSeconds: Int
+    let target: Int
+    let isContestAmountPickerEnabled: Bool
 
     @State private var party_name: String = ""
     @State private var privacy: String = "Open" // Set default to "Open"
@@ -2038,10 +2530,30 @@ struct FinalizeBetView: View {
     
     @Environment(\.supabaseClient) private var supabaseClient
     
+    // Add the missing word limit constants and computed properties
+    private let maxWordsInTerms = 300
+    
+    private func wordCount(in text: String) -> Int {
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return words.count
+    }
+    
+    private var currentWordCount: Int {
+        wordCount(in: betTerms)
+    }
+    
+    private var isOverWordLimit: Bool {
+        currentWordCount > maxWordsInTerms
+    }
+    
     // Validation computed property - privacy is now mandatory
     private var canProceed: Bool {
-        !party_name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !privacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasValidOptions = betOptions.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let hasValidTerms = !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let isWithinWordLimit = !isOverWordLimit // Add word limit check
+        
+        return hasValidOptions && hasValidTerms && isWithinWordLimit
     }
 
     var body: some View {
@@ -2185,6 +2697,18 @@ struct FinalizeBetView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
+                
+                if isContestAmountPickerEnabled {
+                    HStack {
+                        Text("Target Score:")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.subheadline)
+                        Text("\(target)")
+                            .foregroundColor(.yellow)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                }
             }
         }
         .padding()
@@ -2260,6 +2784,26 @@ struct FinalizeBetView: View {
             .padding()
             .background(Color.white.opacity(0.1))
             .cornerRadius(8)
+            
+            // Add word count display
+            HStack {
+                Text("Word count: \(currentWordCount) / \(maxWordsInTerms)")
+                    .font(.caption)
+                    .foregroundColor(isOverWordLimit ? .red : (currentWordCount > maxWordsInTerms * 3/4 ? .orange : .gray))
+                
+                Spacer()
+                
+                if isOverWordLimit {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                        Text("Exceeds limit")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
         }
     }
     
@@ -2346,36 +2890,39 @@ struct FinalizeBetView: View {
     @ViewBuilder
     private var validationSection: some View {
         if !canProceed {
-            Text("Please complete all required fields to create the bet party")
-                .foregroundColor(.red)
-                .font(.caption)
-                .padding(.horizontal)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Please complete all required fields to create the bet party")
+                    .foregroundColor(.red)
+                    .font(.caption)
+                
+                if isOverWordLimit {
+                    Text("• Terms exceed \(maxWordsInTerms) word limit (\(currentWordCount) words)")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal)
         }
     }
     
     // MARK: - Functions
     
     func randomizePartyName() {
-        let suggestions = [
-            "Bet Bros",
-            "Wager Warriors",
-            "Game Day Squad",
-            "Prediction Party",
-            "Lock & Load",
-            "Sure Things",
-            "Betting Brigade",
-            "Odds Squad",
-            "Props & Profits",
-            "Smart Money",
-            "The Predictors",
-            "Bet Busters",
-            "Wager Wizards",
-            "Lucky Legends",
-            "Risk Takers"
-        ]
-
-        party_name = suggestions.randomElement() ?? "My Betting Party"
+        if let fileURL = Bundle.main.url(forResource: "party_names", withExtension: "txt") {
+            do {
+                let contents = try String(contentsOf: fileURL)
+                let suggestions = contents.components(separatedBy: .newlines).filter { !$0.isEmpty }
+                party_name = suggestions.randomElement() ?? "My Betting Party"
+            } catch {
+                print("Error reading party names: \(error)")
+                party_name = "My Betting Party"
+            }
+        } else {
+            print("party_names.txt not found")
+            party_name = "My Betting Party"
+        }
     }
+
 
     func submitBet() {
         guard let userId = userId else {
@@ -2393,6 +2940,12 @@ struct FinalizeBetView: View {
         guard !privacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             print("Error: Privacy option must be selected")
             errorMessage = "Privacy option must be selected"
+            return
+        }
+        
+        // Check word limit before submitting
+        guard !isOverWordLimit else {
+            errorMessage = "Terms exceed the \(maxWordsInTerms) word limit. Please reduce the text length."
             return
         }
         
@@ -2444,7 +2997,7 @@ struct FinalizeBetView: View {
             let max_members: Int
             let bet: String
             let bet_date: String?
-            let bet_type: String // Updated to match database column name
+            let bet_type: String
             let options: [String]
             let terms: String
             let status: String
@@ -2473,7 +3026,7 @@ struct FinalizeBetView: View {
             timer_duration: timerDuration,
             allow_early_finish: betType == "timed" ? true : nil, // Default for timer bets
             contest_unit: betType == "contest" ? "points" : nil, // Default for contest bets
-            contest_target: betType == "contest" ? 100 : nil, // Default target for contest bets
+            contest_target: betType == "contest" ? target : nil, // Default target for contest bets
             allow_ties: betType == "contest" ? false : nil // Default for contest bets
         )
 

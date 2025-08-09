@@ -8,17 +8,13 @@ struct ProfileView: View {
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var profileImage: Image? = nil
     @State private var profileUIImage: UIImage? = nil
-    
     @Binding var navPath: NavigationPath
-    
     @Environment(\.supabaseClient) private var supabaseClient
     @State private var isUploading = false
     @State private var uploadError: String? = nil
     @State private var userId: String? = nil
     @State private var username: String = ""
     @State private var identifier: String = ""
-
-    // Editing states
     @State private var isEditingUsername = false
     @State private var newUsername: String = ""
     @State private var isEditingEmail = false
@@ -27,18 +23,14 @@ struct ProfileView: View {
     @State private var updateMessage: String?
     @State private var isErrorUpdate: Bool = false
     @State private var showingCredits = false
-    
-    // New states for inline password editing
     @State private var isEditingPassword = false
     @State private var newPassword = ""
-    
-    // Authentication provider state
     @State private var authProvider: String? = nil
-
-    // Updated friends state to include profile images
     @State private var friendsWithImages: [FriendWithImage] = []
-
+    @StateObject private var profileCache = ProfileCache.shared
+    @State private var isLoadingFromCache = false
     @EnvironmentObject var sessionManager: SessionManager
+    
 
     init(navPath: Binding<NavigationPath>, email: String) {
         _navPath = navPath
@@ -59,108 +51,117 @@ struct ProfileView: View {
             .ignoresSafeArea()
             
             ScrollView {
-                VStack(spacing: 32) {
-                    profileHeader
-                    
-                    // Account Info Section
-                    accountInfoSection
-                    
-                    // Friends Section (updated with profile pictures)
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Friends")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 8)
+                if isLoadingFromCache {
+                    VStack {
+                        ProgressView("Loading...")
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .foregroundColor(.white)
+                            .padding(.top, 100)
+                        Spacer()
+                    }
+                }
+                else {
+                    VStack(spacing: 32) {
+                        profileHeader
+                        accountInfoSection
                         
-                        if friendsWithImages.isEmpty {
-                            Text("No friends yet.")
-                                .foregroundColor(.white.opacity(0.5))
-                                .font(.system(size: 16))
-                                .padding(.horizontal, 24)
-                        } else {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 16) {
-                                    ForEach(friendsWithImages, id: \.id) { friend in
-                                        VStack(spacing: 8) {
-                                            // Profile picture with async loading
-                                            AsyncImage(url: friend.profileImageURL) { image in
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 48, height: 48)
-                                                    .clipShape(Circle())
-                                                    .overlay(
-                                                        Circle()
-                                                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                                                    )
-                                            } placeholder: {
-                                                // Fallback to default icon while loading or if no image
-                                                Image(systemName: "person.crop.circle.fill")
-                                                    .resizable()
-                                                    .frame(width: 48, height: 48)
-                                                    .foregroundColor(.blue)
+                        // Friends Section (updated with profile pictures)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Friends")
+                                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.top, 8)
+                            
+                            if friendsWithImages.isEmpty {
+                                Text("No friends yet.")
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .font(.system(size: 16))
+                                    .padding(.horizontal, 24)
+                            } else {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 16) {
+                                        ForEach(friendsWithImages, id: \.id) { friend in
+                                            VStack(spacing: 8) {
+                                                // Profile picture with async loading
+                                                AsyncImage(url: friend.profileImageURL) { image in
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                        .frame(width: 48, height: 48)
+                                                        .clipShape(Circle())
+                                                        .overlay(
+                                                            Circle()
+                                                                .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                                                        )
+                                                } placeholder: {
+                                                    // Fallback to default icon while loading or if no image
+                                                    Image(systemName: "person.crop.circle.fill")
+                                                        .resizable()
+                                                        .frame(width: 48, height: 48)
+                                                        .foregroundColor(.blue)
+                                                }
+                                                
+                                                Text(friend.username)
+                                                    .font(.system(size: 16, weight: .medium))
+                                                    .foregroundColor(.white)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.tail)
                                             }
-                                            
-                                            Text(friend.username)
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.white)
-                                                .lineLimit(1)
-                                                .truncationMode(.tail)
+                                            .padding(12)
+                                            .background(Color.white.opacity(0.08))
+                                            .cornerRadius(16)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 16)
+                                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                            )
                                         }
-                                        .padding(12)
-                                        .background(Color.white.opacity(0.08))
-                                        .cornerRadius(16)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                        )
                                     }
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 8)
                                 }
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 8)
                             }
                         }
-                    }
-                    .padding(.bottom, 8)
-                    
-                    if let message = updateMessage {
-                        Text(message)
-                            .foregroundColor(isErrorUpdate ? .red : .green)
-                            .padding()
-                    }
-                    
-                    Button(action: {
-                        showingCredits = true
-                    }) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "person.3.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(.orange)
-                            
-                            Text("Credits")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Spacer()
-                            
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.6))
+                        .padding(.bottom, 8)
+                        
+                        if let message = updateMessage {
+                            Text(message)
+                                .foregroundColor(isErrorUpdate ? .red : .green)
+                                .padding()
                         }
-                        .padding(16)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
+                        
+                        Button(action: {
+                            showingCredits = true
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "person.3.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.orange)
+                                
+                                Text("Credits")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(16)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 24)
+                        .sheet(isPresented: $showingCredits) {
+                            CreditsView()
+                        }
+                        
+                        logoutButton
                     }
-                    .padding(.horizontal, 24)
-                    .sheet(isPresented: $showingCredits) {
-                        CreditsView()
-                    }
-                    
-                    logoutButton
                 }
             }
             .onChange(of: selectedItem) { newItem in
@@ -172,6 +173,7 @@ struct ProfileView: View {
                     
                     profileUIImage = uiImage
                     profileImage = Image(uiImage: uiImage)
+                    
                     // Upload to Supabase
                     isUploading = true
                     uploadError = nil
@@ -187,6 +189,11 @@ struct ProfileView: View {
                         }
                         let manager = ProfileManager(supabaseClient: supabaseClient)
                         let _ = try await manager.uploadProfileImageAndSaveURL(for: userId, image: uiImage)
+                        
+                        // Update cache with new image
+                        let cacheKey = "\(userId)_\(currentEmail)"
+                        profileCache.updateProfileImage(uiImage, swiftUIImage: Image(uiImage: uiImage), for: cacheKey)
+                        
                         isUploading = false
                     } catch {
                         uploadError = "Upload failed: \(error.localizedDescription)"
@@ -195,6 +202,14 @@ struct ProfileView: View {
                 }
             }
             .task {
+                await fetchUserProfile()
+            }
+            .refreshable {
+                // Clear cache and reload
+                if let userId = userId {
+                    let cacheKey = "\(userId)_\(currentEmail)"
+                    profileCache.clearCache(for: cacheKey)
+                }
                 await fetchUserProfile()
             }
         }
@@ -374,8 +389,36 @@ struct ProfileView: View {
                 print("[ProfileView] Fallback loaded userId: \(fetchedUserId ?? "nil")")
             }
             guard let userId = fetchedUserId else { throw URLError(.userAuthenticationRequired) }
-            await MainActor.run { self.userId = userId }
-
+            
+            // Set userId immediately
+            await MainActor.run {
+                self.userId = userId
+                self.isLoadingFromCache = true
+            }
+            
+            // Check cache first
+            let cacheKey = "\(userId)_\(currentEmail)"
+            if let cachedProfile = profileCache.getCachedProfile(for: cacheKey) {
+                print("[ProfileView] Loading from cache for userId: \(userId)")
+                await MainActor.run {
+                    self.username = cachedProfile.username
+                    self.identifier = cachedProfile.identifier
+                    self.currentEmail = cachedProfile.email
+                    self.authProvider = cachedProfile.authProvider
+                    self.friendsWithImages = cachedProfile.friendsWithImages
+                    if let uiImage = cachedProfile.profileImage, let swiftUIImage = cachedProfile.profileImageSwiftUI {
+                        self.profileUIImage = uiImage
+                        self.profileImage = swiftUIImage
+                    }
+                    self.isErrorUpdate = false
+                    self.updateMessage = nil
+                    self.isLoadingFromCache = false
+                }
+                return
+            }
+            
+            print("[ProfileView] No valid cache found, fetching from server for userId: \(userId)")
+            
             // Fetch authentication provider
             await fetchAuthProvider()
 
@@ -389,7 +432,6 @@ struct ProfileView: View {
             struct EmailRow: Decodable { let email: String }
             let emailRows = try JSONDecoder().decode([EmailRow].self, from: emailResponse.data)
             let fetchedEmail = emailRows.first?.email ?? ""
-            await MainActor.run { self.currentEmail = fetchedEmail }
 
             // Fetch username, profile image, and friends in parallel
             async let usernameTask = fetchUsernameAndIdentifier(for: userId)
@@ -399,10 +441,26 @@ struct ProfileView: View {
             let (fetchedUsername, fetchedIdentifier) = await (try? usernameTask) ?? ("", "")
             let loadedImage = await (try? profileImageTask)
             let fetchedFriends = await (try? friendsTask) ?? []
+            let fetchedAuthProvider = await MainActor.run { self.authProvider ?? "email" }
+
+            // Cache the data
+            let cachedProfile = CachedProfile(
+                userId: userId,
+                username: fetchedUsername,
+                identifier: fetchedIdentifier,
+                email: fetchedEmail,
+                profileImage: loadedImage?.0,
+                profileImageSwiftUI: loadedImage?.1,
+                authProvider: fetchedAuthProvider,
+                friendsWithImages: fetchedFriends,
+                timestamp: Date()
+            )
+            profileCache.setCachedProfile(cachedProfile, for: cacheKey)
 
             await MainActor.run {
                 self.username = fetchedUsername
                 self.identifier = fetchedIdentifier
+                self.currentEmail = fetchedEmail
                 if let (uiImage, image) = loadedImage {
                     self.profileUIImage = uiImage
                     self.profileImage = image
@@ -410,12 +468,14 @@ struct ProfileView: View {
                 self.friendsWithImages = fetchedFriends
                 self.isErrorUpdate = false
                 self.updateMessage = nil
+                self.isLoadingFromCache = false
             }
         } catch {
             print("❌ Error fetching user profile: \(error.localizedDescription)")
             await MainActor.run {
                 self.isErrorUpdate = true
                 self.updateMessage = "Error loading profile. Please try again."
+                self.isLoadingFromCache = false
             }
         }
     }
@@ -483,6 +543,10 @@ struct ProfileView: View {
                 .eq("user_id", value: userId)
                 .execute()
             
+            // Update cache
+            let cacheKey = "\(userId)_\(currentEmail)"
+            profileCache.updateUsername(newUsername, for: cacheKey)
+            
             await MainActor.run {
                 self.username = newUsername
                 self.isEditingUsername = false
@@ -493,7 +557,7 @@ struct ProfileView: View {
     }
 
     private func updateUserEmail(newEmail: String) async {
-        guard !newEmail.isEmpty, newEmail != currentEmail else { return }
+        guard !newEmail.isEmpty, newEmail != currentEmail, let userId = userId else { return }
         
         do {
             try await supabaseClient.auth.update(
@@ -504,8 +568,18 @@ struct ProfileView: View {
             try await supabaseClient
                 .from("Login Information")
                 .update(["email": newEmail])
-                .eq("user_id", value: userId!)
+                .eq("user_id", value: userId)
                 .execute()
+
+            // Update cache
+            let oldCacheKey = "\(userId)_\(currentEmail)"
+            let newCacheKey = "\(userId)_\(newEmail)"
+            profileCache.updateEmail(newEmail, for: oldCacheKey)
+            // Move cache to new key
+            if let cached = profileCache.getCachedProfile(for: oldCacheKey) {
+                profileCache.setCachedProfile(cached, for: newCacheKey)
+                profileCache.clearCache(for: oldCacheKey)
+            }
 
             await MainActor.run {
                 self.currentEmail = newEmail
@@ -520,7 +594,6 @@ struct ProfileView: View {
             }
         }
     }
-
     private func updatePassword(newPassword: String) async {
         guard !newPassword.isEmpty else {
             await MainActor.run {

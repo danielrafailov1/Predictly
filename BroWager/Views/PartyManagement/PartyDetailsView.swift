@@ -279,11 +279,22 @@ struct PartyDetailsView: View {
             Button("End") {
                 Task {
                     await endGame()
-                    showConfirmOutcomeView = true
+                    // Skip ConfirmBetOutcomeView for timer/contest bets
+                    if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
+                        // Automatically determine winners based on completion/scores
+                        await determineTimerContestWinners()
+                        showGameResultsView = true
+                    } else {
+                        showConfirmOutcomeView = true
+                    }
                 }
             }
         } message: {
-            Text("Ready to end the game and confirm the bet outcome?")
+            if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
+                Text("Ready to end the game? Winners will be automatically determined based on completion.")
+            } else {
+                Text("Ready to end the game and confirm the bet outcome?")
+            }
         }
         // NEW: Bet warning alert
         .alert("Players Haven't Bet Yet", isPresented: $showBetWarning) {
@@ -752,21 +763,28 @@ struct PartyDetailsView: View {
     // MARK: - Computed Properties for Buttons
     
     private var makeBetButton: some View {
-        Button(action: {
-            showPlaceBetView = true
-        }) {
-            HStack {
-                Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                Text(hasPlacedBet ? "Edit Bet" : "Make a Bet")
-                    .font(.system(size: 18, weight: .bold))
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Color.orange.opacity(0.9))
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        // Only show button if: no bet placed, OR bet is placed but it's a normal type (editable)
+        if !hasPlacedBet || (hasPlacedBet && betType.lowercased() == "normal") {
+            AnyView(
+                Button(action: {
+                    showPlaceBetView = true
+                }) {
+                    HStack {
+                        Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text(hasPlacedBet ? "Edit Bet" : "Make a Bet")
+                            .font(.system(size: 18, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.orange.opacity(0.9))
+                    .cornerRadius(16)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+            )
+        } else {
+            AnyView(EmptyView())
         }
     }
     
@@ -1156,6 +1174,14 @@ struct PartyDetailsView: View {
         let bet_events: [String]?
         let is_winner: Bool?
     }
+    
+    struct UserBetData: Codable {
+        let user_id: String
+        let start_time: String?
+        let end_time: String?
+        let final_score: Int64?
+        let elapsed_time: String?
+    }
 
     // Replace these functions in your PartyDetailsView:
 
@@ -1173,11 +1199,12 @@ struct PartyDetailsView: View {
             struct GameStatusResult: Codable { let game_status: String? }
             let results = try JSONDecoder().decode([GameStatusResult].self, from: response.data)
             
-            if let result = results.first {
+            if let result = results.first, let gameStatus = result.game_status {
                 await MainActor.run {
-                    self.gameStatus = result.game_status ?? "waiting"
+                    self.gameStatus = gameStatus
                 }
             }
+
         } catch {
             print("Error fetching game status: \(error)")
             // Default to waiting if there's an error
@@ -1229,6 +1256,96 @@ struct PartyDetailsView: View {
         }
     }
 
+    // MARK: - Automatic Winner Determination for Timer/Contest Bets
+    private func determineTimerContestWinners() async {
+        guard let partyId = partyId else { return }
+        
+        do {
+            // Fetch all user bets for this party
+            let userBetsResponse = try await supabaseClient
+                .from("User Bets")
+                .select("user_id, start_time, end_time, final_score, elapsed_time")
+                .eq("party_id", value: Int(partyId))
+                .execute()
+            
+            let userBets = try JSONDecoder().decode([UserBetData].self, from: userBetsResponse.data)
+            
+            if betType.lowercased() == "timed" {
+                await determineTimedBetWinners(userBets: userBets, partyId: partyId)
+            } else if betType.lowercased() == "contest" {
+                await determineContestBetWinners(userBets: userBets, partyId: partyId)
+            }
+            
+        } catch {
+            print("Error determining winners: \(error)")
+        }
+    }
+
+    private func determineTimedBetWinners(userBets: [UserBetData], partyId: Int64) async {
+        for userBet in userBets {
+            var isWinner = false
+            
+            // Check if user completed the task in time
+            if let startTimeStr = userBet.start_time,
+               let endTimeStr = userBet.end_time,
+               let startTime = ISO8601DateFormatter().date(from: startTimeStr),
+               let endTime = ISO8601DateFormatter().date(from: endTimeStr) {
+                
+                let actualDuration = Int(endTime.timeIntervalSince(startTime))
+                
+                // Winner if they completed within the time limit
+                isWinner = actualDuration <= timerDuration
+                
+                print("🏆 Timed Bet Winner Check:")
+                print("   User: \(userBet.user_id)")
+                print("   Actual Duration: \(actualDuration)s")
+                print("   Time Limit: \(timerDuration)s")
+                print("   Is Winner: \(isWinner)")
+            } else {
+                // If no end time recorded, they didn't complete the task
+                isWinner = false
+                print("🏆 Timed Bet: User \(userBet.user_id) - No completion time recorded")
+            }
+            
+            // Update the user's winner status
+            do {
+                _ = try await supabaseClient
+                    .from("User Bets")
+                    .update(["is_winner": isWinner])
+                    .eq("party_id", value: Int(partyId))
+                    .eq("user_id", value: userBet.user_id)
+                    .execute()
+                    
+                print("✅ Updated winner status for \(userBet.user_id): \(isWinner)")
+            } catch {
+                print("❌ Error updating timed bet winner status for user \(userBet.user_id): \(error)")
+            }
+        }
+    }
+
+    private func determineContestBetWinners(userBets: [UserBetData], partyId: Int64) async {
+        for userBet in userBets {
+            var isWinner = false
+            
+            // Check if user hit the target score
+            if let finalScore = userBet.final_score {
+                isWinner = Int(finalScore) >= contestTarget
+            }
+            
+            // Update the user's winner status
+            do {
+                _ = try await supabaseClient
+                    .from("User Bets")
+                    .update(["is_winner": isWinner])
+                    .eq("party_id", value: Int(partyId))
+                    .eq("user_id", value: userBet.user_id)
+                    .execute()
+            } catch {
+                print("Error updating contest bet winner status for user \(userBet.user_id): \(error)")
+            }
+        }
+    }
+    
     private func checkUserBetStatus() async {
         guard let userId = currentUserId, let partyId = partyId else { return }
         
@@ -1325,13 +1442,13 @@ struct PartyDetailsView: View {
                 let status: String?
                 let bet: String?
                 let terms: String?
-                let game_status: String?
+                let game_status: String
                 let max_selections: Int?
-                let timer_duration: Int?  // NEW
-                let allow_early_finish: Bool?  // NEW
-                let contest_unit: String?  // NEW
-                let contest_target: Int?  // NEW
-                let allow_ties: Bool?  // NEW
+                let timer_duration: Int?
+                let allow_early_finish: Bool?
+                let contest_unit: String?
+                let contest_target: Int?
+                let allow_ties: Bool?
             }
             
             let partyArray = try decoder.decode([PartyResult].self, from: partyResponse.data)
@@ -1365,7 +1482,7 @@ struct PartyDetailsView: View {
                 self.status = partyResult.status ?? "open"
                 self.betPrompt = partyResult.bet ?? ""
                 self.betTerms = partyResult.terms ?? ""
-                self.gameStatus = partyResult.game_status ?? "waiting"
+                self.gameStatus = partyResult.game_status
                 self.maxSelections = partyResult.max_selections ?? 1
                 
                 // NEW: Set timer/contest specific properties

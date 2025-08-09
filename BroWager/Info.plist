@@ -2,27 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>GIDClientID</key>
-    <string>507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>browager</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef.apps.googleusercontent.com</string>
-                <string>com.googleusercontent.apps.507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef</string>
-            </array>
-        </dict>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>browager-oauth</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>browager</string>
-            </array>
-        </dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>browager</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>myapp-507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef.apps.googleusercontent.com</string>
+				<string>com.googleusercontent.apps.507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>browager-oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>browager</string>
+			</array>
+		</dict>
 	</array>
 	<key>GEMINI_API_KEYS</key>
 	<array>
@@ -33,6 +33,8 @@
 		<string>AIzaSyDFJUVMcSEqp9T2L4WG_DlPHDT_gKjnSKU</string>
 		<string>AIzaSyDZg-mvtsI_XG-krQmRp1J_0Ar9JtG5wjo</string>
 	</array>
+	<key>GIDClientID</key>
+	<string>507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef.apps.googleusercontent.com</string>
 	<key>GOOGLE_CSE_API_KEY</key>
 	<string>AIzaSyAAmgQw_YbvXDGFJmbe0xPkSliEz3XMrj8</string>
 	<key>GOOGLE_CSE_ENGINE_ID</key>

@@ -9,12 +9,12 @@ struct PlaceBetView: View {
     let betOptions: [String]
     let betTerms: String
     let maxSelections: Int
-    let betType: String  // NEW
-    let timerDuration: Int  // NEW: Duration in seconds
-    let allowEarlyFinish: Bool  // NEW
-    let contestUnit: String  // NEW
-    let contestTarget: Int  // NEW
-    let allowTies: Bool  // NEW
+    let betType: String
+    let timerDuration: Int
+    let allowEarlyFinish: Bool
+    let contestUnit: String
+    let contestTarget: Int
+    let allowTies: Bool
     let isEditing: Bool
     
     @Environment(\.supabaseClient) private var supabaseClient
@@ -25,7 +25,7 @@ struct PlaceBetView: View {
     @State private var errorMessage: String?
     @State private var existingBetId: Int64? = nil
     
-    // NEW: Timer/Contest specific states
+    // Timer/Contest specific states
     @State private var timeRemaining: Int = 0
     @State private var timerRunning = false
     @State private var timer: Timer?
@@ -34,16 +34,23 @@ struct PlaceBetView: View {
     @State private var startTime: Date?
     @State private var endTime: Date?
     
-    // NEW: Contest specific states
+    // Contest specific states
     @State private var contestScore: Int = 0
     @State private var contestStarted = false
     @State private var contestFinished = false
     @State private var elapsedTime: Int = 0
     @State private var elapsedTimer: Timer?
+    @State private var targetAchievedTime: Int? = nil // NEW: Track when target was achieved
     
+    private struct BetCompletionUpdate: Encodable {
+        let completed_in_time: Bool
+        let score: Int
+        let end_time: String?
+        let elapsed_time: Int? // NEW: Add elapsed time for contest completion
+    }
+
     private var isTimerBet: Bool {
         let normalizedBetType = betType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        print("🔍 Checking if timer bet - original: '\(betType)', normalized: '\(normalizedBetType)'")
         return normalizedBetType == "timed"
     }
 
@@ -55,7 +62,7 @@ struct PlaceBetView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background - extend to cover entire screen including safe areas
+                // Background
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(red: 0.1, green: 0.1, blue: 0.2),
@@ -85,7 +92,6 @@ struct PlaceBetView: View {
                                     .foregroundColor(.white.opacity(0.8))
                                     .multilineTextAlignment(.center)
                                 
-                                // NEW: Bet type indicator
                                 HStack {
                                     Image(systemName: betTypeIcon)
                                         .foregroundColor(.blue)
@@ -101,18 +107,9 @@ struct PlaceBetView: View {
                             }
                             .padding(.top, 20)
                             
-                            // Timer/Contest Control Section - show for timer and contest types
+                            // Timer/Contest Control Section
                             if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
                                 timerContestControlSection
-                                    .onAppear {
-                                        print("🔍 Timer/Contest section is showing for betType: \(betType)")
-                                    }
-                            } else {
-                                Text("Debug: betType is '\(betType)' - not showing timer")
-                                    .foregroundColor(.yellow)
-                                    .onAppear {
-                                        print("🔍 Timer section NOT showing - betType: '\(betType)'")
-                                    }
                             }
                             
                             // Bet Prompt
@@ -135,7 +132,6 @@ struct PlaceBetView: View {
                                 termsSection
                                 optionsSelectionSection
                             } else if betType.lowercased() == "timed" {
-                                // For timer bets, show terms but no options selection
                                 termsSection
                             }
                             
@@ -159,30 +155,14 @@ struct PlaceBetView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        stopAllTimers()
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
-            }
         }
         .onAppear {
-            // Set navigation bar appearance
             let appearance = UINavigationBarAppearance()
             appearance.configureWithTransparentBackground()
             appearance.backgroundColor = .clear
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             
-            print("🔍 Debug PlaceBetView - betType: '\(betType)'")
-            print("🔍 Debug PlaceBetView - betType lowercased: '\(betType.lowercased())'")
-            print("🔍 Debug PlaceBetView - timerDuration: \(timerDuration)")
-            print("🔍 Debug PlaceBetView - Should show timer: \(betType.lowercased() == "timed")")
-            
-            // Initialize timer/contest states
             if betType.lowercased() == "timed" {
                 timeRemaining = timerDuration
             }
@@ -204,17 +184,8 @@ struct PlaceBetView: View {
         VStack(spacing: 16) {
             if betType.lowercased() == "timed" {
                 timerControlSection
-                    .onAppear {
-                        print("🔍 Showing timer control section")
-                    }
             } else if betType.lowercased() == "contest" {
                 contestControlSection
-                    .onAppear {
-                        print("🔍 Showing contest control section")
-                    }
-            } else {
-                Text("Debug: Unexpected betType in timerContestControlSection: '\(betType)'")
-                    .foregroundColor(.red)
             }
         }
         .padding()
@@ -329,15 +300,17 @@ struct PlaceBetView: View {
             
             // Timer Status
             if isTimerFinished {
+                let completedInTime = endTime != nil && startTime != nil &&
+                                     endTime!.timeIntervalSince(startTime!) < Double(timerDuration)
                 HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Timer Complete!")
+                    Image(systemName: completedInTime ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(completedInTime ? .green : .red)
+                    Text(completedInTime ? "Task Completed in Time!" : "Time Expired")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.green)
+                        .foregroundColor(completedInTime ? .green : .red)
                 }
                 .padding()
-                .background(Color.green.opacity(0.1))
+                .background((completedInTime ? Color.green : Color.red).opacity(0.1))
                 .cornerRadius(8)
             } else if hasTimerStarted {
                 HStack {
@@ -393,6 +366,17 @@ struct PlaceBetView: View {
                         .font(.system(size: 16, weight: .medium, design: .monospaced))
                         .foregroundColor(.orange)
                 }
+                
+                // NEW: Show target achieved time
+                if let achievedTime = targetAchievedTime {
+                    Text("🎯 Target achieved in: \(formatTime(achievedTime))")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.2))
+                        .cornerRadius(8)
+                }
             }
             
             // Contest Controls
@@ -430,7 +414,7 @@ struct PlaceBetView: View {
                     Button(action: finishContest) {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                            Text("Finish Contest")
+                            Text("Quit and Accept Loss")
                         }
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
@@ -438,20 +422,6 @@ struct PlaceBetView: View {
                         .padding()
                         .background(Color.blue.opacity(0.8))
                         .cornerRadius(12)
-                    }
-                }
-                
-                if contestStarted && !contestFinished {
-                    Button(action: resetContest) {
-                        HStack {
-                            Image(systemName: "arrow.clockwise.circle.fill")
-                            Text("Reset Contest")
-                        }
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.gray.opacity(0.8))
-                        .cornerRadius(8)
                     }
                 }
             }
@@ -514,7 +484,6 @@ struct PlaceBetView: View {
     
     private var termsSection: some View {
         Group {
-            // Show warning if too many selections
             if selectedOptions.count > maxSelections {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -529,7 +498,6 @@ struct PlaceBetView: View {
                 .padding(.horizontal, 24)
             }
             
-            // Bet Terms (if available)
             if !betTerms.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Terms & Conditions:")
@@ -647,15 +615,14 @@ struct PlaceBetView: View {
         }
     }
     
-    // Computed property to check if submission is allowed
     private var canSubmit: Bool {
         switch betType.lowercased() {
         case "normal":
             return !selectedOptions.isEmpty && selectedOptions.count <= maxSelections
         case "timed":
-            return true // Timer bets can always be submitted
+            return true
         case "contest":
-            return true // Contest bets can always be submitted
+            return true
         default:
             return !selectedOptions.isEmpty && selectedOptions.count <= maxSelections
         }
@@ -706,15 +673,25 @@ struct PlaceBetView: View {
     }
     
     private func finishTimer() {
-        timer?.invalidate()
-        timer = nil
-        timerRunning = false
+        stopAllTimers()
         isTimerFinished = true
         endTime = Date()
+        
+        // Don't update win/loss status here - only store completion data
+        Task {
+            await storeBetCompletion(completedInTime: false, score: 0)
+        }
     }
     
     private func finishEarly() {
-        finishTimer()
+        stopAllTimers()
+        isTimerFinished = true
+        endTime = Date()
+        
+        // Don't update win/loss status here - only store completion data
+        Task {
+            await storeBetCompletion(completedInTime: true, score: 1)
+        }
     }
     
     private func getTimerColor() -> Color {
@@ -744,6 +721,26 @@ struct PlaceBetView: View {
         let newScore = contestScore + change
         if newScore >= 0 {
             contestScore = newScore
+            
+            // Check if target reached for the first time
+            if contestScore >= contestTarget && !contestFinished && targetAchievedTime == nil {
+                targetAchievedTime = elapsedTime
+                autoCompleteContest()
+            }
+        }
+    }
+    
+    private func autoCompleteContest() {
+        contestFinished = true
+        endTime = Date()
+        elapsedTimer?.invalidate()
+        elapsedTimer = nil
+        
+        print("🎉 Contest auto-completed! Target reached in \(targetAchievedTime ?? elapsedTime) seconds")
+        
+        // Don't update win/loss status here - only store completion data
+        Task {
+            await storeBetCompletion(completedInTime: true, score: contestScore)
         }
     }
     
@@ -752,17 +749,13 @@ struct PlaceBetView: View {
         endTime = Date()
         elapsedTimer?.invalidate()
         elapsedTimer = nil
-    }
-    
-    private func resetContest() {
-        contestScore = 0
-        elapsedTime = 0
-        contestStarted = false
-        contestFinished = false
-        startTime = nil
-        endTime = nil
-        elapsedTimer?.invalidate()
-        elapsedTimer = nil
+        
+        // Don't update win/loss status here - only store completion data
+        let achievedTarget = contestScore >= contestTarget
+        
+        Task {
+            await storeBetCompletion(completedInTime: achievedTarget, score: contestScore)
+        }
     }
     
     // MARK: - Helper Functions
@@ -786,21 +779,16 @@ struct PlaceBetView: View {
         elapsedTimer = nil
     }
     
-    // Function to handle option toggling with max selection logic (for normal bets)
     private func toggleOption(_ option: String) {
         if selectedOptions.contains(option) {
-            // Always allow deselection
             selectedOptions.remove(option)
         } else {
-            // Check if we can add more selections
             if selectedOptions.count < maxSelections {
                 selectedOptions.insert(option)
             } else if maxSelections == 1 {
-                // For single selection, replace the current selection
                 selectedOptions.removeAll()
                 selectedOptions.insert(option)
             }
-            // For multiple selections, if at limit, don't add more
         }
     }
 
@@ -827,15 +815,8 @@ struct PlaceBetView: View {
             let existingBets = try JSONDecoder().decode([ExistingBet].self, from: response.data)
             
             if let existingBet = existingBets.first {
-                // Parse the bet_selection back into an array for normal bets
                 if betType.lowercased() == "normal" {
                     let optionsArray = existingBet.bet_selection.components(separatedBy: ", ")
-                    await MainActor.run {
-                        self.existingBetId = existingBet.id
-                        self.selectedOptions = Set(optionsArray)
-                        self.isLoading = false
-                    }
-                } else {
                     await MainActor.run {
                         self.existingBetId = existingBet.id
                         self.isLoading = false
@@ -857,7 +838,6 @@ struct PlaceBetView: View {
     }
     
     private func placeBet() async {
-        // Validate based on bet type
         guard canSubmit else {
             await MainActor.run {
                 self.errorMessage = getValidationMessage()
@@ -876,27 +856,30 @@ struct PlaceBetView: View {
                 let user_id: String
                 let bet_selection: String
                 let is_winner: Bool?
-                let start_time: String?  // NEW
-                let end_time: String?    // NEW
-                let final_score: Int?    // NEW for contest
-                let elapsed_time: Int?   // NEW
+                let start_time: String?
+                let end_time: String?
+                let final_score: Int?
+                let elapsed_time: Int?
+                let completed_in_time: Bool? // NEW: Add this field
             }
             
             let selectedOptionText = getBetSelectionText()
-            
-            // Format timestamps
             let startTimeString = startTime?.ISO8601Format()
             let endTimeString = endTime?.ISO8601Format()
+            
+            // For contest bets, use the time when target was achieved, not total elapsed time
+            let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
             
             let betData = BetInsert(
                 party_id: partyId,
                 user_id: userId,
                 bet_selection: selectedOptionText,
-                is_winner: nil,
+                is_winner: nil, // Don't set winner status until game ends
                 start_time: startTimeString,
                 end_time: endTimeString,
                 final_score: betType.lowercased() == "contest" ? contestScore : nil,
-                elapsed_time: betType.lowercased() == "contest" ? elapsedTime : nil
+                elapsed_time: completionTime,
+                completed_in_time: getCompletedInTimeStatus()
             )
             
             _ = try await supabaseClient
@@ -936,6 +919,7 @@ struct PlaceBetView: View {
         let end_time: String?
         let final_score: Int?
         let elapsed_time: Int?
+        let completed_in_time: Bool?
     }
     
     private func updateBet() async {
@@ -946,7 +930,6 @@ struct PlaceBetView: View {
             return
         }
 
-        // Validate based on bet type
         guard canSubmit else {
             await MainActor.run {
                 self.errorMessage = getValidationMessage()
@@ -961,21 +944,19 @@ struct PlaceBetView: View {
 
         do {
             let selectedOptionText = getBetSelectionText()
-
-            // Format timestamps
             let startTimeString = startTime?.ISO8601Format()
             let endTimeString = endTime?.ISO8601Format()
+            let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
 
-            // Build update payload
             let updateData = BetUpdateData(
                 bet_selection: selectedOptionText,
                 start_time: startTimeString,
                 end_time: endTimeString,
                 final_score: betType.lowercased() == "contest" ? contestScore : nil,
-                elapsed_time: betType.lowercased() == "contest" ? elapsedTime : nil
+                elapsed_time: completionTime,
+                completed_in_time: getCompletedInTimeStatus()
             )
 
-            // Send update to Supabase
             _ = try await supabaseClient
                 .from("User Bets")
                 .update(updateData)
@@ -1012,7 +993,8 @@ struct PlaceBetView: View {
             }
         case "contest":
             if contestFinished {
-                return "Score: \(contestScore)/\(contestTarget) \(contestUnit)"
+                let achievedTimeText = targetAchievedTime != nil ? " (achieved in \(formatTime(targetAchievedTime!)))" : ""
+                return "Score: \(contestScore)/\(contestTarget) \(contestUnit)\(achievedTimeText)"
             } else if contestStarted {
                 return "Contest started - Score: \(contestScore)"
             } else {
@@ -1037,41 +1019,52 @@ struct PlaceBetView: View {
             if !hasTimerStarted {
                 return "Start the timer to begin the challenge."
             }
-            return "" // No validation issues for started timer
+            return ""
         case "contest":
-            return "" // No validation needed for contest
+            return ""
         default:
             break
         }
         return ""
     }
     
-    // MARK: - Timer-specific validation for submission
-    private func canSubmitTimerBet() -> Bool {
-        // For timer bets, user must have at least started the timer to submit
-        return hasTimerStarted
+    private func getCompletedInTimeStatus() -> Bool? {
+        switch betType.lowercased() {
+        case "timed":
+            if isTimerFinished {
+                return endTime != nil && startTime != nil &&
+                       endTime!.timeIntervalSince(startTime!) < Double(timerDuration)
+            }
+            return nil
+        case "contest":
+            return contestScore >= contestTarget
+        default:
+            return nil
+        }
     }
-}
-
-#Preview {
-    PlaceBetView(
-        partyId: 1,
-        userId: "user123",
-        partyName: "Test Party",
-        betPrompt: "Complete this challenge within the time limit",
-        betOptions: ["Option A", "Option B", "Option C"],
-        betTerms: "Complete the task within the given timeframe",
-        maxSelections: 1,
-        betType: "timed",
-        timerDuration: 300, // 5 minutes
-        allowEarlyFinish: true,
-        contestUnit: "points",
-        contestTarget: 100,
-        allowTies: false,
-        isEditing: false
-    )
-    .environmentObject(SessionManager(supabaseClient: SupabaseClient(
-        supabaseURL: URL(string: "https://example.supabase.co")!,
-        supabaseKey: "public-anon-key"
-    )))
+    
+    // MARK: - Store Bet Completion (without setting winner status)
+    private func storeBetCompletion(completedInTime: Bool, score: Int) async {
+        do {
+            let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
+            
+            let updateData = BetCompletionUpdate(
+                completed_in_time: completedInTime,
+                score: score,
+                end_time: endTime?.ISO8601Format(),
+                elapsed_time: completionTime
+            )
+            
+            _ = try await supabaseClient
+                .from("User Bets")
+                .update(updateData)
+                .eq("party_id", value: Int(partyId))
+                .eq("user_id", value: userId)
+                .execute()
+            
+            print("✅ Bet completion stored - Completed: \(completedInTime), Score: \(score), Time: \(completionTime ?? 0)")
+        } catch {
+            print("❌ Failed to store bet completion: \(error)")
+        }
+    }
 }
