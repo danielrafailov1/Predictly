@@ -228,7 +228,7 @@ struct PlaceBetView: View {
                         .background(Color.green.opacity(0.8))
                         .cornerRadius(10)
                     }
-                } else if timerRunning && !isTimerFinished {
+                } else if timerRunning && !isTimerFinished && timeRemaining > 0 {
                     Button(action: pauseTimer) {
                         HStack(spacing: 4) {
                             Image(systemName: "pause.circle.fill")
@@ -269,7 +269,7 @@ struct PlaceBetView: View {
                         .background(Color.gray.opacity(0.8))
                         .cornerRadius(10)
                     }
-                } else if !timerRunning && hasTimerStarted && !isTimerFinished {
+                } else if !timerRunning && hasTimerStarted && !isTimerFinished && timeRemaining > 0 {
                     Button(action: resumeTimer) {
                         HStack(spacing: 6) {
                             Image(systemName: "play.circle.fill")
@@ -294,6 +294,42 @@ struct PlaceBetView: View {
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.8))
                         .cornerRadius(10)
+                    }
+                }
+                else if timeRemaining <= 0 && !isTimerFinished {
+                    VStack(spacing: 8) {
+                        Text("Time's up! Did you complete the task?")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                        
+                        HStack(spacing: 12) {
+                            Button(action: markTaskCompleted) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text("Yes, Completed")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.8))
+                                .cornerRadius(8)
+                            }
+                            
+                            Button(action: markTaskNotCompleted) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "xmark.circle.fill")
+                                    Text("No, Did Not Complete")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.8))
+                                .cornerRadius(8)
+                            }
+                        }
                     }
                 }
             }
@@ -360,13 +396,6 @@ struct PlaceBetView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 
-                // Elapsed Time
-                if contestStarted {
-                    Text("Time: \(formatTime(elapsedTime))")
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .foregroundColor(.orange)
-                }
-                
                 // NEW: Show target achieved time
                 if let achievedTime = targetAchievedTime {
                     Text("🎯 Target achieved in: \(formatTime(achievedTime))")
@@ -379,7 +408,7 @@ struct PlaceBetView: View {
                 }
             }
             
-            // Contest Controls
+            // Contest Controls - SWITCHED ORDER: Score buttons first, then timer
             VStack(spacing: 12) {
                 if !contestStarted {
                     Button(action: startContest) {
@@ -395,20 +424,28 @@ struct PlaceBetView: View {
                         .cornerRadius(12)
                     }
                 } else if !contestFinished {
-                    // Score adjustment buttons
-                    HStack(spacing: 16) {
+                    // LARGER Score adjustment buttons - moved above timer
+                    HStack(spacing: 24) {
                         Button(action: { adjustScore(-1) }) {
                             Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(size: 40)) // INCREASED from 24 to 40
                                 .foregroundColor(.red)
                         }
                         .disabled(contestScore <= 0)
                         
                         Button(action: { adjustScore(1) }) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(size: 40)) // INCREASED from 24 to 40
                                 .foregroundColor(.green)
                         }
+                    }
+                    .padding(.vertical, 8)
+                    
+                    // Elapsed Time - moved below the score buttons
+                    if contestStarted {
+                        Text("Time: \(formatTime(elapsedTime))")
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .foregroundColor(.orange)
                     }
                     
                     Button(action: finishContest) {
@@ -676,8 +713,23 @@ struct PlaceBetView: View {
         stopAllTimers()
         isTimerFinished = true
         endTime = Date()
+    }
+    
+    private func markTaskCompleted() {
+        stopAllTimers()
+        isTimerFinished = true
+        endTime = Date()
         
-        // Don't update win/loss status here - only store completion data
+        Task {
+            await storeBetCompletion(completedInTime: true, score: 1)
+        }
+    }
+    
+    private func markTaskNotCompleted() {
+        stopAllTimers()
+        isTimerFinished = true
+        endTime = Date()
+        
         Task {
             await storeBetCompletion(completedInTime: false, score: 0)
         }
@@ -860,21 +912,19 @@ struct PlaceBetView: View {
                 let end_time: String?
                 let final_score: Int?
                 let elapsed_time: Int?
-                let completed_in_time: Bool? // NEW: Add this field
+                let completed_in_time: Bool?
             }
             
             let selectedOptionText = getBetSelectionText()
             let startTimeString = startTime?.ISO8601Format()
             let endTimeString = endTime?.ISO8601Format()
-            
-            // For contest bets, use the time when target was achieved, not total elapsed time
             let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
             
             let betData = BetInsert(
                 party_id: partyId,
                 user_id: userId,
                 bet_selection: selectedOptionText,
-                is_winner: nil, // Don't set winner status until game ends
+                is_winner: getCompletedInTimeStatus(),
                 start_time: startTimeString,
                 end_time: endTimeString,
                 final_score: betType.lowercased() == "contest" ? contestScore : nil,
@@ -1048,11 +1098,21 @@ struct PlaceBetView: View {
         do {
             let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
             
+            // Updated struct to include is_winner
+            struct BetCompletionUpdate: Encodable {
+                let completed_in_time: Bool
+                let score: Int
+                let end_time: String?
+                let elapsed_time: Int?
+                let is_winner: Bool // NEW: Add is_winner field
+            }
+            
             let updateData = BetCompletionUpdate(
                 completed_in_time: completedInTime,
                 score: score,
                 end_time: endTime?.ISO8601Format(),
-                elapsed_time: completionTime
+                elapsed_time: completionTime,
+                is_winner: completedInTime // NEW: Set is_winner based on completion status
             )
             
             _ = try await supabaseClient
@@ -1062,7 +1122,7 @@ struct PlaceBetView: View {
                 .eq("user_id", value: userId)
                 .execute()
             
-            print("✅ Bet completion stored - Completed: \(completedInTime), Score: \(score), Time: \(completionTime ?? 0)")
+            print("✅ Bet completion stored - Completed: \(completedInTime), Score: \(score), Time: \(completionTime ?? 0), Winner: \(completedInTime)")
         } catch {
             print("❌ Failed to store bet completion: \(error)")
         }

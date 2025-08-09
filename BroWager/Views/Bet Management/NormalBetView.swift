@@ -1408,6 +1408,22 @@ struct BetOptionsView: View {
     @State private var target = 1
     @State private var isContestAmountPickerEnabled = false
     
+    // Options refresh cooldown states - using AppStorage for persistence
+    @AppStorage("optionsRefreshCount") private var optionsRefreshCount = 0
+    @AppStorage("lastOptionsRefreshTimestamp") private var lastOptionsRefreshTimestamp: Double = 0
+    @State private var isOptionsRefreshDisabled = false
+    @State private var optionsCooldownTimer: Timer?
+    @State private var optionsTimeRemaining: Int = 0
+    
+    // Terms refresh cooldown states - using AppStorage for persistence
+    @AppStorage("termsRefreshCount") private var termsRefreshCount = 0
+    @AppStorage("lastTermsRefreshTimestamp") private var lastTermsRefreshTimestamp: Double = 0
+    @State private var isTermsRefreshDisabled = false
+    @State private var termsCooldownTimer: Timer?
+    @State private var termsTimeRemaining: Int = 0
+    
+    private let maxRefreshesPerMinute = 3
+    
     private var filledOptionsCount: Int {
         betOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
     }
@@ -1476,6 +1492,12 @@ struct BetOptionsView: View {
         }
         .onAppear {
             setupInitialOptions()
+            checkOptionsCooldownStatus()
+            checkTermsCooldownStatus()
+        }
+        .onDisappear {
+            optionsCooldownTimer?.invalidate()
+            termsCooldownTimer?.invalidate()
         }
     }
 
@@ -1527,7 +1549,6 @@ struct BetOptionsView: View {
             .padding(.horizontal)
         }
     }
-
 
     private var backgroundGradient: some View {
         LinearGradient(
@@ -1586,10 +1607,31 @@ struct BetOptionsView: View {
     }
 
     private var optionsHeaderSection: some View {
-        HStack {
-            optionsCounterText
-            Spacer()
-            generateOptionsButton
+        VStack(spacing: 8) {
+            HStack {
+                optionsCounterText
+                Spacer()
+                generateOptionsButton
+            }
+            
+            // Options cooldown message with live timer
+            if isOptionsRefreshDisabled && optionsTimeRemaining > 0 {
+                HStack {
+                    Spacer()
+                    Text("Options cooldown: \(optionsTimeRemaining)s remaining")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                    Spacer()
+                }
+            } else if optionsRefreshCount > 0 && !isOptionsRefreshDisabled {
+                HStack {
+                    Spacer()
+                    Text("\(maxRefreshesPerMinute - optionsRefreshCount) option refreshes remaining this minute")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.caption)
+                    Spacer()
+                }
+            }
         }
         .padding(.horizontal)
     }
@@ -1611,7 +1653,7 @@ struct BetOptionsView: View {
     private var generateOptionsButton: some View {
         Button {
             Task {
-                await generateOptions(betPrompt: betPrompt, date: selectedDate)
+                await handleOptionsRefreshTap()
             }
         } label: {
             Group {
@@ -1621,12 +1663,15 @@ struct BetOptionsView: View {
                         .scaleEffect(0.8)
                 } else {
                     Image(systemName: "sparkles")
-                        .foregroundColor(.yellow)
+                        .foregroundColor(isOptionsRefreshDisabled ? .gray : .yellow)
                         .font(.system(size: 20))
                 }
             }
+            .padding(8)
+            .background((isOptionsRefreshDisabled ? Color.gray : Color.yellow).opacity(0.2))
+            .clipShape(Circle())
         }
-        .disabled(isGeneratingOptions)
+        .disabled(isGeneratingOptions || isOptionsRefreshDisabled)
     }
 
     private var optionsListSection: some View {
@@ -1665,6 +1710,25 @@ struct BetOptionsView: View {
                 generateTermsButton
             }
             
+            // Terms cooldown message with live timer
+            if isTermsRefreshDisabled && termsTimeRemaining > 0 {
+                HStack {
+                    Spacer()
+                    Text("Terms cooldown: \(termsTimeRemaining)s remaining")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                    Spacer()
+                }
+            } else if termsRefreshCount > 0 && !isTermsRefreshDisabled {
+                HStack {
+                    Spacer()
+                    Text("\(maxRefreshesPerMinute - termsRefreshCount) terms refreshes remaining this minute")
+                        .foregroundColor(.white.opacity(0.6))
+                        .font(.caption)
+                    Spacer()
+                }
+            }
+            
             // Word count indicator
             HStack {
                 Text("Word count: \(currentWordCount) / \(maxWordsInTerms)")
@@ -1690,12 +1754,18 @@ struct BetOptionsView: View {
 
     private var generateTermsButton: some View {
         Button {
-            generateTerms(date: selectedDate)
+            Task {
+                await handleTermsRefreshTap()
+            }
         } label: {
             Image(systemName: "sparkles")
-                .foregroundColor(.yellow)
+                .foregroundColor(isTermsRefreshDisabled ? .gray : .yellow)
                 .font(.system(size: 20))
+                .padding(8)
+                .background((isTermsRefreshDisabled ? Color.gray : Color.yellow).opacity(0.2))
+                .clipShape(Circle())
         }
+        .disabled(isTermsRefreshDisabled)
     }
 
     private var termsEditorSection: some View {
@@ -1746,25 +1816,24 @@ struct BetOptionsView: View {
     }
     
     private func enforceWordLimit(_ newValue: String) {
-            let words = newValue.components(separatedBy: .whitespacesAndNewlines)
-                .filter { !$0.isEmpty }
+        let words = newValue.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        
+        // If over the limit, truncate to the word limit
+        if words.count > maxWordsInTerms {
+            let truncatedWords = Array(words.prefix(maxWordsInTerms))
+            let truncatedText = truncatedWords.joined(separator: " ")
             
-            // If over the limit, truncate to the word limit
-            if words.count > maxWordsInTerms {
-                let truncatedWords = Array(words.prefix(maxWordsInTerms))
-                let truncatedText = truncatedWords.joined(separator: " ")
-                
-                // Use a dispatch to avoid binding update conflicts
-                DispatchQueue.main.async {
-                    self.betTerms = truncatedText
-                }
-                
-                // Provide haptic feedback
-                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                impactFeedback.impactOccurred()
+            // Use a dispatch to avoid binding update conflicts
+            DispatchQueue.main.async {
+                self.betTerms = truncatedText
             }
+            
+            // Provide haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
         }
-
+    }
 
     private var aiOptimizationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1896,6 +1965,176 @@ struct BetOptionsView: View {
         }
     }
 
+    // MARK: - Refresh Limit Helper Functions
+    
+    private func getCurrentTimestamp() -> Double {
+        return Date().timeIntervalSince1970
+    }
+    
+    // Options cooldown functions
+    private func checkOptionsCooldownStatus() {
+        let currentTime = getCurrentTimestamp()
+        let timeSinceLastRefresh = currentTime - lastOptionsRefreshTimestamp
+        
+        // Reset if more than 60 seconds have passed
+        if timeSinceLastRefresh >= 60 {
+            optionsRefreshCount = 0
+            isOptionsRefreshDisabled = false
+            optionsTimeRemaining = 0
+            optionsCooldownTimer?.invalidate()
+            return
+        }
+        
+        // Check if we're in cooldown
+        if optionsRefreshCount >= maxRefreshesPerMinute {
+            isOptionsRefreshDisabled = true
+            optionsTimeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+            startOptionsLiveTimer()
+        } else {
+            isOptionsRefreshDisabled = false
+            optionsTimeRemaining = 0
+        }
+    }
+    
+    private func startOptionsLiveTimer() {
+        optionsCooldownTimer?.invalidate()
+        
+        optionsCooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                let currentTime = getCurrentTimestamp()
+                let timeSinceLastRefresh = currentTime - lastOptionsRefreshTimestamp
+                
+                if timeSinceLastRefresh >= 60 {
+                    // Cooldown period has ended
+                    optionsRefreshCount = 0
+                    isOptionsRefreshDisabled = false
+                    optionsTimeRemaining = 0
+                    optionsCooldownTimer?.invalidate()
+                } else {
+                    // Update remaining time
+                    optionsTimeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+                    if optionsTimeRemaining == 0 {
+                        optionsRefreshCount = 0
+                        isOptionsRefreshDisabled = false
+                        optionsCooldownTimer?.invalidate()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func handleOptionsRefreshTap() async {
+        let currentTime = getCurrentTimestamp()
+        let timeSinceLastRefresh = currentTime - lastOptionsRefreshTimestamp
+        
+        // Reset counter if more than 60 seconds have passed
+        if timeSinceLastRefresh >= 60 {
+            optionsRefreshCount = 0
+        }
+        
+        // Check if we've exceeded the limit
+        if optionsRefreshCount >= maxRefreshesPerMinute {
+            isOptionsRefreshDisabled = true
+            optionsTimeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+            startOptionsLiveTimer()
+            return
+        }
+        
+        // Increment counter and refresh
+        optionsRefreshCount += 1
+        lastOptionsRefreshTimestamp = currentTime
+        await generateOptions(betPrompt: betPrompt, date: selectedDate)
+        
+        // Start cooldown if we've hit the limit
+        if optionsRefreshCount >= maxRefreshesPerMinute {
+            isOptionsRefreshDisabled = true
+            optionsTimeRemaining = 60
+            startOptionsLiveTimer()
+        }
+    }
+    
+    // Terms cooldown functions
+    private func checkTermsCooldownStatus() {
+        let currentTime = getCurrentTimestamp()
+        let timeSinceLastRefresh = currentTime - lastTermsRefreshTimestamp
+        
+        // Reset if more than 60 seconds have passed
+        if timeSinceLastRefresh >= 60 {
+            termsRefreshCount = 0
+            isTermsRefreshDisabled = false
+            termsTimeRemaining = 0
+            termsCooldownTimer?.invalidate()
+            return
+        }
+        
+        // Check if we're in cooldown
+        if termsRefreshCount >= maxRefreshesPerMinute {
+            isTermsRefreshDisabled = true
+            termsTimeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+            startTermsLiveTimer()
+        } else {
+            isTermsRefreshDisabled = false
+            termsTimeRemaining = 0
+        }
+    }
+    
+    private func startTermsLiveTimer() {
+        termsCooldownTimer?.invalidate()
+        
+        termsCooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                let currentTime = getCurrentTimestamp()
+                let timeSinceLastRefresh = currentTime - lastTermsRefreshTimestamp
+                
+                if timeSinceLastRefresh >= 60 {
+                    // Cooldown period has ended
+                    termsRefreshCount = 0
+                    isTermsRefreshDisabled = false
+                    termsTimeRemaining = 0
+                    termsCooldownTimer?.invalidate()
+                } else {
+                    // Update remaining time
+                    termsTimeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+                    if termsTimeRemaining == 0 {
+                        termsRefreshCount = 0
+                        isTermsRefreshDisabled = false
+                        termsCooldownTimer?.invalidate()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func handleTermsRefreshTap() async {
+        let currentTime = getCurrentTimestamp()
+        let timeSinceLastRefresh = currentTime - lastTermsRefreshTimestamp
+        
+        // Reset counter if more than 60 seconds have passed
+        if timeSinceLastRefresh >= 60 {
+            termsRefreshCount = 0
+        }
+        
+        // Check if we've exceeded the limit
+        if termsRefreshCount >= maxRefreshesPerMinute {
+            isTermsRefreshDisabled = true
+            termsTimeRemaining = max(0, Int(60 - timeSinceLastRefresh))
+            startTermsLiveTimer()
+            return
+        }
+        
+        // Increment counter and refresh
+        termsRefreshCount += 1
+        lastTermsRefreshTimestamp = currentTime
+        generateTerms(date: selectedDate)
+        
+        // Start cooldown if we've hit the limit
+        if termsRefreshCount >= maxRefreshesPerMinute {
+            isTermsRefreshDisabled = true
+            termsTimeRemaining = 60
+            startTermsLiveTimer()
+        }
+    }
+
     // MARK: - Helper Functions
 
     private func setupInitialOptions() {
@@ -1989,129 +2228,128 @@ struct BetOptionsView: View {
         isOptimizing = false
     }
     
-    func generateOptions(betPrompt: String, date: Date?) {
+    func generateOptions(betPrompt: String, date: Date?) async {
         isGeneratingOptions = true
-        Task {
-            do {
-                let isBinaryBet = detectBinaryBet(betPrompt)
-                let targetCount = isBinaryBet ? 2 : optionCount
+        
+        do {
+            let isBinaryBet = detectBinaryBet(betPrompt)
+            let targetCount = isBinaryBet ? 2 : optionCount
+            
+            let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+            
+            let prompt: String
+            
+            if isBinaryBet {
+                prompt = """
+                Analyze this betting question: "\(betPrompt)"
                 
-                let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+                This is a binary (yes/no or either/or) question in the \(selectedCategory?.rawValue.lowercased() ?? "general") category.
                 
-                let prompt: String
+                Generate exactly 2 clear, specific options that directly answer this question:
                 
-                if isBinaryBet {
-                    prompt = """
-                    Analyze this betting question: "\(betPrompt)"
-                    
-                    This is a binary (yes/no or either/or) question in the \(selectedCategory?.rawValue.lowercased() ?? "general") category.
-                    
-                    Generate exactly 2 clear, specific options that directly answer this question:
-                    
-                    Rules:
-                    - Extract the exact entities/teams/people mentioned in the question
-                    - If it's "Who will win X vs Y", return exactly "X" and "Y" (use the actual names)
-                    - If it's "Will [something] happen", return "Yes" and "No"
-                    - If it's "Which is better A or B", return "A" and "B" (use actual names)
-                    - Be precise and use the exact terms from the question
-                    - Keep each option under 8 words
-                    
-                    Return only the 2 options, one per line, no numbering or extra text.
-                    """
+                Rules:
+                - Extract the exact entities/teams/people mentioned in the question
+                - If it's "Who will win X vs Y", return exactly "X" and "Y" (use the actual names)
+                - If it's "Will [something] happen", return "Yes" and "No"
+                - If it's "Which is better A or B", return "A" and "B" (use actual names)
+                - Be precise and use the exact terms from the question
+                - Keep each option under 8 words
+                
+                Return only the 2 options, one per line, no numbering or extra text.
+                """
+            } else {
+                // Modified prompt to exclude date context when no date is selected
+                let dateContext: String
+                if let date = date {
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateStyle = .full
+                    let formattedDate = dateFormatter.string(from: date)
+                    dateContext = "- Make them realistic for the date: \(formattedDate)"
                 } else {
-                    // Modified prompt to exclude date context when no date is selected
-                    let dateContext: String
-                    if let date = date {
-                        let dateFormatter = DateFormatter()
-                        dateFormatter.dateStyle = .full
-                        let formattedDate = dateFormatter.string(from: date)
-                        dateContext = "- Make them realistic for the date: \(formattedDate)"
-                    } else {
-                        dateContext = "- Make them generally realistic and timeless (no specific date context needed)"
-                    }
-                    
-                    prompt = """
-                    Analyze this betting question: "\(betPrompt)"
-                    
-                    Generate exactly \(targetCount) realistic, specific options that directly answer this question about \(categoryContext).
-                    
-                    Requirements:
-                    - Each option must be a plausible answer to the exact question asked
-                    - Be specific and measurable (avoid vague terms like "other" or "something else")
-                    - If the question mentions specific entities, include them in relevant options
-                    - Options should be mutually exclusive (only one can be correct)
-                    \(dateContext)
-                    - Keep each option concise (under 15 words)
-                    - Ensure all \(targetCount) options are filled
-                    
-                    For example:
-                    - If asked "What will the weather be like?": "Sunny", "Rainy", "Cloudy", "Stormy"
-                    - If asked "Who will score first?": Use actual player names if mentioned
-                    - If asked "What time will we arrive?": "Before 2 PM", "2-4 PM", "4-6 PM", "After 6 PM"
-                    
-                    Return exactly \(targetCount) options, one per line, no numbering or extra text.
-                    """
-                }
-
-                let responseText = try await AIServices.shared.sendPrompt(
-                    prompt,
-                    model: "gemini-2.5-flash-lite",
-                    temperature: 0.3,
-                    maxTokens: 300
-                )
-
-                let cleanedLines = responseText
-                    .components(separatedBy: .newlines)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                    .map {
-                        // Remove numbering, bullets, and other prefixes
-                        $0.replacingOccurrences(of: #"^\s*[\d\-\•\*\)\.\:]+\.?\s*"#, with: "", options: .regularExpression)
-                    }
-                    .filter { $0.count > 1 && $0.count < 150 }
-
-                var generatedOptions = Array(cleanedLines.prefix(targetCount))
-                
-                // Ensure we have the exact number of options needed
-                while generatedOptions.count < targetCount {
-                    let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount - generatedOptions.count)
-                    generatedOptions.append(contentsOf: fallbackOptions)
+                    dateContext = "- Make them generally realistic and timeless (no specific date context needed)"
                 }
                 
-                // Take exactly the number we need
-                generatedOptions = Array(generatedOptions.prefix(targetCount))
+                prompt = """
+                Analyze this betting question: "\(betPrompt)"
                 
-                // Clear existing options and fill with generated ones
-                betOptions = Array(repeating: "", count: optionCount)
-                for (index, option) in generatedOptions.enumerated() {
-                    if index < betOptions.count {
-                        betOptions[index] = option
-                    }
-                }
+                Generate exactly \(targetCount) realistic, specific options that directly answer this question about \(categoryContext).
+                
+                Requirements:
+                - Each option must be a plausible answer to the exact question asked
+                - Be specific and measurable (avoid vague terms like "other" or "something else")
+                - If the question mentions specific entities, include them in relevant options
+                - Options should be mutually exclusive (only one can be correct)
+                \(dateContext)
+                - Keep each option concise (under 15 words)
+                - Ensure all \(targetCount) options are filled
+                
+                For example:
+                - If asked "What will the weather be like?": "Sunny", "Rainy", "Cloudy", "Stormy"
+                - If asked "Who will score first?": Use actual player names if mentioned
+                - If asked "What time will we arrive?": "Before 2 PM", "2-4 PM", "4-6 PM", "After 6 PM"
+                
+                Return exactly \(targetCount) options, one per line, no numbering or extra text.
+                """
+            }
 
-                // If we still don't have enough, use fallback
-                if generatedOptions.count < targetCount {
-                    let additionalFallback = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount)
-                    for (index, option) in additionalFallback.enumerated() {
-                        if index < betOptions.count && betOptions[index].isEmpty {
-                            betOptions[index] = option
-                        }
-                    }
-                }
+            let responseText = try await AIServices.shared.sendPrompt(
+                prompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.3,
+                maxTokens: 300
+            )
 
-            } catch {
-                print("Failed to generate bet options: \(error)")
-                let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: detectBinaryBet(betPrompt), count: optionCount)
-                betOptions = Array(repeating: "", count: optionCount)
-                for (index, option) in fallbackOptions.enumerated() {
-                    if index < betOptions.count {
+            let cleanedLines = responseText
+                .components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map {
+                    // Remove numbering, bullets, and other prefixes
+                    $0.replacingOccurrences(of: #"^\s*[\d\-\•\*\)\.\:]+\.?\s*"#, with: "", options: .regularExpression)
+                }
+                .filter { $0.count > 1 && $0.count < 150 }
+
+            var generatedOptions = Array(cleanedLines.prefix(targetCount))
+            
+            // Ensure we have the exact number of options needed
+            while generatedOptions.count < targetCount {
+                let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount - generatedOptions.count)
+                generatedOptions.append(contentsOf: fallbackOptions)
+            }
+            
+            // Take exactly the number we need
+            generatedOptions = Array(generatedOptions.prefix(targetCount))
+            
+            // Clear existing options and fill with generated ones
+            betOptions = Array(repeating: "", count: optionCount)
+            for (index, option) in generatedOptions.enumerated() {
+                if index < betOptions.count {
+                    betOptions[index] = option
+                }
+            }
+
+            // If we still don't have enough, use fallback
+            if generatedOptions.count < targetCount {
+                let additionalFallback = generateFallbackOptions(for: betPrompt, isBinary: isBinaryBet, count: targetCount)
+                for (index, option) in additionalFallback.enumerated() {
+                    if index < betOptions.count && betOptions[index].isEmpty {
                         betOptions[index] = option
                     }
                 }
             }
-            
-            isGeneratingOptions = false
+
+        } catch {
+            print("Failed to generate bet options: \(error)")
+            let fallbackOptions = generateFallbackOptions(for: betPrompt, isBinary: detectBinaryBet(betPrompt), count: optionCount)
+            betOptions = Array(repeating: "", count: optionCount)
+            for (index, option) in fallbackOptions.enumerated() {
+                if index < betOptions.count {
+                    betOptions[index] = option
+                }
+            }
         }
+        
+        isGeneratingOptions = false
     }
 
     func detectBinaryBet(_ prompt: String) -> Bool {
