@@ -54,6 +54,7 @@
 		4B6E45AA2E43FACF00376E7E /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 4B6E45A92E43FACF00376E7E /* GoogleSignIn */; };
 		4B6E45AC2E43FACF00376E7E /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 4B6E45AB2E43FACF00376E7E /* GoogleSignInSwift */; };
 		4B6E45B22E46946300376E7E /* party_names.txt in Resources */ = {isa = PBXBuildFile; fileRef = 4B6E45B12E46946300376E7E /* party_names.txt */; };
+		4B6E45B42E46D2A500376E7E /* ProfileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6E45B32E46D2A100376E7E /* ProfileCache.swift */; };
 		4B786A1F2E3091A2004E5105 /* TimerSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A1E2E3091A2004E5105 /* TimerSetView.swift */; };
 		4B786A212E3091A7004E5105 /* TimedBetSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */; };
 		4B786A232E314C6D004E5105 /* ContestBetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B786A222E314C20004E5105 /* ContestBetView.swift */; };
@@ -131,6 +132,7 @@
 		4B6AE1112E05CF6200656DF3 /* PartyInvitesView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PartyInvitesView.swift; sourceTree = "<group>"; };
 		4B6E45AD2E43FC9500376E7E /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		4B6E45B12E46946300376E7E /* party_names.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = party_names.txt; sourceTree = "<group>"; };
+		4B6E45B32E46D2A100376E7E /* ProfileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCache.swift; sourceTree = "<group>"; };
 		4B786A1E2E3091A2004E5105 /* TimerSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSetView.swift; sourceTree = "<group>"; };
 		4B786A202E3091A7004E5105 /* TimedBetSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedBetSettingView.swift; sourceTree = "<group>"; };
 		4B786A222E314C20004E5105 /* ContestBetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContestBetView.swift; sourceTree = "<group>"; };
@@ -252,6 +254,7 @@
 		4B2D15922DFCB3CB0068E5E4 /* Credentials */ = {
 			isa = PBXGroup;
 			children = (
+				4B6E45B32E46D2A100376E7E /* ProfileCache.swift */,
 				4B1F1B342E3B271800197463 /* CreditsView.swift */,
 				4BDD178B2E01F3F400CD117D /* LoginSignupView.swift */,
 				4B2D15902DFCB3CB0068E5E4 /* LoggedInView.swift */,
@@ -547,6 +550,7 @@
 				4B2D15A92DFCB3CB0068E5E4 /* PartyLobbyView.swift in Sources */,
 				4B56EF012E1C9F8F0088E513 /* SidebarView.swift in Sources */,
 				4B2D15882DFCB3C60068E5E4 /* Instrument.swift in Sources */,
+				4B6E45B42E46D2A500376E7E /* ProfileCache.swift in Sources */,
 				4B2D15BE2DFCB3CE0068E5E4 /* Soccer.swift in Sources */,
 				4B1F1B3A2E3EBCD700197463 /* APIKeyManager.swift in Sources */,
 				4B2D15AB2DFCB3CB0068E5E4 /* BasketballView.swift in Sources */,

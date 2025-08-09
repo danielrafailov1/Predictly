@@ -19,6 +19,10 @@ class SessionManager: ObservableObject {
             await self.refreshSession()
         }
     }
+    
+    func clearProfileCache() {
+        ProfileCache.shared.clearAllCache()
+    }
 
     func refreshSession() async {
         print("refreshSession: called on instance: \(Unmanaged.passUnretained(self).toOpaque())")
@@ -102,6 +106,7 @@ class SessionManager: ObservableObject {
     func signOut() async {
         do {
             try await supabaseClient.auth.signOut()
+            clearProfileCache() // Add this line
             await MainActor.run {
                 self.isLoggedIn = false
                 self.userEmail = nil
