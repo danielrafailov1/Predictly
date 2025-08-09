@@ -23,27 +23,29 @@ struct PartyInvitesView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea(.all)
+                .ignoresSafeArea(.all) // Changed to .all
                 
                 VStack {
                     if isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(1.5)
+                            .colorScheme(.dark) // Force dark
                     } else if let error = errorMessage {
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 40))
                                 .foregroundColor(.red)
                             Text(error)
-                                .foregroundColor(.white)
+                                .foregroundColor(.white) // Force white
                                 .multilineTextAlignment(.center)
+                                .font(.body)
                             Button("Retry") {
                                 Task { await loadInvites() }
                             }
                             .padding()
                             .background(Color.blue)
-                            .foregroundColor(.white)
+                            .foregroundColor(.white) // Force white
                             .cornerRadius(10)
                         }
                     } else if invites.isEmpty {
@@ -53,7 +55,7 @@ struct PartyInvitesView: View {
                                 .foregroundColor(.white.opacity(0.5))
                             Text("No party invites")
                                 .font(.system(size: 20, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.white) // Force white
                         }
                     } else {
                         List {
@@ -70,29 +72,39 @@ struct PartyInvitesView: View {
                                 .listRowSeparator(.hidden)
                             }
                         }
-                        .listStyle(PlainListStyle())
-                        .scrollContentBackground(.hidden)
+                        .listStyle(PlainListStyle()) // Add this
+                        .scrollContentBackground(.hidden) // Add this for iOS 16+
+                        .colorScheme(.dark) // Force dark color scheme
                     }
                 }
             }
             .navigationTitle("Party Invites")
+            .navigationBarTitleDisplayMode(.inline) // Add this
+            .toolbarBackground(.clear, for: .navigationBar) // Make toolbar clear
+            .toolbarColorScheme(.dark, for: .navigationBar) // Force dark scheme
+            .preferredColorScheme(.dark) // Force entire view to dark
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") { dismiss() }
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white) // Force white button text
                 }
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // Prevent split view issues
+        .preferredColorScheme(.dark) // Apply to entire NavigationView
         .task {
             await loadInvites()
         }
     }
     
+    // Rest of your loadInvites function remains the same...
     private func loadInvites() async {
         isLoading = true
         errorMessage = nil
         
         do {
-            // Get party invites for this user
             let invitesResponse = try await supabaseClient
                 .from("Party Invites")
                 .select("id, party_id, inviter_user_id, invitee_user_id, status, created_at")
@@ -100,12 +112,10 @@ struct PartyInvitesView: View {
                 .eq("status", value: "pending")
                 .order("created_at", ascending: false)
                 .execute()
-
             
             let fetchedInvites = try JSONDecoder().decode([PartyInviteBasic].self, from: invitesResponse.data)
                 .filter { $0.status == "pending" }
             
-            // Get party names
             let partyIds = Array(Set(fetchedInvites.map { Int($0.partyId) }))
             var partyNames: [Int64: String] = [:]
             
@@ -125,7 +135,6 @@ struct PartyInvitesView: View {
                 partyNames = Dictionary(uniqueKeysWithValues: partyNameRows.map { ($0.id, $0.party_name) })
             }
             
-            // Get inviter usernames
             let inviterIds = Array(Set(fetchedInvites.map { $0.inviterUserId }))
             var inviterUsernames: [String: String] = [:]
             
@@ -166,7 +175,6 @@ struct PartyInviteRow: View {
     let partyName: String
     let inviterUsername: String
     let onInviteProcessed: (Int64) -> Void
-
     
     @Environment(\.supabaseClient) private var supabaseClient
     @State private var isProcessing = false
@@ -177,11 +185,11 @@ struct PartyInviteRow: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(partyName)
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.white) // Force white
             
             Text("Invited by: \(inviterUsername)")
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(.white.opacity(0.7)) // Force white with opacity
             
             if let error = errorMessage {
                 Text(error)
@@ -204,8 +212,9 @@ struct PartyInviteRow: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(Color.green)
-                    .foregroundColor(.white)
+                    .foregroundColor(.white) // Force white
                     .cornerRadius(8)
+                    .font(.system(size: 14, weight: .semibold))
                     
                     Button("Decline") {
                         Task { await declineInvite() }
@@ -214,12 +223,14 @@ struct PartyInviteRow: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(Color.red)
-                    .foregroundColor(.white)
+                    .foregroundColor(.white) // Force white
                     .cornerRadius(8)
+                    .font(.system(size: 14, weight: .semibold))
                     
                     if isProcessing {
                         ProgressView()
                             .scaleEffect(0.8)
+                            .colorScheme(.dark) // Force dark
                     }
                 }
             } else {
@@ -231,8 +242,10 @@ struct PartyInviteRow: View {
         .padding()
         .background(Color.white.opacity(0.1))
         .cornerRadius(12)
+        .colorScheme(.dark) // Force entire row to dark scheme
     }
     
+    // Rest of your functions remain the same...
     private func acceptInvite() async {
         isProcessing = true
         errorMessage = nil
@@ -251,7 +264,6 @@ struct PartyInviteRow: View {
                 self.isProcessing = false
             }
             
-
             onInviteProcessed(invite.id)
             
         } catch {
@@ -276,7 +288,6 @@ struct PartyInviteRow: View {
                 self.isProcessing = false
             }
             
-            // Refresh the parent view
             onInviteProcessed(invite.id)
             
         } catch {

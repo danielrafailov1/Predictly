@@ -14,53 +14,95 @@ struct AddFriendView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                TextField("Search by username", text: $searchText)
-                    .padding()
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
-                    .onSubmit { Task { await search() } }
-                Button("Search") { Task { await search() } }
-                    .foregroundColor(.white)
-                    .padding(.horizontal)
+            ZStack {
+                // Background gradient that covers entire screen
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color(red: 0.15, green: 0.15, blue: 0.25)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(.all) // Changed to .all
+                
+                VStack(spacing: 16) {
+                    TextField("Search by username", text: $searchText)
+                        .padding()
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(10)
+                        .foregroundColor(.white) // Force white text
+                        .colorScheme(.dark) // Force dark color scheme
+                        .onSubmit { Task { await search() } }
+                        
+                    Button("Search") {
+                        Task { await search() }
+                    }
+                    .foregroundColor(.white) // Force white
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
                     .background(Color.blue)
                     .cornerRadius(8)
-                if isLoading {
-                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else if let error = errorMessage {
-                    Text(error).foregroundColor(.red)
-                } else {
-                    List(results, id: \.user_id) { user in
-                        HStack {
-                            Text("\(user.username)#\(user.identifier)").foregroundColor(.white)
-                            Spacer()
-                            if sentRequestTo == user.user_id {
-                                Text("Request Sent").foregroundColor(.green)
-                            } else {
-                                Button("Add") { Task { await sendRequest(to: user.user_id) } }
+                    .font(.system(size: 16, weight: .semibold))
+                    
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .colorScheme(.dark) // Force dark
+                    } else if let error = errorMessage {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.body)
+                    } else {
+                        List(results, id: \.user_id) { user in
+                            HStack {
+                                Text("\(user.username)#\(user.identifier)")
+                                    .foregroundColor(.white) // Force white
+                                    .font(.body)
+                                Spacer()
+                                if sentRequestTo == user.user_id {
+                                    Text("Request Sent")
+                                        .foregroundColor(.green)
+                                        .font(.system(size: 14, weight: .medium))
+                                } else {
+                                    Button("Add") {
+                                        Task { await sendRequest(to: user.user_id) }
+                                    }
                                     .foregroundColor(.blue)
+                                    .font(.system(size: 16, weight: .semibold))
+                                }
                             }
+                            .listRowBackground(Color.clear)
                         }
-                        .listRowBackground(Color.clear)
+                        .listStyle(PlainListStyle()) // Add this
+                        .scrollContentBackground(.hidden) // Add this for iOS 16+
+                        .background(Color.clear)
+                        .colorScheme(.dark) // Force dark color scheme
                     }
-                    .background(Color.clear)
+                    Spacer()
                 }
-                Spacer()
+                .padding()
             }
-            .padding()
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
-                    startPoint: .top, endPoint: .bottom
-                ).ignoresSafeArea()
-            )
             .navigationTitle("Add Friend")
-            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Close") { dismiss() } } }
+            .navigationBarTitleDisplayMode(.inline) // Add this
+            .toolbarBackground(.clear, for: .navigationBar) // Make toolbar clear
+            .toolbarColorScheme(.dark, for: .navigationBar) // Force dark scheme
+            .preferredColorScheme(.dark) // Force entire view to dark
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white) // Force white button text
+                }
+            }
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // Prevent split view issues
+        .preferredColorScheme(.dark) // Apply to entire NavigationView
         .task { await getUserId() }
     }
     
+    // Rest of your functions remain the same...
     private func getUserId() async {
         do {
             let userResp = try await supabaseClient
@@ -140,4 +182,4 @@ struct UserSearchResult: Decodable {
     let user_id: String
     let username: String
     let identifier: String
-} 
+}

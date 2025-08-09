@@ -18,45 +18,77 @@ struct FriendRequestsView: View {
                     gradient: Gradient(colors: [Color(red: 0.1, green: 0.1, blue: 0.2), Color(red: 0.15, green: 0.15, blue: 0.25)]),
                     startPoint: .top, endPoint: .bottom
                 )
-                .ignoresSafeArea(.all)
+                .ignoresSafeArea(.all) // Changed to .all
                 
                 VStack(spacing: 16) {
                     Text("Friend Requests")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(.white) // Force white
                         .padding(.top, 16)
+                    
                     if isLoading {
-                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .colorScheme(.dark) // Force dark color scheme
                     } else if let error = errorMessage {
-                        Text(error).foregroundColor(.red)
+                        Text(error)
+                            .foregroundColor(.red)
                     } else if requests.isEmpty {
-                        Text("No pending requests.").foregroundColor(.white.opacity(0.7))
+                        Text("No pending requests.")
+                            .foregroundColor(.white) // Force white
+                            .font(.body)
                     } else {
                         List(requests, id: \.id) { req in
                             HStack {
-                                Text(req.username).foregroundColor(.white)
+                                Text(req.username)
+                                    .foregroundColor(.white) // Force white
+                                    .font(.body)
                                 Spacer()
-                                Button("Accept") { Task { await accept(req) } }
-                                    .foregroundColor(.green)
-                                    .buttonStyle(PlainButtonStyle())
-                                Button("Reject") { Task { await reject(req) } }
-                                    .foregroundColor(.red)
-                                    .buttonStyle(PlainButtonStyle())
+                                
+                                Button("Accept") {
+                                    Task { await accept(req) }
+                                }
+                                .foregroundColor(.green)
+                                .font(.system(size: 16, weight: .semibold))
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Button("Reject") {
+                                    Task { await reject(req) }
+                                }
+                                .foregroundColor(.red)
+                                .font(.system(size: 16, weight: .semibold))
+                                .buttonStyle(PlainButtonStyle())
                             }
                             .listRowBackground(Color.clear)
                         }
+                        .listStyle(PlainListStyle()) // Add this
+                        .scrollContentBackground(.hidden) // Add this for iOS 16+
                         .background(Color.clear)
+                        .colorScheme(.dark) // Force dark color scheme
                     }
                     Spacer()
                 }
                 .padding()
             }
-            .navigationTitle("Requests")
-            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Close") { dismiss() } } }
+            .navigationBarTitleDisplayMode(.inline) // Add this
+            .toolbarBackground(.clear, for: .navigationBar) // Make toolbar clear
+            .toolbarColorScheme(.dark, for: .navigationBar) // Force dark scheme
+            .preferredColorScheme(.dark) // Force entire view to dark
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white) // Force white button text
+                }
+            }
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // Prevent split view issues
+        .preferredColorScheme(.dark) // Apply to entire NavigationView
         .task { await loadRequests() }
     }
     
+    // Rest of your functions remain the same...
     private func loadRequests() async {
         isLoading = true
         do {
@@ -76,7 +108,6 @@ struct FriendRequestsView: View {
                 return
             }
             userId = userIdRow.user_id
-            // Get pending requests where friend_id == userId and status == "pending"
             let reqResp = try await supabaseClient
                 .from("Friends")
                 .select("id, user_id, status, created_at")
@@ -84,7 +115,6 @@ struct FriendRequestsView: View {
                 .eq("status", value: "pending")
                 .execute()
             let arr = try JSONDecoder().decode([FriendRequestRowRaw].self, from: reqResp.data)
-            // Fetch usernames for each sender
             var localRequests: [FriendRequestRow] = []
             for req in arr {
                 let userResp = try await supabaseClient
@@ -130,6 +160,7 @@ struct FriendRequestsView: View {
             }
         }
     }
+    
     private func reject(_ req: FriendRequestRow) async {
         print("[FriendRequestsView] Reject called for id: \(req.id)")
         isLoading = true
@@ -155,6 +186,7 @@ struct FriendRequestRowRaw: Decodable {
     let status: String
     let created_at: String
 }
+
 struct FriendRequestRow: Identifiable {
     let id: Int64
     let user_id: String
