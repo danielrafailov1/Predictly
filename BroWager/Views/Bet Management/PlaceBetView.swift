@@ -912,21 +912,19 @@ struct PlaceBetView: View {
                 let end_time: String?
                 let final_score: Int?
                 let elapsed_time: Int?
-                let completed_in_time: Bool? // NEW: Add this field
+                let completed_in_time: Bool?
             }
             
             let selectedOptionText = getBetSelectionText()
             let startTimeString = startTime?.ISO8601Format()
             let endTimeString = endTime?.ISO8601Format()
-            
-            // For contest bets, use the time when target was achieved, not total elapsed time
             let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
             
             let betData = BetInsert(
                 party_id: partyId,
                 user_id: userId,
                 bet_selection: selectedOptionText,
-                is_winner: nil, // Don't set winner status until game ends
+                is_winner: getCompletedInTimeStatus(),
                 start_time: startTimeString,
                 end_time: endTimeString,
                 final_score: betType.lowercased() == "contest" ? contestScore : nil,
@@ -1100,11 +1098,21 @@ struct PlaceBetView: View {
         do {
             let completionTime = betType.lowercased() == "contest" ? targetAchievedTime : elapsedTime
             
+            // Updated struct to include is_winner
+            struct BetCompletionUpdate: Encodable {
+                let completed_in_time: Bool
+                let score: Int
+                let end_time: String?
+                let elapsed_time: Int?
+                let is_winner: Bool // NEW: Add is_winner field
+            }
+            
             let updateData = BetCompletionUpdate(
                 completed_in_time: completedInTime,
                 score: score,
                 end_time: endTime?.ISO8601Format(),
-                elapsed_time: completionTime
+                elapsed_time: completionTime,
+                is_winner: completedInTime // NEW: Set is_winner based on completion status
             )
             
             _ = try await supabaseClient
@@ -1114,7 +1122,7 @@ struct PlaceBetView: View {
                 .eq("user_id", value: userId)
                 .execute()
             
-            print("✅ Bet completion stored - Completed: \(completedInTime), Score: \(score), Time: \(completionTime ?? 0)")
+            print("✅ Bet completion stored - Completed: \(completedInTime), Score: \(score), Time: \(completionTime ?? 0), Winner: \(completedInTime)")
         } catch {
             print("❌ Failed to store bet completion: \(error)")
         }
