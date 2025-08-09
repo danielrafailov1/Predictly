@@ -553,10 +553,10 @@ struct PartyDetailsView: View {
             Spacer()
             
             Text(partyName)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(1)
             
             Spacer()
             

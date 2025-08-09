@@ -2729,8 +2729,8 @@ struct FinalizeBetView: View {
     
     @Environment(\.supabaseClient) private var supabaseClient
     
-    // Add the missing word limit constants and computed properties
     private let maxWordsInTerms = 300
+    private let maxPartyNameCharacters = 25
     
     private func wordCount(in text: String) -> Int {
         let words = text.components(separatedBy: .whitespacesAndNewlines)
@@ -2756,22 +2756,29 @@ struct FinalizeBetView: View {
     }
 
     var body: some View {
-        ZStack {
-            backgroundGradient
-            
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    dateSection
-                    betSummarySection
-                    partyNameSection
-                    privacySection
-                    maxMembersSection
-                    errorSection
-                    submitButtonSection
-                    validationSection
+        NavigationView {
+            ZStack {
+                backgroundGradient
+                
+                VStack {
+                    customHeaderView // Add this line if you want the custom header
+                    
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            dateSection
+                            betSummarySection
+                            partyNameSection
+                            privacySection
+                            maxMembersSection
+                            errorSection
+                            submitButtonSection
+                            validationSection
+                        }
+                        .padding(.top)
+                    }
                 }
-                .padding(.top)
             }
+            .navigationBarHidden(true) // Hide the default navigation bar if using custom header
         }
         .navigationDestination(isPresented: $showPartyDetails) {
             PartyDetailsView(party_code: createdPartyCode, email: email)
@@ -3006,12 +3013,69 @@ struct FinalizeBetView: View {
         }
     }
     
-    private var partyNameSection: some View {
-        VStack(alignment: .leading) {
-            Text("Enter party name")
+    private var truncatedPartyName: String {
+        if party_name.count > maxPartyNameCharacters {
+            return String(party_name.prefix(maxPartyNameCharacters)) + "…"
+        }
+        return party_name
+    }
+    
+    private var customHeaderView: some View {
+        HStack {
+            Button(action: {
+                // Navigate back in the navigation path instead of navigateToMyParties()
+                navPath.removeLast()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("Back")
+                        .font(.system(size: 16, weight: .medium))
+                }
                 .foregroundColor(.white)
-                .font(.headline)
-                .padding(.horizontal)
+            }
+            .padding(.leading, 16)
+            
+            Spacer()
+            
+            Text(truncatedPartyName.isEmpty ? "New Party" : truncatedPartyName)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity)
+            
+            Spacer()
+            
+            // Invisible spacer to balance the back button
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("Back")
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .opacity(0)
+            .padding(.trailing, 16)
+        }
+        .padding(.top, 15)
+    }
+    
+    private var partyNameSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Enter party name")
+                    .foregroundColor(.white)
+                    .font(.headline)
+                
+                Spacer()
+                
+                // Character count indicator
+                Text("\(party_name.count)/\(maxPartyNameCharacters)")
+                    .foregroundColor(party_name.count > maxPartyNameCharacters ? .red : .gray)
+                    .font(.caption)
+            }
+            .padding(.horizontal)
             
             HStack {
                 TextField("Party Name", text: $party_name)
@@ -3019,6 +3083,20 @@ struct FinalizeBetView: View {
                     .background(Color.gray.opacity(0.2))
                     .cornerRadius(10)
                     .foregroundColor(.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(party_name.count > maxPartyNameCharacters ? Color.red : Color.clear, lineWidth: 2)
+                    )
+                    .onChange(of: party_name) { newValue in
+                        // Enforce character limit
+                        if newValue.count > maxPartyNameCharacters {
+                            party_name = String(newValue.prefix(maxPartyNameCharacters))
+                            
+                            // Provide haptic feedback when limit is reached
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                            impactFeedback.impactOccurred()
+                        }
+                    }
                 
                 Button(action: randomizePartyName) {
                     Image(systemName: "die.face.5.fill")
@@ -3027,6 +3105,23 @@ struct FinalizeBetView: View {
                 }
             }
             .padding(.horizontal)
+            
+            // Warning message when approaching or exceeding limit
+            if party_name.count > maxPartyNameCharacters * 4/5 { // Show warning at 80% of limit
+                HStack(spacing: 6) {
+                    Image(systemName: party_name.count > maxPartyNameCharacters ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+                        .foregroundColor(party_name.count > maxPartyNameCharacters ? .red : .orange)
+                        .font(.caption)
+                    
+                    Text(party_name.count > maxPartyNameCharacters ?
+                        "Party name has been truncated to \(maxPartyNameCharacters) characters" :
+                        "Approaching character limit")
+                        .font(.caption)
+                        .foregroundColor(party_name.count > maxPartyNameCharacters ? .red : .orange)
+                }
+                .padding(.horizontal)
+                .transition(.opacity)
+            }
         }
     }
     
