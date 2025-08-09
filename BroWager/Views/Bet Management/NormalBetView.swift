@@ -2,30 +2,6 @@
 
 import SwiftUI
 
-#Preview {
-    NormalBetView(
-        navPath: .constant(NavigationPath()),
-        email: "preview@example.com",
-        userId: UUID(),
-        selectedCategory: BetCategoryView.BetCategory.sports,
-        betType: "normal"
-    )
-}
-
-// Updated Bet Creation Flow with Word Limit for Bet Prompt
-
-import SwiftUI
-
-#Preview {
-    NormalBetView(
-        navPath: .constant(NavigationPath()),
-        email: "preview@example.com",
-        userId: UUID(),
-        selectedCategory: BetCategoryView.BetCategory.sports,
-        betType: "normal"
-    )
-}
-
 struct NormalBetView: View {
     @Binding var navPath: NavigationPath
     let email: String
@@ -609,6 +585,11 @@ struct NormalBetView: View {
                 }
             }
         }
+        .navigationBarHidden(true)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .tabBar)
+        .preferredColorScheme(.dark)
+        .statusBarHidden(false) // Keep status bar visible but dark themed
         .alert("Date Selection Info", isPresented: $showDateInfo) {
             Button("Got it!", role: .cancel) { }
         } message: {
@@ -735,97 +716,315 @@ struct NormalBetView: View {
     @MainActor
     func detectAndProcessDate(from text: String) async {
         // Don't process if already processing or text is too short
-        guard !isProcessingDate && text.count > 3 else { return }
-        
-        let dateKeywords = [
-            "tonight", "tomorrow", "today", "sunday", "monday", "tuesday", "wednesday",
-            "thursday", "friday", "saturday", "this weekend", "next week", "next weekend",
-            "morning", "afternoon", "evening", "night", "pm", "am"
-        ]
-        
-        let lowercasedText = text.lowercased()
-        let containsDateKeyword = dateKeywords.contains { lowercasedText.contains($0) }
-        
-        guard containsDateKeyword else { return }
+        guard !isProcessingDate && text.count > 2 else { return }
         
         isProcessingDate = true
         
-        do {
-            let parsedDate = try await parseNaturalLanguageDate(from: text)
-            if let date = parsedDate {
-                selectedDate = date
-                isDateEnabled = true
-                updateDateComponentsFromDate(date)
-                detectedDateText = "Auto-detected: \(formatDetectedDate(date))"
-            }
-        } catch {
-            print("Failed to parse natural language date: \(error)")
+        if let detectedDate = parseNaturalLanguageDate(from: text) {
+            selectedDate = detectedDate
+            isDateEnabled = true
+            updateDateComponentsFromDate(detectedDate)
+            detectedDateText = "Auto-detected: \(formatDetectedDate(detectedDate))"
         }
         
         isProcessingDate = false
     }
 
-    @MainActor
-    func parseNaturalLanguageDate(from text: String) async throws -> Date? {
-        let prompt = """
-        Extract and parse any date/time information from this text: "\(text)"
+    func parseNaturalLanguageDate(from text: String) -> Date? {
+        let lowercasedText = text.lowercased()
+        let calendar = Calendar.current
+        let now = Date()
         
-        Current date and time: \(Date())
-        
-        Look for phrases like:
-        - "tonight" (today at 8 PM)
-        - "tomorrow night" (tomorrow at 8 PM)  
-        - "Sunday morning" (next Sunday at 10 AM)
-        - "this weekend" (next Saturday at 7 PM)
-        - "next week" (next Monday at 7 PM)
-        - Specific times like "7pm", "3:30 PM"
-        - Day names like "Monday", "Friday"
-        
-        Rules:
-        - If only day is mentioned (like "Sunday"), assume 7 PM
-        - If "morning" is mentioned, use 10 AM
-        - If "afternoon" is mentioned, use 2 PM  
-        - If "evening" or "night" is mentioned, use 8 PM
-        - If "tonight" is mentioned, use today at 8 PM
-        - If "tomorrow" is mentioned, use tomorrow (with appropriate time)
-        - Always use the next occurrence of the mentioned day
-        
-        Return ONLY the date in ISO format (YYYY-MM-DD HH:MM:SS) or "NONE" if no date found.
-        Do not include any other text or explanation.
-        """
-        
-        let response = try await AIServices.shared.sendPrompt(
-            prompt,
-            model: "gemini-2.5-flash-lite",
-            temperature: 0.1,
-            maxTokens: 100
-        )
-        
-        let cleanResponse = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        if cleanResponse.uppercased() == "NONE" {
-            return nil
+        // Helper to get next occurrence of a weekday
+        func getNextWeekday(_ weekday: Int) -> Date? {
+            let today = calendar.component(.weekday, from: now)
+            let daysUntilWeekday = (weekday - today + 7) % 7
+            let targetDays = daysUntilWeekday == 0 ? 7 : daysUntilWeekday // If it's today, get next week
+            return calendar.date(byAdding: .day, value: targetDays, to: now)
         }
         
-        // Try to parse the ISO date
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        
-        if let date = formatter.date(from: cleanResponse) {
-            return date
+        // Helper to create date with specific time
+        func createDateWithTime(baseDate: Date, hour: Int, minute: Int = 0) -> Date? {
+            return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDate)
         }
         
-        // Fallback: try without seconds
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        if let date = formatter.date(from: cleanResponse) {
-            return date
+        // 1. Handle relative day keywords
+        if lowercasedText.contains("today") {
+            let timeHour = extractTimeFromText(lowercasedText) ?? (lowercasedText.contains("night") || lowercasedText.contains("evening") ? 20 :
+                          lowercasedText.contains("morning") ? 10 :
+                          lowercasedText.contains("afternoon") ? 14 : 19)
+            return createDateWithTime(baseDate: now, hour: timeHour)
         }
         
-        // Fallback: try date only (add default time)
-        formatter.dateFormat = "yyyy-MM-dd"
-        if let date = formatter.date(from: cleanResponse) {
-            let calendar = Calendar.current
-            return calendar.date(bySettingHour: 19, minute: 0, second: 0, of: date) // 7 PM default
+        if lowercasedText.contains("tomorrow") {
+            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) else { return nil }
+            let timeHour = extractTimeFromText(lowercasedText) ?? (lowercasedText.contains("night") || lowercasedText.contains("evening") ? 20 :
+                          lowercasedText.contains("morning") ? 10 :
+                          lowercasedText.contains("afternoon") ? 14 : 19)
+            return createDateWithTime(baseDate: tomorrow, hour: timeHour)
+        }
+        
+        if lowercasedText.contains("tonight") {
+            return createDateWithTime(baseDate: now, hour: 20) // 8 PM
+        }
+        
+        // 2. Handle weekday names
+        let weekdays = [
+            ("sunday", 1), ("monday", 2), ("tuesday", 3), ("wednesday", 4),
+            ("thursday", 5), ("friday", 6), ("saturday", 7)
+        ]
+        
+        for (dayName, dayNumber) in weekdays {
+            if lowercasedText.contains(dayName) {
+                guard let weekdayDate = getNextWeekday(dayNumber) else { continue }
+                
+                let timeHour = extractTimeFromText(lowercasedText) ?? (
+                    lowercasedText.contains("morning") ? 10 :
+                    lowercasedText.contains("afternoon") ? 14 :
+                    lowercasedText.contains("evening") || lowercasedText.contains("night") ? 20 : 19
+                )
+                
+                return createDateWithTime(baseDate: weekdayDate, hour: timeHour)
+            }
+        }
+        
+        // 3. Handle "this weekend" / "next weekend"
+        if lowercasedText.contains("this weekend") || lowercasedText.contains("weekend") {
+            guard let saturday = getNextWeekday(7) else { return nil }
+            let timeHour = extractTimeFromText(lowercasedText) ?? 19
+            return createDateWithTime(baseDate: saturday, hour: timeHour)
+        }
+        
+        if lowercasedText.contains("next weekend") {
+            guard let nextSaturday = calendar.date(byAdding: .weekOfYear, value: 1, to: getNextWeekday(7) ?? now) else { return nil }
+            let timeHour = extractTimeFromText(lowercasedText) ?? 19
+            return createDateWithTime(baseDate: nextSaturday, hour: timeHour)
+        }
+        
+        // 4. Handle "next week"
+        if lowercasedText.contains("next week") {
+            guard let nextWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: now) else { return nil }
+            let timeHour = extractTimeFromText(lowercasedText) ?? 19
+            return createDateWithTime(baseDate: nextWeek, hour: timeHour)
+        }
+        
+        // 5. Handle holidays (add more as needed)
+        let holidays = getUpcomingHolidays()
+        for (holidayName, holidayDate) in holidays {
+            if lowercasedText.contains(holidayName) {
+                let timeHour = extractTimeFromText(lowercasedText) ?? 19
+                return createDateWithTime(baseDate: holidayDate, hour: timeHour)
+            }
+        }
+        
+        // 6. Handle specific dates (month day, year patterns)
+        if let specificDate = parseSpecificDate(from: lowercasedText) {
+            let timeHour = extractTimeFromText(lowercasedText) ?? 19
+            return createDateWithTime(baseDate: specificDate, hour: timeHour)
+        }
+        
+        return nil
+    }
+    
+    func extractTimeFromText(_ text: String) -> Int? {
+        // Regex patterns for various time formats
+        let timePatterns = [
+            "(?i)(\\d{1,2})\\s*pm", // "7pm", "7 pm"
+            "(?i)(\\d{1,2})\\s*am", // "7am", "7 am"
+            "(?i)(\\d{1,2}):(\\d{2})\\s*pm", // "7:30pm"
+            "(?i)(\\d{1,2}):(\\d{2})\\s*am"  // "7:30am"
+        ]
+        
+        for pattern in timePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+                
+                let hourRange = match.range(at: 1)
+                let hourString = String(text[Range(hourRange, in: text)!])
+                
+                if let hour = Int(hourString) {
+                    // Handle AM/PM conversion
+                    if pattern.contains("pm") && hour != 12 {
+                        return hour + 12
+                    } else if pattern.contains("am") && hour == 12 {
+                        return 0
+                    } else {
+                        return hour
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    func calculateThanksgiving(year: Int) -> Date? {
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.year = year
+        components.month = 11
+        components.day = 1
+        
+        guard let firstOfNovember = calendar.date(from: components) else { return nil }
+        
+        let firstWeekday = calendar.component(.weekday, from: firstOfNovember)
+        let daysUntilFirstThursday = (5 - firstWeekday + 7) % 7
+        let firstThursday = calendar.date(byAdding: .day, value: daysUntilFirstThursday, to: firstOfNovember)
+        
+        // 4th Thursday is 3 weeks after first Thursday
+        return calendar.date(byAdding: .weekOfYear, value: 3, to: firstThursday!)
+    }
+    
+    func getUpcomingHolidays() -> [(String, Date)] {
+        let calendar = Calendar.current
+        let currentYear = calendar.component(.year, from: Date())
+        var holidays: [(String, Date)] = []
+        
+        // Fixed date holidays
+        let fixedHolidays = [
+            ("new year", 1, 1),
+            ("valentine's day", 2, 14),
+            ("valentines day", 2, 14),
+            ("st patrick's day", 3, 17),
+            ("april fools", 4, 1),
+            ("independence day", 7, 4),
+            ("july 4th", 7, 4),
+            ("halloween", 10, 31),
+            ("christmas eve", 12, 24),
+            ("christmas", 12, 25),
+            ("new year's eve", 12, 31)
+        ]
+        
+        for (name, month, day) in fixedHolidays {
+            var components = DateComponents()
+            components.year = currentYear
+            components.month = month
+            components.day = day
+            
+            if let holidayDate = calendar.date(from: components) {
+                // If holiday has passed this year, use next year
+                if holidayDate < Date() {
+                    components.year = currentYear + 1
+                    if let nextYearDate = calendar.date(from: components) {
+                        holidays.append((name, nextYearDate))
+                    }
+                } else {
+                    holidays.append((name, holidayDate))
+                }
+            }
+        }
+        
+        // Add calculated holidays (like Thanksgiving - 4th Thursday in November)
+        if let thanksgiving = calculateThanksgiving(year: currentYear) {
+            if thanksgiving < Date() {
+                if let nextThanksgiving = calculateThanksgiving(year: currentYear + 1) {
+                    holidays.append(("thanksgiving", nextThanksgiving))
+                }
+            } else {
+                holidays.append(("thanksgiving", thanksgiving))
+            }
+        }
+        
+        return holidays
+    }
+    
+    func parseSpecificDate(from text: String) -> Date? {
+        let calendar = Calendar.current
+        let currentYear = calendar.component(.year, from: Date())
+        
+        // Month names mapping
+        let monthNames = [
+            "january": 1, "jan": 1, "february": 2, "feb": 2, "march": 3, "mar": 3,
+            "april": 4, "apr": 4, "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7,
+            "august": 8, "aug": 8, "september": 9, "sep": 9, "october": 10, "oct": 10,
+            "november": 11, "nov": 11, "december": 12, "dec": 12
+        ]
+        
+        // Pattern 1: "January 15", "March 3rd", "December 25th 2024"
+        let monthDayYearPattern = "(?i)(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+(\\d{4}))?"
+        
+        if let regex = try? NSRegularExpression(pattern: monthDayYearPattern),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+            
+            let monthRange = match.range(at: 1)
+            let dayRange = match.range(at: 2)
+            let yearRange = match.range(at: 3)
+            
+            let monthString = String(text[Range(monthRange, in: text)!]).lowercased()
+            let dayString = String(text[Range(dayRange, in: text)!])
+            
+            if let month = monthNames[monthString],
+               let day = Int(dayString) {
+                
+                let year: Int
+                if yearRange.location != NSNotFound {
+                    let yearString = String(text[Range(yearRange, in: text)!])
+                    year = Int(yearString) ?? currentYear
+                } else {
+                    // If no year specified, use current year or next year if date has passed
+                    var components = DateComponents()
+                    components.year = currentYear
+                    components.month = month
+                    components.day = day
+                    
+                    if let testDate = calendar.date(from: components), testDate < Date() {
+                        year = currentYear + 1
+                    } else {
+                        year = currentYear
+                    }
+                }
+                
+                var dateComponents = DateComponents()
+                dateComponents.year = year
+                dateComponents.month = month
+                dateComponents.day = day
+                
+                return calendar.date(from: dateComponents)
+            }
+        }
+        
+        // Pattern 2: "12/25", "12/25/2024", "3/15"
+        let numericDatePattern = "(\\d{1,2})/(\\d{1,2})(?:/(\\d{4}))?"
+        
+        if let regex = try? NSRegularExpression(pattern: numericDatePattern),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
+            
+            let monthRange = match.range(at: 1)
+            let dayRange = match.range(at: 2)
+            let yearRange = match.range(at: 3)
+            
+            let monthString = String(text[Range(monthRange, in: text)!])
+            let dayString = String(text[Range(dayRange, in: text)!])
+            
+            if let month = Int(monthString),
+               let day = Int(dayString),
+               month >= 1 && month <= 12 && day >= 1 && day <= 31 {
+                
+                let year: Int
+                if yearRange.location != NSNotFound {
+                    let yearString = String(text[Range(yearRange, in: text)!])
+                    year = Int(yearString) ?? currentYear
+                } else {
+                    // Use current year or next year if date has passed
+                    var components = DateComponents()
+                    components.year = currentYear
+                    components.month = month
+                    components.day = day
+                    
+                    if let testDate = calendar.date(from: components), testDate < Date() {
+                        year = currentYear + 1
+                    } else {
+                        year = currentYear
+                    }
+                }
+                
+                var dateComponents = DateComponents()
+                dateComponents.year = year
+                dateComponents.month = month
+                dateComponents.day = day
+                
+                return calendar.date(from: dateComponents)
+            }
         }
         
         return nil
@@ -2530,8 +2729,8 @@ struct FinalizeBetView: View {
     
     @Environment(\.supabaseClient) private var supabaseClient
     
-    // Add the missing word limit constants and computed properties
     private let maxWordsInTerms = 300
+    private let maxPartyNameCharacters = 25
     
     private func wordCount(in text: String) -> Int {
         let words = text.components(separatedBy: .whitespacesAndNewlines)
@@ -2557,22 +2756,29 @@ struct FinalizeBetView: View {
     }
 
     var body: some View {
-        ZStack {
-            backgroundGradient
-            
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    dateSection
-                    betSummarySection
-                    partyNameSection
-                    privacySection
-                    maxMembersSection
-                    errorSection
-                    submitButtonSection
-                    validationSection
+        NavigationView {
+            ZStack {
+                backgroundGradient
+                
+                VStack {
+                    customHeaderView // Add this line if you want the custom header
+                    
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            dateSection
+                            betSummarySection
+                            partyNameSection
+                            privacySection
+                            maxMembersSection
+                            errorSection
+                            submitButtonSection
+                            validationSection
+                        }
+                        .padding(.top)
+                    }
                 }
-                .padding(.top)
             }
+            .navigationBarHidden(true) // Hide the default navigation bar if using custom header
         }
         .navigationDestination(isPresented: $showPartyDetails) {
             PartyDetailsView(party_code: createdPartyCode, email: email)
@@ -2807,12 +3013,69 @@ struct FinalizeBetView: View {
         }
     }
     
-    private var partyNameSection: some View {
-        VStack(alignment: .leading) {
-            Text("Enter party name")
+    private var truncatedPartyName: String {
+        if party_name.count > maxPartyNameCharacters {
+            return String(party_name.prefix(maxPartyNameCharacters)) + "…"
+        }
+        return party_name
+    }
+    
+    private var customHeaderView: some View {
+        HStack {
+            Button(action: {
+                // Navigate back in the navigation path instead of navigateToMyParties()
+                navPath.removeLast()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("Back")
+                        .font(.system(size: 16, weight: .medium))
+                }
                 .foregroundColor(.white)
-                .font(.headline)
-                .padding(.horizontal)
+            }
+            .padding(.leading, 16)
+            
+            Spacer()
+            
+            Text(truncatedPartyName.isEmpty ? "New Party" : truncatedPartyName)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity)
+            
+            Spacer()
+            
+            // Invisible spacer to balance the back button
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("Back")
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .opacity(0)
+            .padding(.trailing, 16)
+        }
+        .padding(.top, 15)
+    }
+    
+    private var partyNameSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Enter party name")
+                    .foregroundColor(.white)
+                    .font(.headline)
+                
+                Spacer()
+                
+                // Character count indicator
+                Text("\(party_name.count)/\(maxPartyNameCharacters)")
+                    .foregroundColor(party_name.count > maxPartyNameCharacters ? .red : .gray)
+                    .font(.caption)
+            }
+            .padding(.horizontal)
             
             HStack {
                 TextField("Party Name", text: $party_name)
@@ -2820,6 +3083,20 @@ struct FinalizeBetView: View {
                     .background(Color.gray.opacity(0.2))
                     .cornerRadius(10)
                     .foregroundColor(.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(party_name.count > maxPartyNameCharacters ? Color.red : Color.clear, lineWidth: 2)
+                    )
+                    .onChange(of: party_name) { newValue in
+                        // Enforce character limit
+                        if newValue.count > maxPartyNameCharacters {
+                            party_name = String(newValue.prefix(maxPartyNameCharacters))
+                            
+                            // Provide haptic feedback when limit is reached
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                            impactFeedback.impactOccurred()
+                        }
+                    }
                 
                 Button(action: randomizePartyName) {
                     Image(systemName: "die.face.5.fill")
@@ -2828,6 +3105,23 @@ struct FinalizeBetView: View {
                 }
             }
             .padding(.horizontal)
+            
+            // Warning message when approaching or exceeding limit
+            if party_name.count > maxPartyNameCharacters * 4/5 { // Show warning at 80% of limit
+                HStack(spacing: 6) {
+                    Image(systemName: party_name.count > maxPartyNameCharacters ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+                        .foregroundColor(party_name.count > maxPartyNameCharacters ? .red : .orange)
+                        .font(.caption)
+                    
+                    Text(party_name.count > maxPartyNameCharacters ?
+                        "Party name has been truncated to \(maxPartyNameCharacters) characters" :
+                        "Approaching character limit")
+                        .font(.caption)
+                        .foregroundColor(party_name.count > maxPartyNameCharacters ? .red : .orange)
+                }
+                .padding(.horizontal)
+                .transition(.opacity)
+            }
         }
     }
     

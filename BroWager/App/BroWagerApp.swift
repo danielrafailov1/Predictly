@@ -43,6 +43,11 @@ struct BroWagerApp: App {
         } else {
             print("❌ Failed to configure Google Sign-In: GIDClientID not found in Info.plist")
         }
+        
+        // ADD THIS: Request notification permissions
+        Task {
+            await NotificationManager.shared.requestPermission()
+        }
     }
 
     var body: some Scene {

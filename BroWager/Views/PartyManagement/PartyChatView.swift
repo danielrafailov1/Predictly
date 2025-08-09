@@ -17,6 +17,7 @@ struct PartyChatView: View {
     @State private var username: String = ""
     @State private var userId: String? = nil
     @State private var profileImages: [String: Image?] = [:]
+    @State private var lastKnownMessageCount = 0
     
     // Live polling
     @State private var messageTimer: Timer? = nil
@@ -362,11 +363,41 @@ struct PartyChatView: View {
                 .execute()
             let decoder = JSONDecoder()
             let msgs = try decoder.decode([ChatMessage].self, from: response.data)
+            
             await MainActor.run {
+                // Check for new messages from other users
+                if !self.isLoading && msgs.count > self.lastKnownMessageCount {
+                    let newMessages = Array(msgs.suffix(msgs.count - self.lastKnownMessageCount))
+                    let newMessagesFromOthers = newMessages.filter { $0.user_id != (self.userId ?? "") }
+                    
+                    // Show notification for new messages from other party members
+                    for message in newMessagesFromOthers {
+                        let notificationBody: String
+                        if message.message.hasPrefix("https://") && (message.message.contains("/images/") || message.message.contains("/audio/")) {
+                            if message.message.contains("/images/") {
+                                notificationBody = "📷 Sent a photo"
+                            } else {
+                                notificationBody = "🎵 Sent an audio message"
+                            }
+                        } else {
+                            notificationBody = message.message
+                        }
+                        
+                        NotificationManager.shared.scheduleLocalNotification(
+                            title: "\(message.username) in \(partyName)",
+                            body: notificationBody
+                        )
+                    }
+                }
+                
                 if self.messages != msgs {
                     self.messages = msgs
                 }
-                if self.isLoading { self.isLoading = false }
+                self.lastKnownMessageCount = msgs.count
+                
+                if self.isLoading {
+                    self.isLoading = false
+                }
             }
         } catch {
             // Only set error if this is the initial load
