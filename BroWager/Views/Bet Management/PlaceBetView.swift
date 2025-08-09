@@ -360,13 +360,6 @@ struct PlaceBetView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 
-                // Elapsed Time
-                if contestStarted {
-                    Text("Time: \(formatTime(elapsedTime))")
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .foregroundColor(.orange)
-                }
-                
                 // NEW: Show target achieved time
                 if let achievedTime = targetAchievedTime {
                     Text("🎯 Target achieved in: \(formatTime(achievedTime))")
@@ -379,7 +372,7 @@ struct PlaceBetView: View {
                 }
             }
             
-            // Contest Controls
+            // Contest Controls - SWITCHED ORDER: Score buttons first, then timer
             VStack(spacing: 12) {
                 if !contestStarted {
                     Button(action: startContest) {
@@ -395,20 +388,28 @@ struct PlaceBetView: View {
                         .cornerRadius(12)
                     }
                 } else if !contestFinished {
-                    // Score adjustment buttons
-                    HStack(spacing: 16) {
+                    // LARGER Score adjustment buttons - moved above timer
+                    HStack(spacing: 24) {
                         Button(action: { adjustScore(-1) }) {
                             Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(size: 40)) // INCREASED from 24 to 40
                                 .foregroundColor(.red)
                         }
                         .disabled(contestScore <= 0)
                         
                         Button(action: { adjustScore(1) }) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(size: 40)) // INCREASED from 24 to 40
                                 .foregroundColor(.green)
                         }
+                    }
+                    .padding(.vertical, 8)
+                    
+                    // Elapsed Time - moved below the score buttons
+                    if contestStarted {
+                        Text("Time: \(formatTime(elapsedTime))")
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .foregroundColor(.orange)
                     }
                     
                     Button(action: finishContest) {
