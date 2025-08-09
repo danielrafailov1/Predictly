@@ -536,39 +536,33 @@ struct PartyDetailsView: View {
     // MARK: - Custom Header with Back Button
     
     private var customHeaderView: some View {
-        HStack {
-            Button(action: {
-                navigateToMyParties()
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                    Text("Back")
-                        .font(.system(size: 16, weight: .medium))
+        VStack(spacing: 8) {
+            // Top row with back button
+            HStack {
+                Button(action: {
+                    navigateToMyParties()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text("Back")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(.white)
                 }
-                .foregroundColor(.white)
+                
+                Spacer()
             }
-            .padding(.leading, 16)
+            .padding(.horizontal, 16)
             
-            Spacer()
-            
+            // Second row with party name - full width
             Text(partyName)
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .minimumScaleFactor(0.6)
                 .lineLimit(1)
-            
-            Spacer()
-            
-            // Invisible spacer to balance the back button
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
-                Text("My Parties")
-                    .font(.system(size: 16, weight: .medium))
-            }
-            .opacity(0)
-            .padding(.trailing, 16)
+                .padding(.horizontal, 16)
         }
         .padding(.top, 15)
         .onAppear { print("PartyDetailsView: loaded, partyName = \(partyName), partyId = \(String(describing: partyId))") }
