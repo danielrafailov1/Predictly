@@ -115,4 +115,30 @@ class SessionManager: ObservableObject {
             print("Sign out failed: \(error)")
         }
     }
+    
+    func deleteAccount() async -> (success: Bool, errorMessage: String?) {
+        do {
+            guard let userId = newUserId else {
+                return (false, "User ID not found")
+            }
+            
+            let deletionService = AccountDeletionService(supabaseClient: supabaseClient)
+            let result = await deletionService.deleteAccount(userId: userId)
+            
+            if result.success {
+                // Clear local state
+                clearProfileCache()
+                await MainActor.run {
+                    self.isLoggedIn = false
+                    self.userEmail = nil
+                    self.needsUsername = false
+                    self.newUserId = nil
+                }
+            }
+            
+            return result
+        } catch {
+            return (false, "Failed to delete account: \(error.localizedDescription)")
+        }
+    }
 }
