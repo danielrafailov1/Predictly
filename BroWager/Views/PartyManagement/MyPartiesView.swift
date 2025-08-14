@@ -674,33 +674,17 @@ struct MyPartiesView: View {
             let userPartyRows = try JSONDecoder().decode([UserPartyRow].self, from: userPartiesResponse.data)
             let userPartyIds = Set(userPartyRows.map { $0.party_id })
             
-            var allOpenParties: [OpenPartyRow] = []
-            
-            // Query for "Open" parties - including all required fields
-            let openResponse = try await supabaseClient
+            // Replace the two separate queries (openResponse and publicResponse) with:
+            let combinedResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
-                .eq("privacy_option", value: "Open")
-                .neq("game_status", value: "ended") // Exclude ended games
+                .in("privacy_option", values: ["Open", "Public"])
+                .neq("game_status", value: "ended")
                 .order("created_at", ascending: false)
                 .range(from: 0, to: chunkSize - 1)
                 .execute()
-            
-            let openParties = try JSONDecoder().decode([OpenPartyRow].self, from: openResponse.data)
-            allOpenParties.append(contentsOf: openParties)
-            
-            // Query for "Public" parties - including all required fields
-            let publicResponse = try await supabaseClient
-                .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
-                .eq("privacy_option", value: "Public")
-                .neq("game_status", value: "ended") // Exclude ended games
-                .order("created_at", ascending: false)
-                .range(from: 0, to: chunkSize - 1)
-                .execute()
-            
-            let publicParties = try JSONDecoder().decode([OpenPartyRow].self, from: publicResponse.data)
-            allOpenParties.append(contentsOf: publicParties)
+
+            let allOpenParties = try JSONDecoder().decode([OpenPartyRow].self, from: combinedResponse.data)
             
             // Filter out parties that user is already member of
             let availableOpenParties = allOpenParties.filter { party in

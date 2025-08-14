@@ -291,6 +291,12 @@ struct PartyChatView: View {
         }
     }
     
+    private func createMediaUploadHelper() -> MediaUploadHelper {
+        
+        // Create a fresh instance to avoid client state issues
+        return MediaUploadHelper(supabaseClient: supabaseClient)
+    }
+    
     func initializeUserIdAndUsername() async {
         // Try sessionManager.newUserId first
         if let sessionUserId = sessionManager.newUserId {
@@ -443,7 +449,7 @@ struct PartyChatView: View {
         await MainActor.run { isUploading = true }
         
         do {
-            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let helper = createMediaUploadHelper()
             let publicUrl = try await helper.uploadImage(data: data)
             
             guard let userId = self.userId else { return }
@@ -474,7 +480,7 @@ struct PartyChatView: View {
         await MainActor.run { isUploading = true }
         
         do {
-            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let helper = createMediaUploadHelper()
             let publicUrl = try await helper.uploadAudio(url: url)
             
             guard let userId = self.userId else { return }

@@ -149,6 +149,12 @@ struct DirectMessageView: View {
         !newMessage.trimmingCharacters(in: .whitespaces).isEmpty && !isUploading
     }
     
+    private func createMediaUploadHelper() -> MediaUploadHelper {
+        
+        // Create a fresh instance to avoid client state issues
+        return MediaUploadHelper(supabaseClient: supabaseClient)
+    }
+    
     private func scrollToBottom(proxy: ScrollViewProxy) {
         if let lastMessage = allMessages.last {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -339,7 +345,7 @@ struct DirectMessageView: View {
         }
         
         do {
-            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let helper = createMediaUploadHelper()
             let publicUrl = try await helper.uploadImage(data: data)
             
             let message = [
@@ -389,7 +395,7 @@ struct DirectMessageView: View {
         }
         
         do {
-            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let helper = createMediaUploadHelper()
             let publicUrl = try await helper.uploadAudio(url: url)
             
             let message = [
