@@ -193,7 +193,7 @@ struct LeaderBoardView: View {
     private func getEmptyStateText() -> String {
         switch selectedScope {
         case .friends:
-            return "Add friends and make at least 2 bets each to see rankings"
+            return "Add friends and make at least 2 challenges each to see rankings"
         case .global:
             return "Make at least 3 challenges to join the global competition"
         }

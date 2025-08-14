@@ -495,7 +495,7 @@ struct NormalBetView: View {
                     // Date Toggle Section with Info Button
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Set specific date for bet")
+                            Text("Set specific date for challenge")
                                 .foregroundColor(.white)
                                 .font(.title2)
                             

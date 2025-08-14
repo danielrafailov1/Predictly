@@ -108,7 +108,7 @@ struct BetCategoryView: View {
                 // Header
                 VStack(spacing: 8) {
                     Text("Choose challenge category")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                     
