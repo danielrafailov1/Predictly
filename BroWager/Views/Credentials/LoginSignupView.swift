@@ -104,7 +104,7 @@ struct LoginSignupView: View {
         }
         .alert(isPresented: $showWelcome) {
             Alert(
-                title: Text("Welcome to BroWager!"),
+                title: Text("Welcome to Predictly!"),
                 message: Text("Your account has been created. Good luck!"),
                 dismissButton: .default(Text("OK")) {
                     self.showWelcome = false
@@ -165,10 +165,12 @@ struct LoginSignupView: View {
     
     private func login() async {
         var loginEmail = email
-    
+        
         if !email.contains("@") {
             do {
+                print("🔵 Looking up username: \(email)")
                 
+                // First, check if username exists
                 struct UsernameRow: Decodable { let user_id: String }
                 let usernameResp = try await supabaseClient
                     .from("Username")
@@ -176,9 +178,24 @@ struct LoginSignupView: View {
                     .eq("username", value: email)
                     .limit(1)
                     .execute()
-                let usernameRow = try JSONDecoder().decode(UsernameRow.self, from: usernameResp.data)
-                let userId = usernameRow.user_id
                 
+                // Decode as array since Supabase returns arrays
+                let usernameRows = try JSONDecoder().decode([UsernameRow].self, from: usernameResp.data)
+                
+                // Check if we found any results
+                guard let usernameRow = usernameRows.first else {
+                    print("❌ No username found for: \(email)")
+                    await MainActor.run {
+                        self.errorMessage = "Username not found. Please check your username or use your email."
+                        self.showError = true
+                    }
+                    return
+                }
+                
+                let userId = usernameRow.user_id
+                print("✅ Found user_id for username: \(userId)")
+                
+                // Now get the email for this user_id
                 struct EmailRow: Decodable { let email: String }
                 let emailResp = try await supabaseClient
                     .from("Login Information")
@@ -186,31 +203,50 @@ struct LoginSignupView: View {
                     .eq("user_id", value: userId)
                     .limit(1)
                     .execute()
-                let emailRow = try JSONDecoder().decode(EmailRow.self, from: emailResp.data)
+                
+                let emailRows = try JSONDecoder().decode([EmailRow].self, from: emailResp.data)
+                
+                guard let emailRow = emailRows.first else {
+                    print("❌ No email found for user_id: \(userId)")
+                    await MainActor.run {
+                        self.errorMessage = "Account information not found. Please contact support."
+                        self.showError = true
+                    }
+                    return
+                }
+                
                 loginEmail = emailRow.email
+                print("✅ Found email for username: \(loginEmail)")
+                
             } catch {
+                print("❌ Error during username lookup: \(error)")
                 await MainActor.run {
-                    self.errorMessage = "Username not found. Please check your username or use your email."
+                    self.errorMessage = "Username lookup failed. Please try again or use your email."
                     self.showError = true
                 }
                 return
             }
         }
+        
+        // Now attempt to sign in with the resolved email
         do {
+            print("🔵 Attempting login with email: \(loginEmail)")
             let session = try await supabaseClient.auth.signIn(email: loginEmail, password: password)
             let user = session.user
-            print("Logged in with user ID: \(user.id)")
-            let resolved = loginEmail
+            print("✅ Logged in with user ID: \(user.id)")
+            
             await MainActor.run {
-                self.resolvedEmail = resolved
+                self.resolvedEmail = loginEmail
                 self.showError = false
                 self.errorMessage = nil
             }
+            
             await sessionManager.refreshSession()
             self.showWelcome = true
+            
         } catch {
             let errorText = error.localizedDescription
-            print("Login failed: \(errorText)")
+            print("❌ Login failed: \(errorText)")
             await MainActor.run {
                 errorMessage = errorText
                 showError = true
@@ -651,7 +687,7 @@ struct HeaderView: View {
                 .foregroundColor(.white)
                 .padding(.bottom, 8)
             
-            Text("BroWager")
+            Text("Predictly")
                 .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
             
@@ -672,14 +708,14 @@ struct InputFieldsView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // Email/Username Field
+            // Email/Username Field with conditional labeling
             VStack(alignment: .leading, spacing: 8) {
-                Text("Email or Username")
+                Text(isSignUpMode ? "Email" : "Email or Username")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white.opacity(0.9))
                 
-                TextField("", text: $email)
-                    .keyboardType(.emailAddress)
+                TextField(isSignUpMode ? "Enter your email" : "Enter email or username", text: $email)
+                    .keyboardType(isSignUpMode ? .emailAddress : .default)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .padding()
@@ -699,7 +735,7 @@ struct InputFieldsView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white.opacity(0.9))
                 
-                SecureField("", text: $password)
+                SecureField("Enter your password", text: $password)
                     .font(.system(size: 18))
                     .padding()
                     .background(Color.white.opacity(0.1))
@@ -711,10 +747,12 @@ struct InputFieldsView: View {
                     )
             }
             
-            if !isPasswordStrong && !password.isEmpty {
+            // Password strength indicator (only show in signup mode)
+            if isSignUpMode && !password.isEmpty && !isPasswordStrong {
                 Text("Password must be at least 8 characters, include uppercase, lowercase, a digit, and a special character.")
                     .foregroundColor(.red)
                     .font(.system(size: 14))
+                    .padding(.horizontal, 8)
             }
         }
         .padding(.horizontal, 32)
@@ -729,32 +767,60 @@ struct ActionButtonView: View {
     let isPasswordStrong: Bool
     let onAction: (Bool) -> Void
     
-    var body: some View {
-        Button(action: {
-            onAction(isSignUpMode)
-        }) {
-            Text(isSignUpMode ? "Sign Up" : "Sign In")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.blue,
-                            Color.blue.opacity(0.8)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(16)
-                .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
+    // Email validation helper
+    private var isValidEmail: Bool {
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailPredicate = NSPredicate(format:"SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: email)
+    }
+    
+    // Check if form is valid based on mode
+    private var isFormValid: Bool {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasValidInput = !trimmedEmail.isEmpty && !password.isEmpty
+        
+        if isSignUpMode {
+            // Signup requires valid email and strong password
+            return hasValidInput && isValidEmail && isPasswordStrong
+        } else {
+            // Login just needs non-empty email/username and password
+            return hasValidInput
         }
-        .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                 password.isEmpty ||
-                 isLoading ||
-                 (isSignUpMode && !isPasswordStrong))
+    }
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            Button(action: {
+                onAction(isSignUpMode)
+            }) {
+                Text(isSignUpMode ? "Sign Up" : "Sign In")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.blue,
+                                Color.blue.opacity(0.8)
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(16)
+                    .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
+            .disabled(!isFormValid || isLoading)
+            
+            // Show email validation error in signup mode
+            if isSignUpMode && !email.isEmpty && !isValidEmail {
+                Text("Please enter a valid email address")
+                    .foregroundColor(.red)
+                    .font(.system(size: 14))
+                    .padding(.horizontal, 8)
+            }
+        }
         .padding(.horizontal, 32)
     }
 }
@@ -767,10 +833,6 @@ struct SocialLoginView: View {
     
     var body: some View {
         VStack(spacing: 16) {
-//            Text("        or sign in with         ")
-//                .foregroundColor(.white.opacity(0.7))
-//                .font(.system(size: 16, weight: .medium))
-//                .background(Color.clear)
             
             GoogleSignInButton(
                 isLoading: $isGoogleLoading,

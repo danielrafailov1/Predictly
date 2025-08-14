@@ -439,7 +439,23 @@ public class AIServices {
     @available(iOS 15.0, *)
     public func generateBetSuggestions(betType: String, count: Int) async throws -> [String] {
         let prompt = """
-        You are a bet suggestion generator. A group of friends are hanging out and they want to make a bet. Generate \(count) bets of type \(betType) in JSON format. For each bet, only generate a string of the bet content. 
+        You are a suggestion generator. A group of friends are hanging out and they want to make friendly wagers or challenges. Generate \(count) suggestions of type \(betType) in JSON format. For each suggestion, only generate a string of the content.
+        
+        Focus on:
+        - Fun friendly competitions
+        - Skill-based challenges  
+        - Sports predictions
+        - Entertainment wagers
+        - Social activities
+        
+        Avoid using the word that rhymes with "net" in your responses. Instead use terms like:
+        - "wager"
+        - "challenge"
+        - "prediction"
+        - "contest"
+        - "competition"
+        
+        Return only a JSON array of strings.
         """
 
         let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
@@ -461,15 +477,31 @@ public class AIServices {
             throw AIServiceError.decodingError
         }
 
-        // Decode and return
-        return try JSONDecoder().decode([String].self, from: jsonData)
+        // Decode and filter out any responses containing the forbidden word
+        let suggestions = try JSONDecoder().decode([String].self, from: jsonData)
+        return suggestions.filter { !$0.lowercased().contains("bet") }
     }
+
     
     /// Generate suggestions for bets (alternative)
     @available(iOS 15.0, *)
     public func generateBetSuggestions(prompt: String) async throws -> [String] {
-     
-        let responseText = try await sendPrompt(prompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
+        
+        let enhancedPrompt = """
+        \(prompt)
+        
+        Important: Do not use the word that rhymes with "net" in your responses. Instead use alternative terms like:
+        - "wager"
+        - "challenge" 
+        - "prediction"
+        - "contest"
+        - "competition"
+        - "dare"
+        
+        Return only a JSON array of strings.
+        """
+        
+        let responseText = try await sendPrompt(enhancedPrompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
 
         // Extract JSON array from response string
         guard let start = responseText.firstIndex(of: "["),
@@ -484,9 +516,14 @@ public class AIServices {
         
         print(jsonData)
         
-        try print(JSONDecoder().decode([String].self, from: jsonData))
+        let suggestions = try JSONDecoder().decode([String].self, from: jsonData)
         
-        return try JSONDecoder().decode([String].self, from: jsonData)
+        // Filter out any responses that might contain the forbidden word
+        let filteredSuggestions = suggestions.filter { !$0.lowercased().contains("bet") }
+        
+        try print(filteredSuggestions)
+        
+        return filteredSuggestions
     }
     
     // MARK: - Enhanced Google Custom Search API Integration

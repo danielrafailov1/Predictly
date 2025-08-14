@@ -43,7 +43,7 @@ struct LoggedInView: View {
                 // Header with tab indicators
                 VStack(spacing: 16) {
                     HStack {
-                        Text("BroWager")
+                        Text("Predictly")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         Spacer()
@@ -133,7 +133,7 @@ struct HomeTab: View {
                     HStack {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 24))
-                        Text("Create New Bet")
+                        Text("Create New Challenge")
                             .font(.system(size: 18, weight: .semibold))
                     }
                     .foregroundColor(.white)

@@ -184,9 +184,9 @@ struct LeaderBoardView: View {
     private func getSubtitleText() -> String {
         switch selectedScope {
         case .friends:
-            return "Friends with 2+ bets compete"
+            return "Friends with 2+ challenges compete"
         case .global:
-            return "Global rankings (3+ bets required)"
+            return "Global rankings (3+ challenges required)"
         }
     }
     
@@ -195,7 +195,7 @@ struct LeaderBoardView: View {
         case .friends:
             return "Add friends and make at least 2 bets each to see rankings"
         case .global:
-            return "Make at least 3 bets to join the global competition"
+            return "Make at least 3 challenges to join the global competition"
         }
     }
     
@@ -577,7 +577,7 @@ struct LeaderboardRow: View {
                     .foregroundColor(entry.isCurrentUser ? .yellow : .white)
                     .lineLimit(1)
                 
-                Text("\(entry.betCount) bets")
+                Text("\(entry.betCount) challenges")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.5))
             }

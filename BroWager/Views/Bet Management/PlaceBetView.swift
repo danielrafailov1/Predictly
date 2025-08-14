@@ -82,7 +82,7 @@ struct PlaceBetView: View {
                         VStack(spacing: 24) {
                             // Header
                             VStack(spacing: 12) {
-                                Text(isEditing ? "Edit Your Bet" : "Make Your Bet")
+                                Text(isEditing ? "Edit Your Challenge" : "Make Your Challenge")
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
                                     .multilineTextAlignment(.center)
@@ -96,7 +96,7 @@ struct PlaceBetView: View {
                                     Image(systemName: betTypeIcon)
                                         .foregroundColor(.blue)
                                         .font(.system(size: 16))
-                                    Text("\(betType.capitalized) Bet")
+                                    Text("\(betType.capitalized) Challenge")
                                         .font(.system(size: 16, weight: .semibold))
                                         .foregroundColor(.blue)
                                 }
@@ -610,7 +610,7 @@ struct PlaceBetView: View {
         }) {
             HStack {
                 Image(systemName: isEditing ? "pencil.circle.fill" : "plus.circle.fill")
-                Text(isEditing ? "Update Bet" : getSubmitButtonText())
+                Text(isEditing ? "Update Challenge" : getSubmitButtonText())
             }
             .font(.system(size: 20, weight: .bold))
             .padding(.vertical, 14)
@@ -639,16 +639,16 @@ struct PlaceBetView: View {
             if isTimerFinished {
                 return "Submit Timer Result"
             } else {
-                return "Place Timer Bet"
+                return "Place Timer Challenge"
             }
         case "contest":
             if contestFinished {
                 return "Submit Contest Result"
             } else {
-                return "Place Contest Bet"
+                return "Place Contest Challenge"
             }
         default:
-            return "Place Bet"
+            return "Place Challenge"
         }
     }
     
@@ -876,14 +876,14 @@ struct PlaceBetView: View {
                 }
             } else {
                 await MainActor.run {
-                    self.errorMessage = "Could not load existing bet"
+                    self.errorMessage = "Could not load existing challenge"
                     self.isLoading = false
                 }
             }
             
         } catch {
             await MainActor.run {
-                self.errorMessage = "Error loading existing bet: \(error.localizedDescription)"
+                self.errorMessage = "Error loading existing challenge: \(error.localizedDescription)"
                 self.isLoading = false
             }
         }
@@ -957,7 +957,7 @@ struct PlaceBetView: View {
             }
             
             await MainActor.run {
-                self.errorMessage = "Failed to place bet: \(errorDescription)"
+                self.errorMessage = "Failed to place Challenge: \(errorDescription)"
                 self.isLoading = false
             }
         }
@@ -975,7 +975,7 @@ struct PlaceBetView: View {
     private func updateBet() async {
         guard let betId = existingBetId else {
             await MainActor.run {
-                self.errorMessage = "Cannot update bet: missing bet ID"
+                self.errorMessage = "Cannot update challenge: missing challenge ID"
             }
             return
         }
@@ -1022,7 +1022,7 @@ struct PlaceBetView: View {
 
         } catch {
             await MainActor.run {
-                self.errorMessage = "Failed to update bet: \(error.localizedDescription)"
+                self.errorMessage = "Failed to update challenge: \(error.localizedDescription)"
                 self.isLoading = false
             }
         }

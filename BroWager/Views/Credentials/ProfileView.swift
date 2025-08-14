@@ -29,6 +29,9 @@ struct ProfileView: View {
     @State private var friendsWithImages: [FriendWithImage] = []
     @StateObject private var profileCache = ProfileCache.shared
     @State private var isLoadingFromCache = false
+    @State private var showDeleteAccountConfirmation = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String? = nil
     @EnvironmentObject var sessionManager: SessionManager
     
 
@@ -161,6 +164,8 @@ struct ProfileView: View {
                         }
                         
                         logoutButton
+                        
+                        deleteAccountButton
                     }
                 }
             }
@@ -211,6 +216,25 @@ struct ProfileView: View {
                     profileCache.clearCache(for: cacheKey)
                 }
                 await fetchUserProfile()
+            }
+            .alert("Delete Account", isPresented: $showDeleteAccountConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await deleteAccount()
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone and will permanently remove all your data, including parties, bets, friends, and profile information.")
+            }
+            .alert("Account Deletion Error", isPresented: .constant(deleteAccountError != nil)) {
+                Button("OK") {
+                    deleteAccountError = nil
+                }
+            } message: {
+                if let error = deleteAccountError {
+                    Text(error)
+                }
             }
         }
     }
@@ -361,7 +385,43 @@ struct ProfileView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)
+    }
+    
+    private var deleteAccountButton: some View {
+        Button(action: {
+            showDeleteAccountConfirmation = true
+        }) {
+            HStack {
+                if isDeletingAccount {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "trash.circle.fill")
+                        .font(.system(size: 20))
+                }
+                Text(isDeletingAccount ? "Deleting..." : "Delete Account")
+                    .font(.system(size: 18, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.red.opacity(0.8),
+                        Color.red.opacity(0.6)
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(16)
+            .shadow(color: Color.red.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .padding(.horizontal, 24)
         .padding(.bottom, 32)
+        .disabled(isDeletingAccount)
     }
 
     // MARK: - Functions
@@ -730,6 +790,48 @@ struct ProfileView: View {
         }
         
         return friendsWithImages
+    }
+    
+    // MARK: - Account Deletion
+    
+    private func deleteAccount() async {
+        guard let userId = userId else {
+            await MainActor.run {
+                deleteAccountError = "User ID not found"
+            }
+            return
+        }
+        
+        await MainActor.run {
+            isDeletingAccount = true
+            deleteAccountError = nil
+        }
+        
+        do {
+            // Create deletion service and delete account directly
+            let deletionService = AccountDeletionService(supabaseClient: supabaseClient)
+            let result = await deletionService.deleteAccount(userId: userId)
+            
+            await MainActor.run {
+                isDeletingAccount = false
+                
+                if result.success {
+                    // Account deleted successfully, sign out and redirect to login
+                    print("✅ Account deleted successfully")
+                    Task {
+                        await sessionManager.signOut()
+                        navPath = NavigationPath()
+                    }
+                } else {
+                    deleteAccountError = result.errorMessage ?? "Unknown error occurred"
+                }
+            }
+        } catch {
+            await MainActor.run {
+                isDeletingAccount = false
+                deleteAccountError = "Failed to delete account: \(error.localizedDescription)"
+            }
+        }
     }
 }
 

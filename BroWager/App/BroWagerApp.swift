@@ -115,15 +115,20 @@ struct SplashView: View {
             )
             .ignoresSafeArea()
             VStack(spacing: 24) {
-                Image(systemName: "sportscourt.fill")
-                    .font(.system(size: 64))
-                    .foregroundColor(.white)
-                Text("BroWager")
+                Text("Predictly")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
             }
         }
+    }
+}
+
+struct SplashView_Previews: PreviewProvider {
+    static var previews: some View {
+        SplashView()
+            .previewLayout(.sizeThatFits) // Adjusts the preview to fit content size
+            .preferredColorScheme(.dark)  // Optional: Show it in dark mode
     }
 }

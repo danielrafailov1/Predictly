@@ -242,7 +242,7 @@ struct PartyDetailsView: View {
                     isEditing: hasPlacedBet
                 )
             } else {
-                Text("Unable to load bet information")
+                Text("Unable to load challenge information")
                     .foregroundColor(.red)
                     .onAppear {
                         print("Missing data - partyId: \(String(describing: partyId)), userId: \(String(describing: currentUserId)), partyBets: \(partyBets)")
@@ -272,7 +272,7 @@ struct PartyDetailsView: View {
                 }
             }
         } message: {
-            Text("Starting the game will disable all bet editing. Are you sure?")
+            Text("Starting the game will disable all challenge editing. Are you sure?")
         }
         .alert("End Game", isPresented: $showEndGameConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -293,11 +293,11 @@ struct PartyDetailsView: View {
             if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
                 Text("Ready to end the game? Winners will be automatically determined based on completion.")
             } else {
-                Text("Ready to end the game and confirm the bet outcome?")
+                Text("Ready to end the game and confirm the challenge outcome?")
             }
         }
         // NEW: Bet warning alert
-        .alert("Players Haven't Bet Yet", isPresented: $showBetWarning) {
+        .alert("Players Haven't Challenges Yet", isPresented: $showBetWarning) {
             Button("Cancel", role: .cancel) { }
             Button("Start Anyway") {
                 Task {
@@ -305,7 +305,7 @@ struct PartyDetailsView: View {
                 }
             }
         } message: {
-            Text("The following players haven't placed their bets yet:\n\n\(playersWithoutBets.joined(separator: ", "))\n\nAre you sure you want to start the game?")
+            Text("The following players haven't placed their challenges yet:\n\n\(playersWithoutBets.joined(separator: ", "))\n\nAre you sure you want to start the game?")
         }
         // NEW: Member management alerts
         .alert("Kick Member", isPresented: $showKickConfirmation) {
@@ -340,7 +340,7 @@ struct PartyDetailsView: View {
             Button("Party Chat") {
                 showPartyChat = true
             }
-            Button("Bet Type Info") {
+            Button("Challenge Type Info") {
                 showBetTypeTutorial = true
             }
             Button("Invite Players") {
@@ -766,7 +766,7 @@ struct PartyDetailsView: View {
                     HStack {
                         Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
                             .font(.system(size: 18, weight: .semibold))
-                        Text(hasPlacedBet ? "Edit Bet" : "Make a Bet")
+                        Text(hasPlacedBet ? "Edit Challenge" : "Make a Challenge")
                             .font(.system(size: 18, weight: .bold))
                     }
                     .foregroundColor(.white)
@@ -935,16 +935,16 @@ struct PartyDetailsView: View {
     private var betTypeCard: some View {
         partyInfoCard(
             icon: "questionmark.circle.fill",
-            title: "Bet Type",
+            title: "Challenge Type",
             value: betTypeDisplayName(betType)
         )
     }
 
     private func betTypeDisplayName(_ type: String) -> String {
         switch type.lowercased() {
-        case "normal": return "Normal Bet"
-        case "timer": return "Timer Bet"
-        case "contest": return "Contest Bet"
+        case "normal": return "Normal Challenge"
+        case "timer": return "Timed Challenge"
+        case "contest": return "Contest Challenge"
         default: return type.capitalized
         }
     }
@@ -1071,7 +1071,7 @@ struct PartyDetailsView: View {
                                     Image(systemName: hasBet ? "checkmark.circle.fill" : "circle")
                                         .foregroundColor(hasBet ? .green : .orange)
                                         .font(.system(size: 14))
-                                    Text(hasBet ? "Bet Placed" : "No Bet")
+                                    Text(hasBet ? "Prediction Placed" : "No Prediction")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(hasBet ? .green : .orange)
                                 }
@@ -1623,75 +1623,75 @@ struct BetTypeTutorialSheet: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Bet Type System Tutorial")
+                    Text("Challenge Type System Tutorial")
                         .font(.title2).bold()
                         .padding(.bottom, 8)
                     
                     Group {
-                        Text("Normal Bet:")
+                        Text("Normal Challenge:")
                             .font(.headline)
-                        Text("Bet on anything you can imagine! Choose from a list of AI-generated bets, options, and terms, or make your own. ")
+                        Text("Create a challenge on anything you can imagine! Choose from a list of AI-generated challenges, options, and rules, or make your own.")
                         
-                        Text("Timed Bet:")
+                        Text("Timed Challenge:")
                             .font(.headline)
-                        Text("Bet on a task or event that must be completed within a set amount of time to win. Examples include but are not limited to: ")
+                        Text("Complete a task or event within a set amount of time. Examples include but are not limited to:")
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("1. **Complete the Obstacle Course** – Can you finish the course within 10 minutes?")
-                            Text("2. **Complete a Puzzle** – How fast can you finish a 100-piece jigsaw puzzle?")
-                            Text("3. **Beat the Timer** – Complete a challenge in under 5 minutes to win!")
-                            Text("4. **Cooking Challenge** – Can you cook a specific meal within 20 minutes?")
-                            Text("5. **Finish a Workout** – Can you finish 50 push-ups in less than 2 minutes?")
-                            Text("6. **Reading Challenge** – Read 5 pages of a book in under 5 minutes!")
-                            Text("7. **Trivia Challenge** – Answer 10 questions in under 2 minutes!")
-                            Text("8. **Solve a Riddle** – Can you solve the riddle in less than 30 seconds?")
-                            Text("9. **Time to Complete a Game Level** – Finish a video game level in under 3 minutes.")
-                            Text("10. **Complete a Task** – Can you write 100 words in 1 minute?")
+                            Text("1. **Complete the Obstacle Course** – Finish the course within 10 minutes.")
+                            Text("2. **Solve a Puzzle** – Complete a 100-piece jigsaw puzzle as fast as possible.")
+                            Text("3. **Beat the Timer** – Complete a challenge in under 5 minutes.")
+                            Text("4. **Cooking Challenge** – Cook a specific meal within 20 minutes.")
+                            Text("5. **Finish a Workout** – Do 50 push-ups in less than 2 minutes.")
+                            Text("6. **Reading Challenge** – Read 5 pages of a book in under 5 minutes.")
+                            Text("7. **Trivia Challenge** – Answer 10 questions in under 2 minutes.")
+                            Text("8. **Solve a Riddle** – Complete a riddle in less than 30 seconds.")
+                            Text("9. **Game Level Challenge** – Finish a video game level in under 3 minutes.")
+                            Text("10. **Writing Challenge** – Write 100 words in 1 minute.")
                             Text("11. **Fitness Challenge** – Run 1 mile in less than 8 minutes.")
-                            Text("12. **Time to Cook a Dish** – Make the best omelette in under 10 minutes.")
+                            Text("12. **Cooking Challenge** – Make the best omelette in under 10 minutes.")
                             Text("13. **Art Challenge** – Draw a picture in 10 minutes and submit for review.")
                             Text("14. **Video Editing Challenge** – Edit a short video within 15 minutes.")
-                            Text("15. **Trivia Speed Test** – Can you get 5 trivia questions correct in under 1 minute?")
-                            Text("16. **Clean Your Room** – Can you clean your room within 20 minutes?")
+                            Text("15. **Trivia Speed Test** – Answer 5 trivia questions in under 1 minute.")
+                            Text("16. **Clean Your Room** – Clean your room within 20 minutes.")
                             Text("17. **Writing Challenge** – Write a 200-word essay in under 10 minutes.")
                             Text("18. **Memory Challenge** – Memorize a 10-item list in under 1 minute.")
                             Text("19. **Crafting Challenge** – Create a paper airplane in under 2 minutes and see how far it flies.")
                         }
                         
-                        Text("Contest Bet:")
+                        Text("Contest Challenge:")
                             .font(.headline)
-                        Text("A contest where participants race against each other to see who can complete a task the fastest. Examples include but are not limited to: ")
+                        Text("A challenge where participants compete to see who can complete a task the fastest. Examples include but are not limited to:")
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("1. **Race to Finish the Puzzle** – Who can finish a 100-piece puzzle the fastest?")
-                            Text("2. **Who Can Cook the Fastest** – Who can cook the best dish in under 30 minutes?")
-                            Text("3. **Head-to-Head Workout Challenge** – Who can do 50 push-ups faster?")
+                            Text("1. **Puzzle Race** – Who can finish a 100-piece puzzle the fastest?")
+                            Text("2. **Cooking Competition** – Who can cook the best dish in under 30 minutes?")
+                            Text("3. **Workout Race** – Who can do 50 push-ups faster?")
                             Text("4. **Speed Reading** – Who can read and comprehend more pages in 5 minutes?")
-                            Text("5. **Race to Finish the Game** – Who can beat the first level of a game faster?")
-                            Text("6. **Speed Trivia** – Who can answer 10 questions the fastest?")
-                            Text("7. **Fastest Drawing Challenge** – Who can draw a recognizable picture the fastest?")
-                            Text("8. **Cooking Contest** – Who can make the tastiest dish in the shortest amount of time?")
-                            Text("9. **Speed Problem Solving** – Who can solve a series of math problems faster?")
+                            Text("5. **Game Level Challenge** – Who can beat a game level faster?")
+                            Text("6. **Trivia Challenge** – Who can answer 10 questions the fastest?")
+                            Text("7. **Art Race** – Who can draw a recognizable picture the fastest?")
+                            Text("8. **Cooking Challenge** – Who can make the tastiest dish in the shortest amount of time?")
+                            Text("9. **Problem Solving Race** – Who can solve a series of math problems faster?")
                             Text("10. **Fitness Race** – Who can run a mile faster?")
-                            Text("11. **Fastest Scavenger Hunt** – Who can find and bring back 5 items the fastest?")
+                            Text("11. **Scavenger Hunt Race** – Who can find 5 items the fastest?")
                             Text("12. **Memory Challenge** – Who can memorize a list of 10 items the fastest?")
-                            Text("13. **Speed Word Game** – Who can come up with the most words in 2 minutes?")
-                            Text("14. **Fastest to Clean** – Who can clean a room the fastest?")
-                            Text("15. **Art Race** – Who can draw the best picture in 5 minutes?")
-                            Text("16. **Speed to Write** – Who can write a 100-word essay the fastest?")
+                            Text("13. **Word Game Race** – Who can come up with the most words in 2 minutes?")
+                            Text("14. **Room Cleaning Race** – Who can clean a room the fastest?")
+                            Text("15. **Art Speed Challenge** – Who can draw the best picture in 5 minutes?")
+                            Text("16. **Writing Race** – Who can write a 100-word essay the fastest?")
                             Text("17. **Fitness Challenge Race** – Who can do 100 push-ups the fastest?")
-                            Text("18. **Dance Battle** – Who can do the best dance move in 1 minute?")
+                            Text("18. **Dance Challenge** – Who can perform the best dance move in 1 minute?")
                             Text("19. **Creative Speed Challenge** – Who can come up with the most creative idea in 10 minutes?")
                         }
+                        .padding(.bottom, 4)
+                        
+                        Text("Ask your friends if you're unsure which challenge type to choose!")
+                            .italic()
+                            .foregroundColor(.secondary)
+                            .padding(.top, 12)
                     }
-                    .padding(.bottom, 4)
-                    
-                    Text("Ask your friends if you're unsure which bet type to choose!")
-                        .italic()
-                        .foregroundColor(.secondary)
-                        .padding(.top, 12)
                 }
                 .padding()
             }
-            .navigationTitle("Bet Type Info")
+            .navigationTitle("Challenge Type Info")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }

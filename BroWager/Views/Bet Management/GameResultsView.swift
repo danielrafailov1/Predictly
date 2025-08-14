@@ -149,7 +149,7 @@ struct GameResultsView: View {
                             // Bet Question
                             if !betPrompt.isEmpty {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Bet Question:")
+                                    Text("Challenge Question:")
                                         .font(.system(size: 18, weight: .semibold))
                                         .foregroundColor(.white)
                                     
