@@ -115,12 +115,7 @@ struct SplashView: View {
             )
             .ignoresSafeArea()
             VStack(spacing: 24) {
-                Image("titan")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 250, height: 250)
-                    .clipped()
-                Text("Bet Titan")
+                Text("Predictly")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 ProgressView()

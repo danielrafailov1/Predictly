@@ -19,7 +19,7 @@ struct TimedBetSettingView: View {
     var body: some View {
         NavigationView() {
             VStack(spacing: 24) {
-                Text("Choose a Food Bet")
+                Text("Choose a Food Challenge")
                     .font(.title2.bold())
                     .foregroundColor(.white)
                     .padding(.top, 16)
@@ -42,7 +42,7 @@ struct TimedBetSettingView: View {
                         }
                         Divider().background(Color.white.opacity(0.2))
                         HStack {
-                            TextField("Add your own food bet...", text: $customBet)
+                            TextField("Add your own food challenge...", text: $customBet)
                                 .textFieldStyle(.roundedBorder)
                                 .padding(.vertical, 8)
                             Button("Add") {

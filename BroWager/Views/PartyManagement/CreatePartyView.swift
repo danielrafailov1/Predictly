@@ -126,7 +126,7 @@ struct CreatePartyView: View {
                         HStack {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 20))
-                            Text(confirmedBets == nil ? (betType == .draftTeam ? "Draft Players" : "Generate Bets") : "Edit Bets")
+                            Text(confirmedBets == nil ? (betType == .draftTeam ? "Draft Players" : "Generate Challenges") : "Edit Challenges")
                                 .font(.system(size: 18, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -146,7 +146,7 @@ struct CreatePartyView: View {
                         .shadow(color: Color.purple.opacity(0.3), radius: 8, x: 0, y: 4)
                     }
                     if let bets = confirmedBets {
-                        Text("\(bets.count) bets confirmed!")
+                        Text("\(bets.count) challenges confirmed!")
                             .foregroundColor(.green)
                             .font(.system(size: 16, weight: .medium))
                             .padding(.top, 8)
@@ -208,7 +208,7 @@ struct CreatePartyView: View {
                             .foregroundColor(.white)
                     }
                     Stepper(value: $betQuantity, in: 5...25) {
-                        Text("Bet Quantity: \(betQuantity)")
+                        Text("Challenge Quantity: \(betQuantity)")
                             .foregroundColor(.white)
                     }
                     TextField("Pot Balance (optional)", value: $potBalance, formatter: NumberFormatter())
@@ -222,7 +222,7 @@ struct CreatePartyView: View {
                 Button(action: {
                     Task {
                         guard let game = selectedGame, let bets = confirmedBets else {
-                            errorMessage = "Please select a game and confirm bets."
+                            errorMessage = "Please select a game and confirm challenges."
                             return
                         }
                         let newParty = NewParty(

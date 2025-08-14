@@ -44,7 +44,7 @@ struct CustomBetView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
                     // Header
-                    Text("Create Custom Bet")
+                    Text("Create Custom Challenge")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .padding(.top, 32)
@@ -82,7 +82,7 @@ struct CustomBetView: View {
                     
                     // Bet Title Section
                     VStack(spacing: 12) {
-                        Text("Bet Title")
+                        Text("Challenge Title")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -102,7 +102,7 @@ struct CustomBetView: View {
                     
                     // Bet Outcome Section
                     VStack(spacing: 16) {
-                        Text("Bet Outcome")
+                        Text("Challenge Outcome")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -181,7 +181,7 @@ struct CustomBetView: View {
                     
                     // Bet Deadline Section
                     VStack(spacing: 16) {
-                        Text("Bet Deadline")
+                        Text("Challenge Deadline")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                             .frame(maxWidth: .infinity, alignment: .leading)

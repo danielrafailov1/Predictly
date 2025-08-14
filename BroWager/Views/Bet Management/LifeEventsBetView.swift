@@ -18,7 +18,7 @@ struct LifeEventsBetView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 24) {
-                Text("Choose a Life Event Bet")
+                Text("Choose a Life Event Challenge")
                     .font(.title2.bold())
                     .foregroundColor(.white)
                     .padding(.top, 16)

@@ -1,8 +1,8 @@
 import Foundation
 
 public enum BetType: String, CaseIterable, Identifiable, Codable {
-    case predefined = "Predefined Bet"
-    case draftTeam = "Draft Team Bet"
+    case predefined = "Predefined Challenge"
+    case draftTeam = "Draft Team Challenge"
     case randomPlayer = "Random Player"
     case statBased = "Stat-Based"
     case outcomeBased = "Outcome-Based"

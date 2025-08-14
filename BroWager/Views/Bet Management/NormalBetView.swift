@@ -132,14 +132,14 @@ struct NormalBetView: View {
             
             if !canProceed {
                 VStack(spacing: 4) {
-                    if betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Please enter a bet question to continue")
+                    if challengePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Please enter a challenge question to continue")
                             .foregroundColor(.red)
                             .font(.caption)
                     }
                     
-                    if isBetPromptOverWordLimit {
-                        Text("Bet question exceeds \(maxWordsInBetPrompt) word limit (\(currentBetPromptWordCount) words)")
+                    if isChallengePromptOverWordLimit {
+                        Text("Challenge question exceeds \(maxWordsInChallengePrompt) word limit (\(currentChallengePromptWordCount) words)")
                             .foregroundColor(.red)
                             .font(.caption)
                     }
@@ -394,7 +394,7 @@ struct NormalBetView: View {
                     
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Write your Bet")
+                            Text("Write your Challenge")
                                 .foregroundColor(.white)
                                 .font(.title2)
                             
@@ -471,7 +471,7 @@ struct NormalBetView: View {
                                     .foregroundColor(.red)
                                     .font(.caption)
                                 
-                                Text("Bet question exceeds \(maxWordsInBetPrompt) word limit. Text has been automatically truncated.")
+                                Text("Challenge question exceeds \(maxWordsInChallengePrompt) word limit. Text has been automatically truncated.")
                                     .font(.caption)
                                     .foregroundColor(.red)
                                     .multilineTextAlignment(.leading)
@@ -593,7 +593,7 @@ struct NormalBetView: View {
         .alert("Date Selection Info", isPresented: $showDateInfo) {
             Button("Got it!", role: .cancel) { }
         } message: {
-            Text("You can either manually select a date or simply type natural phrases like 'tonight', 'tomorrow night', 'Sunday morning', or 'next Friday at 7pm' in your bet question - the app will automatically detect and set the date for you!")
+            Text("You can either manually select a date or simply type natural phrases like 'tonight', 'tomorrow night', 'Sunday morning', or 'next Friday at 7pm' in your challenge question - the app will automatically detect and set the date for you!")
         }
     }
     
@@ -1590,7 +1590,7 @@ struct BetOptionsView: View {
                 HStack {
                     Image(systemName: "calendar")
                         .foregroundColor(.blue)
-                    Text("Bet Date: \(date, style: .date)")
+                    Text("Challenge Date: \(date, style: .date)")
                         .foregroundColor(.white.opacity(0.8))
                         .font(.subheadline)
                 }
@@ -3045,7 +3045,7 @@ struct FinalizeBetView: View {
                         .foregroundColor(.blue)
                         .font(.title2)
                     VStack(alignment: .leading) {
-                        Text("Bet Date")
+                        Text("Challenge Date")
                             .foregroundColor(.white.opacity(0.7))
                             .font(.caption)
                         Text(date, style: .date)
@@ -3061,7 +3061,7 @@ struct FinalizeBetView: View {
                         .foregroundColor(.gray)
                         .font(.title2)
                     VStack(alignment: .leading) {
-                        Text("Bet Timing")
+                        Text("Challenge Timing")
                             .foregroundColor(.white.opacity(0.7))
                             .font(.caption)
                         Text("No specific date set")
@@ -3077,7 +3077,7 @@ struct FinalizeBetView: View {
     
     private var betSummarySection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Bet Summary")
+            Text("Challenge Summary")
                 .foregroundColor(.white)
                 .font(.title)
                 .fontWeight(.bold)
@@ -3133,7 +3133,7 @@ struct FinalizeBetView: View {
                 }
                 
                 HStack {
-                    Text("Bet Type:")
+                    Text("Challenge Type:")
                         .foregroundColor(.white.opacity(0.7))
                         .font(.subheadline)
                     Text(betType.capitalized)
@@ -3162,7 +3162,7 @@ struct FinalizeBetView: View {
     
     private var betQuestionCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Bet Question", systemImage: "questionmark.circle.fill")
+            Label("Challenge Question", systemImage: "questionmark.circle.fill")
                 .foregroundColor(.green)
                 .font(.headline)
             

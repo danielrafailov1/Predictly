@@ -104,7 +104,7 @@ struct PartyLobbyView: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         // Header
-                        Text("Create a Party & Bet")
+                        Text("Create a Party & Challenge")
                             .font(.system(size: 28, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .padding(.top, 16)
@@ -184,10 +184,10 @@ struct PartyLobbyView: View {
 
                             // Bet Amount
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Bet Amount (tokens)")
+                                Text("Challenge Amount (tokens)")
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.white)
-                                TextField("Enter bet amount", text: $betDetails.betAmount)
+                                TextField("Enter challenge amount", text: $betDetails.betAmount)
                                     .font(.system(size: 16))
                                     .foregroundColor(.white)
                                     .keyboardType(.asciiCapable)
@@ -214,7 +214,7 @@ struct PartyLobbyView: View {
 
                         // Bet Type Segmented Control
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Bet Type")
+                            Text("Challenge Type")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.white)
                             VStack(spacing: 16) {
@@ -268,7 +268,7 @@ struct PartyLobbyView: View {
                             )
                             print("[PartyLobbyView] Setting pendingPartySettings to: \(String(describing: pendingPartySettings))")
                         }) {
-                            Text("Generate Bets")
+                            Text("Generate Challenges")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -380,7 +380,7 @@ struct RandomPlayerBetForm: View {
     @Binding var betDetails: PartyLobbyView.BetDetails
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Random player bet (future feature)")
+            Text("Random player challenge (future feature)")
                 .foregroundColor(.white.opacity(0.7))
         }
     }
@@ -390,7 +390,7 @@ struct StatBasedBetForm: View {
     @Binding var betDetails: PartyLobbyView.BetDetails
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Stat-based bet (future feature)")
+            Text("Stat-based challenge (future feature)")
                 .foregroundColor(.white.opacity(0.7))
         }
     }
@@ -400,7 +400,7 @@ struct OutcomeBasedBetForm: View {
     @Binding var betDetails: PartyLobbyView.BetDetails
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Outcome-based bet (future feature)")
+            Text("Outcome-based challenge (future feature)")
                 .foregroundColor(.white.opacity(0.7))
         }
     }
@@ -410,7 +410,7 @@ struct CustomBetForm: View {
     @Binding var betDetails: PartyLobbyView.BetDetails
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Describe your custom bet:")
+            Text("Describe your custom challenge:")
                 .foregroundColor(.white)
             TextField("Custom outcome", text: $betDetails.customOutcome)
                 .font(.system(size: 16))
@@ -509,39 +509,41 @@ extension BetType {
     }
     var shortDescription: String {
         switch self {
-        case .predefined: return "Pick from a set of 25 possible game events. Everyone bets on the same events."
+        case .predefined: return "Pick from a set of 25 possible game events. Everyone makes predictions on the same events."
         case .draftTeam: return "Draft 5 players you think will perform best. Compete for the top team!"
-        case .randomPlayer: return "A random player is chosen for each user. Bet on their performance."
-        case .statBased: return "Bet on specific stats (e.g., home runs, points, assists) for the game."
-        case .outcomeBased: return "Bet on the final outcome or winner of the game."
-        case .custom: return "Create your own unique bet type for your party."
-        case .politics: return "Bet on political events, elections, or debates."
-        case .food: return "Bet on food challenges, eating contests, or culinary outcomes."
-        case .lifeEvents: return "Bet on personal milestones, life events, or fun predictions."
+        case .randomPlayer: return "A random player is chosen for each user. Predict their performance."
+        case .statBased: return "Predict specific stats (e.g., home runs, points, assists) for the game."
+        case .outcomeBased: return "Predict the final outcome or winner of the game."
+        case .custom: return "Create your own unique challenge type for your party."
+        case .politics: return "Predict political events, elections, or debates."
+        case .food: return "Predict outcomes of food challenges, eating contests, or culinary tasks."
+        case .lifeEvents: return "Predict personal milestones, life events, or fun happenings."
         }
     }
+
     var detailedDescription: String {
         switch self {
         case .predefined:
-            return "Predefined Bet lets you select 15 of 25 potential game events you think will happen. Everyone in the party chooses from the same 25 events. At the end of the game, whoever got the most right wins the entire pot."
+            return "Predefined Challenge lets you select 15 of 25 potential game events you think will happen. Everyone in the party chooses from the same 25 events. At the end of the game, whoever predicted the most correctly wins."
         case .draftTeam:
-            return "Draft Team Bet allows you to pick 5 players you think will perform the best in the game. Each party member drafts their own team. At the end, the team with the highest combined stats wins the pot."
+            return "Draft Team Challenge allows you to pick 5 players you think will perform the best in the game. Each party member drafts their own team. At the end, the team with the highest combined stats wins."
         case .randomPlayer:
-            return "Random Player Bet assigns each user a random player from the game. You bet on how well your assigned player will perform."
+            return "Random Player Challenge assigns each user a random player from the game. You predict how well your assigned player will perform."
         case .statBased:
-            return "Stat-Based Bet lets you bet on specific statistics, like home runs, points, or assists. You can customize which stats to bet on."
+            return "Stat-Based Challenge lets you predict specific statistics, like home runs, points, or assists. You can customize which stats to predict."
         case .outcomeBased:
-            return "Outcome-Based Bet is a simple bet on the final outcome or winner of the game."
+            return "Outcome-Based Challenge lets you predict the final outcome or winner of the game."
         case .custom:
-            return "Custom Bet lets you create your own unique betting rules and events for your party."
+            return "Custom Challenge lets you create your own unique rules and events for your party."
         case .politics:
-            return "Politics Bet lets you wager on the outcome of elections, debates, or political events. Examples: 'Who will win the next election?', 'Will a certain bill pass?'."
+            return "Politics Challenge lets you predict the outcome of elections, debates, or political events. Examples: 'Who will win the next election?', 'Will a certain bill pass?'."
         case .food:
-            return "Food Bet lets you wager on food challenges, eating contests, or culinary outcomes. Examples: 'Who can eat the most hot dogs?', 'Will someone try a new cuisine?'."
+            return "Food Challenge lets you predict outcomes of food challenges, eating contests, or culinary tasks. Examples: 'Who can eat the most hot dogs?', 'Will someone try a new cuisine?'."
         case .lifeEvents:
-            return "Life Events Bet lets you wager on personal milestones, events, or fun predictions about friends. Examples: 'Who will get a new job first?', 'Will someone move cities this year?'."
+            return "Life Events Challenge lets you predict personal milestones, events, or fun happenings among friends. Examples: 'Who will get a new job first?', 'Will someone move cities this year?'."
         }
     }
+
 }
 
 #Preview {

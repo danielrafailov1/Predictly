@@ -28,9 +28,9 @@ struct BetTypeView: View {
 
         var description: String {
             switch self {
-            case .normal: return "Bet on anything"
-            case .timed: return "Bet on timed challenges and competitions"
-            case .contest: return "Bet on who can do something the fastest"
+            case .normal: return "Make a prediction on anything"
+            case .timed: return "Take on timed challenges and competitions"
+            case .contest: return "Compete to see who can do something the fastest"
             }
         }
 

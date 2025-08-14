@@ -18,7 +18,7 @@ struct PoliticsBetView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 24) {
-                Text("Choose a Political Bet")
+                Text("Choose a Political Challenge")
                     .font(.title2.bold())
                     .foregroundColor(.white)
                     .padding(.top, 16)

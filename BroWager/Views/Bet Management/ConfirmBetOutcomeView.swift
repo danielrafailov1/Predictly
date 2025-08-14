@@ -88,7 +88,7 @@ struct ConfirmBetOutcomeView: View {
                                     HStack {
                                         Image(systemName: "calendar")
                                             .foregroundColor(.blue)
-                                        Text("Bet Date: \(betDate, style: .date)")
+                                        Text("Challenge Date: \(betDate, style: .date)")
                                             .font(.system(size: 16, weight: .medium))
                                             .foregroundColor(.white.opacity(0.8))
                                     }
@@ -98,7 +98,7 @@ struct ConfirmBetOutcomeView: View {
                             
                             // Bet Prompt
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Bet Question:")
+                                Text("Challenge Question:")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
                                 
