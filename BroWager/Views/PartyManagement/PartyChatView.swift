@@ -454,18 +454,23 @@ struct PartyChatView: View {
             
             guard let userId = self.userId else { return }
             
+            print("✅ Image uploaded successfully: \(publicUrl)")
+            print("🔄 Inserting message into database...")
+            
             let newMsg = NewChatMessage(
                 party_id: partyId,
                 user_id: userId,
                 username: username,
-                message: publicUrl,  // Store URL directly in message field
+                message: publicUrl,
                 created_at: ISO8601DateFormatter().string(from: Date())
             )
-            
+
             _ = try await supabaseClient
                 .from("PartyChatMessages")
                 .insert(newMsg)
                 .execute()
+            
+            print("✅ Message inserted into database")
             
             await loadMessages()
         } catch {
@@ -489,10 +494,10 @@ struct PartyChatView: View {
                 party_id: partyId,
                 user_id: userId,
                 username: username,
-                message: publicUrl,  // Store URL directly in message field
+                message: publicUrl,
                 created_at: ISO8601DateFormatter().string(from: Date())
             )
-            
+
             _ = try await supabaseClient
                 .from("PartyChatMessages")
                 .insert(newMsg)

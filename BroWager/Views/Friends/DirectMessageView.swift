@@ -3,6 +3,16 @@ import Supabase
 import PhotosUI
 import AVFoundation
 
+struct DirectMessageInsert: Codable {
+    let sender_id: String
+    let receiver_id: String
+    let message: String?
+    let media_url: String?
+    let media_type: String?
+    let created_at: String
+    let read: Bool
+}
+
 struct DirectMessageView: View {
     let friend: FriendUser
     let currentUserId: String
@@ -348,15 +358,25 @@ struct DirectMessageView: View {
             let helper = createMediaUploadHelper()
             let publicUrl = try await helper.uploadImage(data: data)
             
-            let message = [
-                "sender_id": currentUserId,
-                "receiver_id": friend.user_id,
-                "message": nil,
-                "media_url": publicUrl,
-                "media_type": "image"
-            ]
+            print("✅ Image uploaded successfully: \(publicUrl)")
+            print("🔄 Inserting message into database...")
             
-            _ = try await supabaseClient.from("DirectMessages").insert(message).execute()
+            let messageInsert = DirectMessageInsert(
+                sender_id: currentUserId,
+                receiver_id: friend.user_id,
+                message: publicUrl,
+                media_url: nil,
+                media_type: "image",
+                created_at: ISO8601DateFormatter().string(from: Date()),
+                read: false
+            )
+            
+            _ = try await supabaseClient
+                .from("DirectMessages")
+                .insert(messageInsert)
+                .execute()
+            
+            print("✅ Message inserted into database")
             
             await MainActor.run {
                 // Remove optimistic message
@@ -398,15 +418,20 @@ struct DirectMessageView: View {
             let helper = createMediaUploadHelper()
             let publicUrl = try await helper.uploadAudio(url: url)
             
-            let message = [
-                "sender_id": currentUserId,
-                "receiver_id": friend.user_id,
-                "message": nil,
-                "media_url": publicUrl,
-                "media_type": "audio"
-            ]
+            let messageInsert = DirectMessageInsert(
+                sender_id: currentUserId,
+                receiver_id: friend.user_id,
+                message: publicUrl,
+                media_url: nil,
+                media_type: "audio",
+                created_at: ISO8601DateFormatter().string(from: Date()),
+                read: false
+            )
             
-            _ = try await supabaseClient.from("DirectMessages").insert(message).execute()
+            _ = try await supabaseClient
+                .from("DirectMessages")
+                .insert(messageInsert)
+                .execute()
             
             await MainActor.run {
                 // Remove optimistic message
@@ -438,7 +463,29 @@ struct MessageBubbleView: View {
             if isSelf { Spacer() }
             
             VStack(alignment: isSelf ? .trailing : .leading) {
-                if let mediaType = message.media_type, let urlString = message.media_url {
+                // Check if message contains an image URL first
+                if let messageText = message.message,
+                   messageText.hasPrefix("https://") &&
+                   (messageText.contains("/images/") || messageText.contains("supabase") || messageText.lowercased().hasSuffix(".jpg") || messageText.lowercased().hasSuffix(".png") || messageText.lowercased().hasSuffix(".jpeg")) {
+                    
+                    if let url = URL(string: messageText) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFit()
+                        } placeholder: {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 150)
+                                .overlay {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                        }
+                        .frame(maxHeight: 200)
+                        .cornerRadius(8)
+                    }
+                } else if let mediaType = message.media_type, let urlString = message.media_url {
                     if urlString == "pending" {
                         // Show placeholder for pending media
                         RoundedRectangle(cornerRadius: 8)
