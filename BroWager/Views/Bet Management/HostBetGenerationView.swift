@@ -171,7 +171,7 @@ struct HostBetGenerationView: View {
                         }
                         return nil
                     }
-                    challenges = players
+                    bets = players
                 } else {
                     error = "Failed to parse player list."
                 }
@@ -217,7 +217,7 @@ struct HostBetGenerationView: View {
                     }
                     return nil
                 }
-                challenges = prompts.count == 25 ? prompts : Array(prompts.prefix(25))
+                bets = prompts.count == 25 ? prompts : Array(prompts.prefix(25))
             } else {
                 error = "Failed to parse response."
             }

@@ -66,7 +66,7 @@ struct BetTypeView: View {
 
             VStack(spacing: 32) {
                 VStack(spacing: 8) {
-                    Text("Choose Bet Type")
+                    Text("Choose Challenge Type")
                         .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
 

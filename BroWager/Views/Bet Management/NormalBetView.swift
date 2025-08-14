@@ -132,14 +132,14 @@ struct NormalBetView: View {
             
             if !canProceed {
                 VStack(spacing: 4) {
-                    if challengePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("Please enter a challenge question to continue")
                             .foregroundColor(.red)
                             .font(.caption)
                     }
                     
-                    if isChallengePromptOverWordLimit {
-                        Text("Challenge question exceeds \(maxWordsInChallengePrompt) word limit (\(currentChallengePromptWordCount) words)")
+                    if isBetPromptOverWordLimit {
+                        Text("Challenge question exceeds \(maxWordsInBetPrompt) word limit (\(currentBetPromptWordCount) words)")
                             .foregroundColor(.red)
                             .font(.caption)
                     }
@@ -471,7 +471,7 @@ struct NormalBetView: View {
                                     .foregroundColor(.red)
                                     .font(.caption)
                                 
-                                Text("Challenge question exceeds \(maxWordsInChallengePrompt) word limit. Text has been automatically truncated.")
+                                Text("Challenge question exceeds \(maxWordsInBetPrompt) word limit. Text has been automatically truncated.")
                                     .font(.caption)
                                     .foregroundColor(.red)
                                     .multilineTextAlignment(.leading)
