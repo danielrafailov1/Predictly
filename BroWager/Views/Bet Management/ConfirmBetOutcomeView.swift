@@ -73,7 +73,7 @@ struct ConfirmBetOutcomeView: View {
                         VStack(spacing: 24) {
                             // Header
                             VStack(spacing: 12) {
-                                Text("Confirm Bet Outcome")
+                                Text("Confirm Challenge Outcome")
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
                                     .multilineTextAlignment(.center)
@@ -325,7 +325,7 @@ struct ConfirmBetOutcomeView: View {
                                 }) {
                                     HStack {
                                         Image(systemName: "checkmark.circle.fill")
-                                        Text("Confirm Bet Outcome")
+                                        Text("Confirm Challenge Outcome")
                                     }
                                     .font(.system(size: 20, weight: .bold))
                                     .padding(.vertical, 14)

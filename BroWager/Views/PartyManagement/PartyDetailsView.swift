@@ -766,7 +766,7 @@ struct PartyDetailsView: View {
                     HStack {
                         Image(systemName: hasPlacedBet ? "pencil.circle.fill" : "plus.circle.fill")
                             .font(.system(size: 18, weight: .semibold))
-                        Text(hasPlacedBet ? "Edit Challenge" : "Make a Challenge")
+                        Text(hasPlacedBet ? "Edit Prediction" : "Make a Prediction")
                             .font(.system(size: 18, weight: .bold))
                     }
                     .foregroundColor(.white)
