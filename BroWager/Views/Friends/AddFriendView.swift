@@ -24,31 +24,38 @@ struct AddFriendView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea(.all) // Changed to .all
+                .ignoresSafeArea(.all)
                 
                 VStack(spacing: 16) {
                     TextField("Search by username", text: $searchText)
                         .padding()
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(10)
-                        .foregroundColor(.white) // Force white text
-                        .colorScheme(.dark) // Force dark color scheme
-                        .onSubmit { Task { await search() } }
+                        .foregroundColor(.white)
+                        .colorScheme(.dark)
+                        .onSubmit {
+                            if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Task { await search() }
+                            }
+                        }
                         
                     Button("Search") {
-                        Task { await search() }
+                        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Task { await search() }
+                        }
                     }
-                    .foregroundColor(.white) // Force white
+                    .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .white)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
-                    .background(Color.blue)
+                    .background(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray.opacity(0.5) : Color.blue)
                     .cornerRadius(8)
                     .font(.system(size: 16, weight: .semibold))
                     
                     if isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .colorScheme(.dark) // Force dark
+                            .colorScheme(.dark)
                     } else if let error = errorMessage {
                         Text(error)
                             .foregroundColor(.red)
@@ -57,7 +64,7 @@ struct AddFriendView: View {
                         List(results, id: \.user_id) { user in
                             HStack {
                                 Text("\(user.username)#\(user.identifier)")
-                                    .foregroundColor(.white) // Force white
+                                    .foregroundColor(.white)
                                     .font(.body)
                                 Spacer()
                                 if sentRequestTo == user.user_id {
@@ -74,35 +81,34 @@ struct AddFriendView: View {
                             }
                             .listRowBackground(Color.clear)
                         }
-                        .listStyle(PlainListStyle()) // Add this
-                        .scrollContentBackground(.hidden) // Add this for iOS 16+
+                        .listStyle(PlainListStyle())
+                        .scrollContentBackground(.hidden)
                         .background(Color.clear)
-                        .colorScheme(.dark) // Force dark color scheme
+                        .colorScheme(.dark)
                     }
                     Spacer()
                 }
                 .padding()
             }
             .navigationTitle("Add Friend")
-            .navigationBarTitleDisplayMode(.inline) // Add this
-            .toolbarBackground(.clear, for: .navigationBar) // Make toolbar clear
-            .toolbarColorScheme(.dark, for: .navigationBar) // Force dark scheme
-            .preferredColorScheme(.dark) // Force entire view to dark
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.clear, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .preferredColorScheme(.dark)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") {
                         dismiss()
                     }
-                    .foregroundColor(.white) // Force white button text
+                    .foregroundColor(.white)
                 }
             }
         }
-        .navigationViewStyle(StackNavigationViewStyle()) // Prevent split view issues
-        .preferredColorScheme(.dark) // Apply to entire NavigationView
+        .navigationViewStyle(StackNavigationViewStyle())
+        .preferredColorScheme(.dark)
         .task { await getUserId() }
     }
     
-    // Rest of your functions remain the same...
     private func getUserId() async {
         do {
             let userResp = try await supabaseClient
@@ -115,61 +121,153 @@ struct AddFriendView: View {
             let userIdRows = try JSONDecoder().decode([UserIdRow].self, from: userResp.data)
             if let first = userIdRows.first {
                 userId = first.user_id
+                print("[AddFriendView] Current user ID: \(userId)")
             } else {
                 errorMessage = "User not found"
             }
         } catch {
-            errorMessage = "Failed to get user id"
+            print("[AddFriendView] getUserId error: \(error)")
+            errorMessage = "Failed to get user id: \(error.localizedDescription)"
         }
     }
     
     private func search() async {
-        isLoading = true
-        errorMessage = nil
+        // Trim whitespace and check if search text is valid
+        let trimmedSearchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSearchText.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "Please enter a username to search"
+            }
+            return
+        }
+        
+        // Ensure we have a valid user ID
+        guard !userId.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "User ID not found. Please try again."
+            }
+            return
+        }
+        
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+            self.results = []
+        }
+        
         do {
+            print("[AddFriendView] Searching for: '\(trimmedSearchText)' excluding user: \(userId)")
+            
+            // Let's see ALL users in the database to find Test1
+            let allUsersResp = try await supabaseClient
+                .from("Username")
+                .select("user_id, username, identifier")
+                .execute() // No limit - get all users
+            print("[AddFriendView] ALL users in DB: \(String(data: allUsersResp.data, encoding: .utf8) ?? "nil")")
+            
+            // Check if Test1 exists with exact match
+            let test1Check = try await supabaseClient
+                .from("Username")
+                .select("user_id, username, identifier")
+                .eq("username", value: "Test1")
+                .execute()
+            print("[AddFriendView] Test1 exact search: \(String(data: test1Check.data, encoding: .utf8) ?? "nil")")
+            
+            // Check if Test1 has the same user_id as current user
+            if let test1Data = try? JSONDecoder().decode([UserSearchResult].self, from: test1Check.data),
+               let test1User = test1Data.first {
+                print("[AddFriendView] Test1 user_id: \(test1User.user_id)")
+                print("[AddFriendView] Current user_id: \(userId)")
+                print("[AddFriendView] Are they the same? \(test1User.user_id == userId)")
+            }
+            
+            // Now perform the actual search
             let resp = try await supabaseClient
                 .from("Username")
                 .select("user_id, username, identifier")
-                .ilike("username", pattern: "%\(searchText)%")
+                .ilike("username", pattern: "%\(trimmedSearchText)%")
                 .neq("user_id", value: userId)
                 .execute()
-            print("[AddFriendView] Raw search response: \(String(data: resp.data, encoding: .utf8) ?? "nil")")
-            do {
-                let arr = try JSONDecoder().decode([UserSearchResult].self, from: resp.data)
-                await MainActor.run { self.results = arr; self.isLoading = false }
-            } catch {
-                await MainActor.run { self.results = []; self.isLoading = false }
+            
+            print("[AddFriendView] Search response: \(String(data: resp.data, encoding: .utf8) ?? "nil")")
+            
+            let searchResults = try JSONDecoder().decode([UserSearchResult].self, from: resp.data)
+            print("[AddFriendView] Found \(searchResults.count) results")
+            
+            await MainActor.run {
+                self.results = searchResults
+                self.isLoading = false
+                
+                if searchResults.isEmpty {
+                    self.errorMessage = "No users found matching '\(trimmedSearchText)'"
+                }
             }
+            
         } catch {
+            print("[AddFriendView] Search error: \(error)")
             await MainActor.run {
                 self.errorMessage = "Search failed: \(error.localizedDescription)"
                 self.isLoading = false
+                self.results = []
             }
         }
     }
     
     private func sendRequest(to friendId: String) async {
-        isLoading = true
-        errorMessage = nil
+        guard !userId.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "User ID not found"
+            }
+            return
+        }
+        
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
+        
         do {
+            // Check if a friendship already exists (in either direction)
+            let existingFriendship = try await supabaseClient
+                .from("Friends")
+                .select("id, status")
+                .or("and(user_id.eq.\(userId),friend_id.eq.\(friendId)),and(user_id.eq.\(friendId),friend_id.eq.\(userId))")
+                .limit(1)
+                .execute()
+            
+            let existingFriendships = try JSONDecoder().decode([ExistingFriendship].self, from: existingFriendship.data)
+            
+            if !existingFriendships.isEmpty {
+                await MainActor.run {
+                    self.errorMessage = "Friend request already exists or you're already friends"
+                    self.isLoading = false
+                }
+                return
+            }
+            
+            // Create new friend request
             let newRequest = [
                 "user_id": userId,
                 "friend_id": friendId,
                 "status": "pending",
                 "created_at": ISO8601DateFormatter().string(from: Date())
             ]
+            
             let response = try await supabaseClient
                 .from("Friends")
                 .insert(newRequest)
                 .select()
                 .execute()
+            
             print("[AddFriendView] Insert response: \(String(data: response.data, encoding: .utf8) ?? "nil")")
+            
             await MainActor.run {
                 self.sentRequestTo = friendId
                 self.isLoading = false
             }
+            
         } catch {
-            print("[AddFriendView] Insert error: \(error)")
+            print("[AddFriendView] Send request error: \(error)")
             await MainActor.run {
                 self.errorMessage = "Failed to send request: \(error.localizedDescription)"
                 self.isLoading = false
@@ -182,4 +280,9 @@ struct UserSearchResult: Decodable {
     let user_id: String
     let username: String
     let identifier: String
+}
+
+struct ExistingFriendship: Decodable {
+    let id: Int64
+    let status: String
 }
