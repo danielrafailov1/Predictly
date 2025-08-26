@@ -24,14 +24,17 @@ struct DirectMessageView: View {
     @State private var timer: Timer? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var selectedItem: PhotosPickerItem? = nil
-    @State private var selectedImageData: Data? = nil
     @StateObject private var audioRecorder = AudioRecorder()
-    @State private var isUploading = false
-    @State private var uploadError: UploadError? = nil
-    @State private var pendingMessages: [DirectMessage] = [] // For optimistic updates
-    @State private var lastMessageCount = 0
+    @State private var uploadStates: [String: UploadState] = [:] // Track individual upload states
+    @State private var pendingMessages: [DirectMessage] = []
     @State private var hasInitiallyScrolled = false
     @State private var lastKnownMessageCount = 0
+    
+    enum UploadState {
+        case uploading
+        case completed
+        case failed(String)
+    }
     
     var allMessages: [DirectMessage] {
         (messages + pendingMessages).sorted { ($0.created_at ?? "") < ($1.created_at ?? "") }
@@ -39,6 +42,7 @@ struct DirectMessageView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Header
             HStack {
                 Text(friend.username)
                     .font(.title2)
@@ -53,25 +57,33 @@ struct DirectMessageView: View {
             .padding()
             Divider()
             
+            // Messages area
             if isLoading {
                 Spacer()
-                ProgressView()
+                ProgressView("Loading messages...")
                 Spacer()
             } else if let error = errorMessage {
                 Spacer()
-                Text(error)
-                    .foregroundColor(.red)
+                VStack {
+                    Text(error)
+                        .foregroundColor(.red)
+                    Button("Retry") {
+                        loadMessages()
+                    }
+                    .buttonStyle(.bordered)
+                }
                 Spacer()
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 8) { // Use LazyVStack for better performance
+                        LazyVStack(spacing: 8) {
                             ForEach(allMessages) { message in
                                 let isSelf = message.sender_id == currentUserId
+                                let uploadState = uploadStates[message.idValue] ?? .completed
                                 MessageBubbleView(
                                     message: message,
                                     isSelf: isSelf,
-                                    isPending: pendingMessages.contains { $0.idValue == message.idValue }
+                                    uploadState: uploadState
                                 )
                                 .id(message.idValue)
                             }
@@ -79,21 +91,17 @@ struct DirectMessageView: View {
                         .padding(.horizontal)
                     }
                     .onChange(of: allMessages.count) { newCount in
-                        // Auto-scroll when new messages arrive (but not on initial load)
-                        if hasInitiallyScrolled && newCount > lastMessageCount {
+                        if hasInitiallyScrolled {
                             scrollToBottom(proxy: proxy)
                         }
-                        lastMessageCount = newCount
                     }
                     .onAppear {
-                        // Scroll to bottom when chat opens
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             scrollToBottom(proxy: proxy)
                             hasInitiallyScrolled = true
                         }
                     }
                     .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NewMessageReceived"))) { _ in
-                        // Auto-scroll when receiving new messages from others
                         scrollToBottom(proxy: proxy)
                     }
                 }
@@ -108,11 +116,10 @@ struct DirectMessageView: View {
                     matching: .images,
                     photoLibrary: .shared()
                 ) {
-                    Image(systemName: isUploading ? "photo.fill" : "photo")
+                    Image(systemName: "photo")
                         .font(.title2)
-                        .foregroundColor(isUploading ? .gray : .primary)
+                        .foregroundColor(.primary)
                 }
-                .disabled(isUploading)
                 .onChange(of: selectedItem) { newItem in
                     handleImageSelection(newItem)
                 }
@@ -122,7 +129,6 @@ struct DirectMessageView: View {
                         .font(.title2)
                         .foregroundColor(audioRecorder.isRecording ? .red : .primary)
                 }
-                .disabled(isUploading)
                 .padding(.horizontal)
 
                 TextField("Message...", text: $newMessage)
@@ -142,9 +148,6 @@ struct DirectMessageView: View {
             .padding()
             .background(Color(.sRGB, white: 0.10, opacity: 1.0))
         }
-        .alert(item: $uploadError) { error in
-            Alert(title: Text("Upload Error"), message: Text(error.message), dismissButton: .default(Text("OK")))
-        }
         .onAppear {
             loadMessages()
             startPeriodicRefresh()
@@ -156,13 +159,7 @@ struct DirectMessageView: View {
     }
     
     private var canSendMessage: Bool {
-        !newMessage.trimmingCharacters(in: .whitespaces).isEmpty && !isUploading
-    }
-    
-    private func createMediaUploadHelper() -> MediaUploadHelper {
-        
-        // Create a fresh instance to avoid client state issues
-        return MediaUploadHelper(supabaseClient: supabaseClient)
+        !newMessage.trimmingCharacters(in: .whitespaces).isEmpty
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy) {
@@ -173,8 +170,11 @@ struct DirectMessageView: View {
         }
     }
     
+    // MARK: - Message Loading (Optimized)
+    
     private func startPeriodicRefresh() {
-        timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { _ in
+        // Reduced frequency to 5 seconds instead of 3
+        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             Task {
                 await loadMessagesInBackground()
             }
@@ -210,7 +210,6 @@ struct DirectMessageView: View {
                     let newMessages = Array(msgs.suffix(msgs.count - self.lastKnownMessageCount))
                     let newMessagesFromFriend = newMessages.filter { $0.sender_id == friend.user_id }
                     
-                    // Show notification for new messages from friend
                     for message in newMessagesFromFriend {
                         let notificationBody: String
                         if let mediaType = message.media_type {
@@ -229,19 +228,14 @@ struct DirectMessageView: View {
                 self.messages = msgs
                 self.lastKnownMessageCount = msgs.count
                 
-                // Remove pending messages that are now confirmed
-                self.pendingMessages.removeAll { pending in
-                    msgs.contains { $0.message == pending.message && $0.sender_id == pending.sender_id }
-                }
+                // Clean up completed uploads and pending messages
+                self.cleanupCompletedUploads(confirmedMessages: msgs)
                 
-                // If we received new messages from others (not initial load), trigger scroll
                 if hasInitiallyScrolled && msgs.count > previousCount {
-                    // Check if the new messages are from the other person
                     let newMessages = Array(msgs.suffix(msgs.count - previousCount))
                     let hasNewMessagesFromOther = newMessages.contains { $0.sender_id != currentUserId }
                     
                     if hasNewMessagesFromOther {
-                        // Post notification to trigger scroll
                         NotificationCenter.default.post(name: NSNotification.Name("NewMessageReceived"), object: nil)
                     }
                 }
@@ -253,20 +247,50 @@ struct DirectMessageView: View {
         } catch {
             await MainActor.run {
                 if showLoading {
-                    self.errorMessage = "Failed to load messages."
+                    self.errorMessage = "Failed to load messages: \(error.localizedDescription)"
                     self.isLoading = false
                 }
             }
         }
     }
     
-    // MARK: - Message Sending
+    private func cleanupCompletedUploads(confirmedMessages: [DirectMessage]) {
+        // Remove pending messages that are now confirmed
+        pendingMessages.removeAll { pending in
+            confirmedMessages.contains { confirmed in
+                // Match by content and sender for more robust matching
+                if let pendingMsg = pending.message, let confirmedMsg = confirmed.message {
+                    return pendingMsg == confirmedMsg && confirmed.sender_id == pending.sender_id
+                }
+                // For media messages, match by type and sender
+                if let pendingType = pending.media_type, let confirmedType = confirmed.media_type,
+                   let confirmedTime = confirmed.created_at, let pendingTime = pending.created_at {
+                    return pendingType == confirmedType &&
+                           confirmed.sender_id == pending.sender_id &&
+                           abs(confirmedTime.timeIntervalSince1970 - pendingTime.timeIntervalSince1970) < 10 // Within 10 seconds
+                }
+                return false
+            }
+        }
+        
+        // Clean up completed upload states
+        uploadStates = uploadStates.filter { key, state in
+            switch state {
+            case .completed:
+                return !confirmedMessages.contains { $0.idValue == key }
+            case .failed, .uploading:
+                return true
+            }
+        }
+    }
+    
+    // MARK: - Message Sending (Improved)
     
     private func sendTextMessage() {
         let trimmed = newMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
-        // Optimistic update
+        let messageId = UUID().uuidString
         let optimisticMessage = DirectMessage(
             id: nil,
             sender_id: currentUserId,
@@ -279,32 +303,36 @@ struct DirectMessageView: View {
         )
         
         pendingMessages.append(optimisticMessage)
+        uploadStates[optimisticMessage.idValue] = .uploading
         newMessage = ""
         
         Task {
-            await sendMessageToServer(optimisticMessage)
+            await sendMessageToServer(optimisticMessage, messageId: messageId)
         }
     }
     
-    private func sendMessageToServer(_ message: DirectMessage) async {
+    private func sendMessageToServer(_ message: DirectMessage, messageId: String) async {
         do {
             _ = try await supabaseClient
                 .from("DirectMessages")
                 .insert(message)
                 .execute()
             
-            // Message will be removed from pending when we refresh
+            await MainActor.run {
+                uploadStates[message.idValue] = .completed
+            }
+            
+            // Immediate refresh for sent messages
             await loadMessagesInBackground()
         } catch {
             await MainActor.run {
-                // Remove failed message from pending
-                pendingMessages.removeAll { $0.idValue == message.idValue }
-                uploadError = UploadError(message: "Failed to send message.")
+                uploadStates[message.idValue] = .failed(error.localizedDescription)
+                // Keep the message in pending with failed state for retry option
             }
         }
     }
     
-    // MARK: - Media Handling
+    // MARK: - Media Handling (Improved)
     
     private func handleImageSelection(_ newItem: PhotosPickerItem?) {
         guard let newItem = newItem else { return }
@@ -315,9 +343,8 @@ struct DirectMessageView: View {
                     await uploadAndSendImage(data: data)
                 }
             } catch {
-                await MainActor.run {
-                    uploadError = UploadError(message: "Failed to load image.")
-                }
+                // Handle error appropriately
+                print("Failed to load image: \(error)")
             }
         }
     }
@@ -336,9 +363,7 @@ struct DirectMessageView: View {
     }
     
     private func uploadAndSendImage(data: Data) async {
-        await MainActor.run { isUploading = true }
-        
-        // Create optimistic message
+        let messageId = UUID().uuidString
         let optimisticMessage = DirectMessage(
             id: nil,
             sender_id: currentUserId,
@@ -347,25 +372,24 @@ struct DirectMessageView: View {
             created_at: ISO8601DateFormatter().string(from: Date()),
             read: false,
             media_type: "image",
-            media_url: "pending" // Placeholder
+            media_url: "pending"
         )
         
         await MainActor.run {
             pendingMessages.append(optimisticMessage)
+            uploadStates[optimisticMessage.idValue] = .uploading
         }
         
         do {
-            let helper = createMediaUploadHelper()
+            // Create helper and upload in background
+            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
             let publicUrl = try await helper.uploadImage(data: data)
-            
-            print("✅ Image uploaded successfully: \(publicUrl)")
-            print("🔄 Inserting message into database...")
             
             let messageInsert = DirectMessageInsert(
                 sender_id: currentUserId,
                 receiver_id: friend.user_id,
-                message: publicUrl,
-                media_url: nil,
+                message: nil,
+                media_url: publicUrl,
                 media_type: "image",
                 created_at: ISO8601DateFormatter().string(from: Date()),
                 read: false
@@ -376,29 +400,21 @@ struct DirectMessageView: View {
                 .insert(messageInsert)
                 .execute()
             
-            print("✅ Message inserted into database")
-            
             await MainActor.run {
-                // Remove optimistic message
-                pendingMessages.removeAll { $0.idValue == optimisticMessage.idValue }
-                isUploading = false
+                uploadStates[optimisticMessage.idValue] = .completed
             }
             
             await loadMessagesInBackground()
             
         } catch {
             await MainActor.run {
-                pendingMessages.removeAll { $0.idValue == optimisticMessage.idValue }
-                uploadError = UploadError(message: "Failed to upload image: \(error.localizedDescription)")
-                isUploading = false
+                uploadStates[optimisticMessage.idValue] = .failed("Failed to upload image: \(error.localizedDescription)")
             }
         }
     }
 
     private func uploadAndSendAudio(url: URL) async {
-        await MainActor.run { isUploading = true }
-        
-        // Create optimistic message
+        let messageId = UUID().uuidString
         let optimisticMessage = DirectMessage(
             id: nil,
             sender_id: currentUserId,
@@ -407,22 +423,26 @@ struct DirectMessageView: View {
             created_at: ISO8601DateFormatter().string(from: Date()),
             read: false,
             media_type: "audio",
-            media_url: "pending" // Placeholder
+            media_url: "pending"
         )
         
         await MainActor.run {
             pendingMessages.append(optimisticMessage)
+            uploadStates[optimisticMessage.idValue] = .uploading
         }
         
         do {
-            let helper = createMediaUploadHelper()
-            let publicUrl = try await helper.uploadAudio(url: url)
+            // Ensure audio is in compatible format before upload
+            let processedURL = try await processAudioForCompatibility(url)
+            
+            let helper = MediaUploadHelper(supabaseClient: supabaseClient)
+            let publicUrl = try await helper.uploadAudio(url: processedURL)
             
             let messageInsert = DirectMessageInsert(
                 sender_id: currentUserId,
                 receiver_id: friend.user_id,
-                message: publicUrl,
-                media_url: nil,
+                message: nil,
+                media_url: publicUrl,
                 media_type: "audio",
                 created_at: ISO8601DateFormatter().string(from: Date()),
                 read: false
@@ -434,106 +454,217 @@ struct DirectMessageView: View {
                 .execute()
             
             await MainActor.run {
-                // Remove optimistic message
-                pendingMessages.removeAll { $0.idValue == optimisticMessage.idValue }
-                isUploading = false
+                uploadStates[optimisticMessage.idValue] = .completed
             }
             
             await loadMessagesInBackground()
             
         } catch {
             await MainActor.run {
-                pendingMessages.removeAll { $0.idValue == optimisticMessage.idValue }
-                uploadError = UploadError(message: "Failed to upload audio: \(error.localizedDescription)")
-                isUploading = false
+                uploadStates[optimisticMessage.idValue] = .failed("Failed to upload audio: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    // MARK: - Audio Processing for Compatibility
+    
+    private func processAudioForCompatibility(_ inputURL: URL) async throws -> URL {
+        return try await withCheckedThrowingContinuation { continuation in
+            // Create output URL for processed audio
+            let outputURL = inputURL.appendingPathExtension("m4a")
+            
+            // Remove existing file if it exists
+            try? FileManager.default.removeItem(at: outputURL)
+            
+            // Set up AVAssetExportSession for format conversion
+            let asset = AVAsset(url: inputURL)
+            guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
+                continuation.resume(throwing: NSError(domain: "AudioProcessing", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"]))
+                return
+            }
+            
+            exportSession.outputURL = outputURL
+            exportSession.outputFileType = .m4a
+            
+            exportSession.exportAsynchronously {
+                switch exportSession.status {
+                case .completed:
+                    continuation.resume(returning: outputURL)
+                case .failed:
+                    continuation.resume(throwing: exportSession.error ?? NSError(domain: "AudioProcessing", code: 2, userInfo: [NSLocalizedDescriptionKey: "Export failed"]))
+                case .cancelled:
+                    continuation.resume(throwing: NSError(domain: "AudioProcessing", code: 3, userInfo: [NSLocalizedDescriptionKey: "Export cancelled"]))
+                default:
+                    continuation.resume(throwing: NSError(domain: "AudioProcessing", code: 4, userInfo: [NSLocalizedDescriptionKey: "Unknown export error"]))
+                }
             }
         }
     }
 }
 
-// MARK: - Message Bubble Component
+// MARK: - Improved Message Bubble Component
 
 struct MessageBubbleView: View {
     let message: DirectMessage
     let isSelf: Bool
-    let isPending: Bool
+    let uploadState: DirectMessageView.UploadState
     
     var body: some View {
         HStack {
             if isSelf { Spacer() }
             
-            VStack(alignment: isSelf ? .trailing : .leading) {
-                // Check if message contains an image URL first
-                if let messageText = message.message,
-                   messageText.hasPrefix("https://") &&
-                   (messageText.contains("/images/") || messageText.contains("supabase") || messageText.lowercased().hasSuffix(".jpg") || messageText.lowercased().hasSuffix(".png") || messageText.lowercased().hasSuffix(".jpeg")) {
-                    
-                    if let url = URL(string: messageText) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFit()
-                        } placeholder: {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 150)
-                                .overlay {
-                                    ProgressView()
-                                        .tint(.white)
-                                }
-                        }
-                        .frame(maxHeight: 200)
-                        .cornerRadius(8)
+            VStack(alignment: isSelf ? .trailing : .leading, spacing: 4) {
+                // Main message content
+                messageContentView
+                
+                // Upload state indicator
+                if case .uploading = uploadState {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("Sending...")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
                     }
-                } else if let mediaType = message.media_type, let urlString = message.media_url {
-                    if urlString == "pending" {
-                        // Show placeholder for pending media
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 200, height: mediaType == "image" ? 150 : 50)
-                            .overlay {
-                                ProgressView()
-                                    .tint(.white)
-                            }
-                    } else if mediaType == "image", let url = URL(string: urlString) {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFit()
-                        } placeholder: {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 150)
-                                .overlay {
-                                    ProgressView()
-                                        .tint(.white)
-                                }
-                        }
-                        .frame(maxHeight: 200)
-                        .cornerRadius(8)
-                    } else if mediaType == "audio", let url = URL(string: urlString) {
-                        AudioPlayerView(audioURL: url)
+                } else if case .failed(let error) = uploadState {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                            .font(.caption2)
+                        Text("Failed to send")
+                            .font(.caption2)
+                            .foregroundColor(.red)
                     }
-                } else if let messageText = message.message {
-                    Text(messageText)
-                        .padding(8)
-                        .background(isSelf ? Color.blue : Color(.sRGB, white: 0.15, opacity: 1.0))
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                        .opacity(isPending ? 0.7 : 1.0)
                 }
             }
             
             if !isSelf { Spacer() }
         }
     }
+    
+    @ViewBuilder
+    private var messageContentView: some View {
+        // Check if message contains an image URL
+        if let messageText = message.message,
+           messageText.hasPrefix("https://") &&
+           (messageText.contains("/images/") || messageText.contains("supabase") ||
+            messageText.lowercased().hasSuffix(".jpg") || messageText.lowercased().hasSuffix(".png") ||
+            messageText.lowercased().hasSuffix(".jpeg")) {
+            
+            if let url = URL(string: messageText) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure(_):
+                        Image(systemName: "photo")
+                            .foregroundColor(.gray)
+                            .frame(height: 150)
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(height: 150)
+                            .overlay {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .frame(maxHeight: 200)
+                .cornerRadius(8)
+            }
+        } else if let mediaType = message.media_type {
+            if mediaType == "image" {
+                if let urlString = message.media_url, urlString != "pending", let url = URL(string: urlString) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                        case .failure(_):
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                                .frame(height: 150)
+                        case .empty:
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 150)
+                                .overlay {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .frame(maxHeight: 200)
+                    .cornerRadius(8)
+                } else {
+                    // Placeholder for pending image
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 200, height: 150)
+                        .overlay {
+                            VStack {
+                                Image(systemName: "photo")
+                                    .foregroundColor(.white)
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                            }
+                        }
+                }
+            } else if mediaType == "audio" {
+                if let urlString = message.media_url, urlString != "pending", let url = URL(string: urlString) {
+                    AudioPlayerView(audioURL: url)
+                } else {
+                    // Placeholder for pending audio
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 200, height: 50)
+                        .overlay {
+                            HStack {
+                                Image(systemName: "mic")
+                                    .foregroundColor(.white)
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                        }
+                }
+            }
+        } else if let messageText = message.message {
+            Text(messageText)
+                .padding(8)
+                .background(isSelf ? Color.blue : Color(.sRGB, white: 0.15, opacity: 1.0))
+                .foregroundColor(.white)
+                .cornerRadius(8)
+        }
+    }
 }
 
-// MARK: - DirectMessage Extension
+// MARK: - DirectMessage Extensions
 
 extension DirectMessage {
-    var idValue: Int64 {
-        id ?? Int64(abs((message ?? media_url ?? "").hashValue ^ sender_id.hashValue ^ receiver_id.hashValue))
+    var idValue: String {
+        if let id = id {
+            return String(id)
+        }
+        return UUID().uuidString // Generate consistent ID for pending messages
+    }
+}
+
+extension String {
+    var timeIntervalSince1970: TimeInterval {
+        let formatter = ISO8601DateFormatter()
+        return formatter.date(from: self)?.timeIntervalSince1970 ?? 0
     }
 }
 
