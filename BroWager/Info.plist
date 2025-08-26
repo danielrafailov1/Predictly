@@ -26,12 +26,13 @@
 	</array>
 	<key>GEMINI_API_KEYS</key>
 	<array>
-		<string>AIzaSyBTsxf45qgpLI8nj0K5Nfmc3qW8IDHUJB8</string>
-		<string>AIzaSyBPjz5MsImnnmKvyltj6X6h7E-JqVufe4E</string>
-		<string>AIzaSyAGGE4SgnklvFnzMxSE0f_DuzjRFe2Vc88</string>
-		<string>AIzaSyDV2V5Q_6BeDTBlEErLlyQrrR6XS4I9qdI</string>
-		<string>AIzaSyDFJUVMcSEqp9T2L4WG_DlPHDT_gKjnSKU</string>
-		<string>AIzaSyDZg-mvtsI_XG-krQmRp1J_0Ar9JtG5wjo</string>
+            <string>AIzaSyCsE-zjozNbOJR7iqHlsAwU2bhDCDtNO2Q</string>
+<!--		<string>AIzaSyBTsxf45qgpLI8nj0K5Nfmc3qW8IDHUJB8</string>-->
+<!--		<string>AIzaSyBPjz5MsImnnmKvyltj6X6h7E-JqVufe4E</string>-->
+<!--		<string>AIzaSyAGGE4SgnklvFnzMxSE0f_DuzjRFe2Vc88</string>-->
+<!--		<string>AIzaSyDV2V5Q_6BeDTBlEErLlyQrrR6XS4I9qdI</string>-->
+<!--		<string>AIzaSyDFJUVMcSEqp9T2L4WG_DlPHDT_gKjnSKU</string>-->
+<!--		<string>AIzaSyDZg-mvtsI_XG-krQmRp1J_0Ar9JtG5wjo</string>-->
 	</array>
 	<key>GIDClientID</key>
 	<string>507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef.apps.googleusercontent.com</string>
