@@ -599,76 +599,30 @@ struct ConfirmBetOutcomeView: View {
                 }
             }
             
-            // Enhanced search with multiple strategies
-            var searchResults = ""
-            var finalSearchQuery = ""
-            var searchAttempts = 0
-            let maxAttempts = 3
-            
             let effectiveDateString = dateFormatter.string(from: effectiveDate)
-            let searchStrategies = generateMultipleSearchStrategies(betPrompt: betPrompt, betDate: effectiveDateString)
             
-            for strategy in searchStrategies {
-                searchAttempts += 1
-                print("🔍 Search attempt \(searchAttempts): \(strategy)")
-                
-                await MainActor.run {
-                    self.searchQuery = strategy
-                }
-                
-                do {
-                    let results = try await AIServices.shared.performGoogleCustomSearch(
-                        query: strategy,
-                        numResults: 8 // Increased for better results
-                    )
-                    
-                    // Check if results are relevant
-                    if isSearchResultRelevant(results, for: betPrompt, date: effectiveDateString) {
-                        searchResults = results
-                        finalSearchQuery = strategy
-                        print("✅ Found relevant results with strategy \(searchAttempts)")
-                        break
-                    } else {
-                        print("⚠️ Strategy \(searchAttempts) returned irrelevant results")
-                    }
-                    
-                } catch {
-                    print("❌ Search strategy \(searchAttempts) failed: \(error)")
-                    continue
-                }
-                
-                if searchAttempts >= maxAttempts {
-                    break
-                }
-            }
-            
-            await MainActor.run {
-                self.searchResults = searchResults
-                self.searchQuery = finalSearchQuery
-            }
-            
-            // Enhanced AI analysis prompt
-            let analysisPrompt = createEnhancedAnalysisPrompt(
+            // Create enhanced analysis prompt that includes search functionality
+            let analysisPrompt = createEnhancedSearchAnalysisPrompt(
                 betPrompt: betPrompt,
                 betOptions: betOptions,
-                betDate: effectiveDateString,
-                searchResults: searchResults,
-                searchQuery: finalSearchQuery
+                betDate: effectiveDateString
             )
             
-            print("\n🔍 === SENDING ENHANCED PROMPT TO AI ===")
+            print("\n🔍 === SENDING ENHANCED SEARCH PROMPT TO AI ===")
             print("🔍 Prompt length: \(analysisPrompt.count) characters")
             
-            let aiResponse = try await AIServices.shared.sendPrompt(
-                analysisPrompt,
-                model: "gemini-2.5-flash",
-                temperature: 0.1,
-                maxTokens: 2000
-            )
+            // Use requestWithSearch instead of the older search method
+            let aiResponse = try await AIServices.shared.requestWithSearch(prompt: analysisPrompt)
             
-            print("\n🔍 === AI ANALYSIS RESPONSE RECEIVED ===")
+            print("\n🔍 === AI SEARCH RESPONSE RECEIVED ===")
             print("🔍 Response: \(aiResponse)")
             
+            await MainActor.run {
+                self.searchResults = aiResponse
+                self.searchQuery = "Gemini integrated search"
+            }
+            
+            // Parse the AI response for verification status
             let (verificationStatus, autoSelections) = parseAIVerificationResponse(aiResponse)
             
             await MainActor.run {
@@ -710,6 +664,63 @@ struct ConfirmBetOutcomeView: View {
         }
         
         print("🔍 === ENHANCED AI VERIFICATION COMPLETE ===\n")
+    }
+
+    // Helper function to create the enhanced search analysis prompt
+    private func createEnhancedSearchAnalysisPrompt(
+        betPrompt: String,
+        betOptions: [String],
+        betDate: String
+    ) -> String {
+        let formattedDate = formatDateForDisplay(betDate)
+        
+        return """
+        You are a sports results verification assistant with access to real-time search capabilities. Your task is to verify the outcome of a sports bet by searching for and analyzing current information.
+
+        BET DETAILS:
+        - Bet Description: "\(betPrompt)"
+        - Bet Date: \(formattedDate)
+        - Available Options: \(betOptions.map { "'\($0)'" }.joined(separator: ", "))
+
+        INSTRUCTIONS:
+        1. Search for recent information about this sports event/bet
+        2. Find the most current and reliable results
+        3. Analyze the information to determine which option(s) are correct
+        4. Provide a clear verification result
+
+        Please search for information about this bet and then provide your analysis in this format:
+
+        **SEARCH ANALYSIS:**
+        [Describe what you found from your search]
+
+        **VERIFICATION RESULT:**
+        For each option, state whether it's:
+        - CORRECT: The option is definitively true based on the evidence
+        - INCORRECT: The option is definitively false based on the evidence  
+        - UNCERTAIN: Cannot be determined from available information
+
+        Option Analysis:
+        \(betOptions.map { "- '\($0)': [STATUS]" }.joined(separator: "\n"))
+
+        **SUMMARY:**
+        [Brief explanation of your findings and reasoning]
+
+        **CONFIDENCE LEVEL:** [High/Medium/Low]
+
+        Search for the most recent information about this bet and provide a thorough analysis.
+        """
+    }
+
+    // Helper function to format date for display
+    private func formatDateForDisplay(_ dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: dateString) {
+            let displayFormatter = DateFormatter()
+            displayFormatter.dateStyle = .medium
+            displayFormatter.timeStyle = .short
+            return displayFormatter.string(from: date)
+        }
+        return dateString
     }
     
     // MARK: - Multiple Search Strategies
@@ -873,126 +884,137 @@ struct ConfirmBetOutcomeView: View {
     }
     
     private func parseAIVerificationResponse(_ response: String) -> ([String: AIVerificationStatus], [String]) {
-        print("\n🔍 === PARSING SEARCH-BASED AI RESPONSE ===")
+        print("🔍 === PARSING SEARCH-BASED AI RESPONSE ===")
         
         var verificationStatus: [String: AIVerificationStatus] = [:]
         var autoSelections: [String] = []
         
         let lines = response.components(separatedBy: .newlines)
-        var inVerificationSection = false
-        
         print("🔍 Total lines in response: \(lines.count)")
         
-        for (lineIndex, line) in lines.enumerated() {
+        // Print all lines for debugging
+        for (index, line) in lines.enumerated() {
+            print("🔍 Line \(index): '\(line)'")
+        }
+        
+        print("🔍 === STRUCTURED PARSING ===")
+        
+        // Look for the "Option Analysis:" section
+        var inOptionAnalysis = false
+        
+        for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
-            print("🔍 Line \(lineIndex): '\(trimmedLine)'")
-            
-            if trimmedLine.uppercased().contains("OPTION VERIFICATION") {
-                print("🟢 Found OPTION VERIFICATION section at line \(lineIndex)")
-                inVerificationSection = true
+            // Check if we've entered the option analysis section
+            if trimmedLine.lowercased().contains("option analysis") {
+                inOptionAnalysis = true
+                print("🔍 Found 'Option Analysis' section")
                 continue
             }
             
-            if inVerificationSection {
-                if trimmedLine.uppercased().contains("EVIDENCE FROM SEARCH:") ||
-                   trimmedLine.uppercased().contains("CONFIDENCE:") ||
-                   trimmedLine.uppercased().contains("SEARCH QUERY USED:") {
-                    print("🟡 Exiting verification section at line \(lineIndex) due to: \(trimmedLine)")
+            // If we're in the option analysis section, parse each line
+            if inOptionAnalysis {
+                // Stop parsing if we hit another section
+                if trimmedLine.hasPrefix("**") && !trimmedLine.isEmpty {
+                    print("🔍 End of Option Analysis section")
                     break
                 }
                 
-                // Parse option verification lines - FIXED PATTERN
-                for (index, option) in betOptions.enumerated() {
-                    let optionNumber = index + 1
-                    let optionPattern = "Option \(optionNumber):"
+                // Parse lines that start with "- '" (option format)
+                if trimmedLine.hasPrefix("- '") {
+                    print("🔍 Parsing option line: '\(trimmedLine)'")
                     
-                    print("🔍 Checking line for option \(optionNumber) (\(option)): '\(trimmedLine)'")
-                    print("🔍 Looking for pattern: \(optionPattern)")
-                    
-                    // Use contains instead of regex for more reliable matching
-                    if trimmedLine.contains(optionPattern) {
-                        print("🟢 Found match for Option \(optionNumber)")
+                    // Extract option name and status
+                    // Format: - 'Option Name': STATUS
+                    if let colonRange = trimmedLine.range(of: ":") {
+                        let optionPart = String(trimmedLine[..<colonRange.lowerBound])
+                        let statusPart = String(trimmedLine[colonRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
                         
-                        let lineUpper = trimmedLine.uppercased()
-                        if lineUpper.contains("CORRECT") && !lineUpper.contains("INCORRECT") {
-                            verificationStatus[option] = .correct
-                            autoSelections.append(option)
-                            print("✅ AI marked as CORRECT: \(option)")
-                        } else if lineUpper.contains("INCORRECT") {
-                            verificationStatus[option] = .incorrect
-                            print("❌ AI marked as INCORRECT: \(option)")
-                        } else if lineUpper.contains("UNCERTAIN") {
-                            verificationStatus[option] = .uncertain
-                            print("🟡 AI marked as UNCERTAIN: \(option)")
-                        } else {
-                            print("⚠️ No classification found in line: '\(trimmedLine)'")
-                            verificationStatus[option] = .uncertain
+                        // Extract option name (remove "- '" prefix and "'" suffix)
+                        let cleanOptionPart = optionPart.replacingOccurrences(of: "- '", with: "").replacingOccurrences(of: "'", with: "")
+                        
+                        print("🔍 Extracted option: '\(cleanOptionPart)', status: '\(statusPart)'")
+                        
+                        // Map status to enum
+                        let status: AIVerificationStatus
+                        switch statusPart.uppercased() {
+                        case "CORRECT":
+                            status = .correct
+                            autoSelections.append(cleanOptionPart)
+                            print("✅ Status: CORRECT - adding to auto-selections")
+                        case "INCORRECT":
+                            status = .incorrect
+                            print("❌ Status: INCORRECT")
+                        case "UNCERTAIN":
+                            status = .uncertain
+                            print("⚠️ Status: UNCERTAIN")
+                        default:
+                            status = .uncertain
+                            print("⚠️ Unknown status '\(statusPart)', defaulting to UNCERTAIN")
                         }
-                        break
+                        
+                        verificationStatus[cleanOptionPart] = status
+                    } else {
+                        print("⚠️ No colon found in option line: '\(trimmedLine)'")
                     }
                 }
             }
         }
         
-        print("\n🔍 === AFTER STRUCTURED PARSING ===")
+        print("🔍 === AFTER STRUCTURED PARSING ===")
         print("🔍 Verification Status: \(verificationStatus)")
         print("🔍 Auto-selections: \(autoSelections)")
         
-        // Fallback parsing if structured format wasn't found
+        // Fallback parsing if structured parsing failed
         if verificationStatus.isEmpty {
-            print("\n🔍 === ATTEMPTING FALLBACK PARSING ===")
+            print("🔍 === ATTEMPTING FALLBACK PARSING ===")
+            
+            let responseLower = response.lowercased()
             
             for (index, option) in betOptions.enumerated() {
-                let optionLower = option.lowercased()
-                let responseLower = response.lowercased()
-                
                 print("🔍 Fallback check for option \(index + 1): '\(option)'")
+                let optionLower = option.lowercased()
                 print("🔍 Option lowercase: '\(optionLower)'")
                 
                 if responseLower.contains(optionLower) {
                     print("🟢 Option found in response")
                     
-                    let optionRange = responseLower.range(of: optionLower)!
-                    let contextStart = max(optionRange.lowerBound.utf16Offset(in: responseLower) - 100, 0)
-                    let contextEnd = min(optionRange.upperBound.utf16Offset(in: responseLower) + 100, responseLower.count)
-                    
-                    let startIndex = responseLower.index(responseLower.startIndex, offsetBy: contextStart)
-                    let endIndex = responseLower.index(responseLower.startIndex, offsetBy: contextEnd)
-                    let context = String(responseLower[startIndex..<endIndex])
-                    
-                    print("🔍 Context around option: '\(context)'")
-                    
-                    if context.contains("correct") && !context.contains("incorrect") {
-                        verificationStatus[option] = .correct
-                        autoSelections.append(option)
-                        print("✅ Fallback: AI marked as CORRECT: \(option)")
-                    } else if context.contains("incorrect") {
-                        verificationStatus[option] = .incorrect
-                        print("❌ Fallback: AI marked as INCORRECT: \(option)")
-                    } else if context.contains("uncertain") {
-                        verificationStatus[option] = .uncertain
-                        print("🟡 Fallback: AI marked as UNCERTAIN: \(option)")
-                    } else {
-                        verificationStatus[option] = .uncertain
-                        print("⚠️ Fallback: No clear classification, defaulting to UNCERTAIN: \(option)")
+                    // Look for the option with its status in the surrounding context
+                    if let optionRange = responseLower.range(of: optionLower) {
+                        let start = max(optionRange.lowerBound, responseLower.index(responseLower.startIndex, offsetBy: max(0, responseLower.distance(from: responseLower.startIndex, to: optionRange.lowerBound) - 100)))
+                        let end = min(optionRange.upperBound, responseLower.index(responseLower.startIndex, offsetBy: min(responseLower.count, responseLower.distance(from: responseLower.startIndex, to: optionRange.upperBound) + 100)))
+                        let context = String(responseLower[start..<end])
+                        print("🔍 Context around option: '\(context)'")
+                        
+                        // Look for status keywords near the option
+                        if context.contains("correct") && !context.contains("incorrect") {
+                            verificationStatus[option] = .correct
+                            autoSelections.append(option)
+                            print("✅ Fallback: Found CORRECT classification: \(option)")
+                        } else if context.contains("incorrect") {
+                            verificationStatus[option] = .incorrect
+                            print("❌ Fallback: Found INCORRECT classification: \(option)")
+                        } else {
+                            verificationStatus[option] = .uncertain
+                            print("⚠️ Fallback: No clear classification, defaulting to UNCERTAIN: \(option)")
+                        }
                     }
                 } else {
-                    print("❌ Option not found in response, marking as UNCERTAIN: \(option)")
+                    print("🔴 Option not found in response")
                     verificationStatus[option] = .uncertain
                 }
             }
         }
         
-        // Set any unverified options to uncertain
+        // Ensure all options have a status
         for option in betOptions {
             if verificationStatus[option] == nil {
-                print("⚠️ Option not processed, setting to uncertain: \(option)")
                 verificationStatus[option] = .uncertain
+                print("⚠️ Setting missing option to UNCERTAIN: \(option)")
             }
         }
         
-        print("\n🔍 === FINAL SEARCH-BASED PARSING RESULTS ===")
+        print("🔍 === FINAL SEARCH-BASED PARSING RESULTS ===")
         print("🔍 Final Verification Status: \(verificationStatus)")
         print("🔍 Final Auto-selections: \(autoSelections)")
         

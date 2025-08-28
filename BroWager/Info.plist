@@ -25,9 +25,6 @@
 		</dict>
 	</array>
 	<key>GEMINI_API_KEYS</key>
-	<array>
-            <string>AIzaSyComOnoMWwT50Sp__eWpIuW3CGb221GHZQ</string>
-	</array>
 	<key>GIDClientID</key>
 	<string>507812768629-mr8tv9dvm70kd18vjao8muri6r8djgef.apps.googleusercontent.com</string>
 	<key>GOOGLE_CSE_API_KEY</key>
