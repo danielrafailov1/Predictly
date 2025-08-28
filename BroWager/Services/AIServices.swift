@@ -1361,4 +1361,107 @@ public class AIServices {
         
         return formatter.date(from: cleanResponse)
     }
+    
+    
+    @available(iOS 15.0, *)
+    public func requestWithSearch(prompt: String) async throws -> String {
+        let responseText = try await sendPromptWithSearch(prompt, model: defaultModel, temperature: 0.9, maxTokens: 10000)
+        
+        print("📦 Full responseText:\n\(responseText)\n")
+        
+        // Return the full response text since it should contain the analysis
+        return responseText
+    }
+    
+    public func sendPromptWithSearch(
+        _ prompt: String,
+        model: String,
+        temperature: Double,
+        maxTokens: Int
+    ) async throws -> String {
+        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+            throw AIServiceError.allKeysExhausted
+        }
+        
+        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+        guard let url = URL(string: endpoint) else {
+            throw AIServiceError.invalidURL
+        }
+
+        let payload: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ],
+            "tools": [
+                [
+                    "google_search": [:]
+                ]
+            ],
+            "generationConfig": [
+                "temperature": temperature,
+                "maxOutputTokens": maxTokens
+            ]
+        ]
+
+        let jsonData = try JSONSerialization.data(withJSONObject: payload)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = jsonData
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Handle HTTP status codes like the other methods
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AIServiceError.networkError(NSError(domain: "Invalid response", code: 0))
+        }
+        
+        switch httpResponse.statusCode {
+        case 200...299:
+            // Success - increment usage for the current key
+            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
+                APIKeyManager.shared.incrementUsage(for: currentKey)
+            }
+            break
+        case 400:
+            throw AIServiceError.apiError("Bad Request - Check your request format")
+        case 401, 403:
+            // Block current key and retry
+            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
+                APIKeyManager.shared.blockKey(currentKey, reason: "Auth error (\(httpResponse.statusCode))")
+            }
+            throw AIServiceError.unauthorized
+        case 429:
+            // Block current key due to rate limiting
+            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
+                APIKeyManager.shared.blockKey(currentKey, reason: "Rate limited (429)")
+            }
+            throw AIServiceError.rateLimited
+        default:
+            throw AIServiceError.apiError("HTTP \(httpResponse.statusCode)")
+        }
+
+        // Debug: Print the raw response from Gemini
+        if let raw = String(data: data, encoding: .utf8) {
+            print("🔥 Raw Gemini Response:\n\(raw)")
+        }
+
+        let decoder = JSONDecoder()
+        do {
+            let geminiResponse = try decoder.decode(GeminiResponse.self, from: data)
+            if let candidates = geminiResponse.candidates,
+               let text = candidates.first?.content.parts.first?.text {
+                return text
+            } else {
+                throw AIServiceError.missingResponse
+            }
+        } catch {
+            print("❌ Decoding error: \(error)")
+            throw AIServiceError.decodingError
+        }
+    }
 }
