@@ -167,6 +167,11 @@ public class AIServices {
     private let baseURL: String
     private let defaultModel: String
     
+    // API Key management
+    private var apiKeys: [String] = []
+    private var currentKeyIndex: Int = 0
+    private var blockedKeys: Set<String> = []
+    
     // MARK: - Initialization
     private init() {
         // Configure URLSession
@@ -178,6 +183,48 @@ public class AIServices {
         // Gemini API base URL and model
         self.baseURL = "https://generativelanguage.googleapis.com/v1beta/models/"
         self.defaultModel = "gemini-2.5-flash"
+        
+        // Load API keys from Info.plist
+        loadAPIKeys()
+    }
+    
+    // MARK: - API Key Management
+    private func loadAPIKeys() {
+        guard let path = Bundle.main.path(forResource: "Info", ofType: "plist"),
+              let dict = NSDictionary(contentsOfFile: path),
+              let keys = dict["GEMINI_API_KEYS"] as? [String] else {
+            print("Warning: No GEMINI_API_KEYS found in Info.plist")
+            return
+        }
+        
+        self.apiKeys = keys.filter { !$0.isEmpty }
+        print("Loaded \(apiKeys.count) API keys from Info.plist")
+    }
+    
+    private func getCurrentAPIKey() -> String? {
+        let availableKeys = apiKeys.filter { !blockedKeys.contains($0) }
+        guard !availableKeys.isEmpty else { return nil }
+        
+        // Use round-robin to distribute load
+        if currentKeyIndex >= availableKeys.count {
+            currentKeyIndex = 0
+        }
+        
+        return availableKeys[currentKeyIndex]
+    }
+    
+    private func blockCurrentKey(reason: String) {
+        guard let currentKey = getCurrentAPIKey() else { return }
+        blockedKeys.insert(currentKey)
+        print("Blocked API key (reason: \(reason)). Blocked keys: \(blockedKeys.count)/\(apiKeys.count)")
+        
+        // Move to next key
+        currentKeyIndex += 1
+    }
+    
+    private func incrementKeyUsage() {
+        // Move to next key for load balancing
+        currentKeyIndex += 1
     }
     
     // MARK: - Gemini API Methods
@@ -189,7 +236,7 @@ public class AIServices {
                      maxTokens: Int? = nil,
                      completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
-        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+        guard let apiKey = getCurrentAPIKey() else {
             completion(.failure(.allKeysExhausted))
             return
         }
@@ -252,7 +299,7 @@ public class AIServices {
         temperature: Double,
         maxTokens: Int
     ) async throws -> String {
-        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+        guard let apiKey = getCurrentAPIKey() else {
             throw AIServiceError.allKeysExhausted
         }
         
@@ -277,7 +324,24 @@ public class AIServices {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = jsonData
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Handle HTTP status codes
+        if let httpResponse = response as? HTTPURLResponse {
+            switch httpResponse.statusCode {
+            case 200...299:
+                incrementKeyUsage()
+                break
+            case 401, 403:
+                blockCurrentKey(reason: "Auth error (\(httpResponse.statusCode))")
+                throw AIServiceError.unauthorized
+            case 429:
+                blockCurrentKey(reason: "Rate limited (429)")
+                throw AIServiceError.rateLimited
+            default:
+                throw AIServiceError.apiError("HTTP \(httpResponse.statusCode)")
+            }
+        }
 
         // Debug: Print the raw response from Gemini
         if let raw = String(data: data, encoding: .utf8) {
@@ -330,7 +394,7 @@ public class AIServices {
                                model: String,
                                completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
-        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+        guard let apiKey = getCurrentAPIKey() else {
             completion(.failure(.allKeysExhausted))
             return
         }
@@ -384,26 +448,20 @@ public class AIServices {
         // Handle HTTP status codes
         switch httpResponse.statusCode {
         case 200...299:
-            // Success - increment usage for the current key
-            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
-                APIKeyManager.shared.incrementUsage(for: currentKey)
-            }
+            // Success - increment usage for load balancing
+            incrementKeyUsage()
             break
         case 400:
             completion(.failure(.apiError("Bad Request - Check your request format")))
             return
         case 401, 403:
             // Block current key and retry
-            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
-                APIKeyManager.shared.blockKey(currentKey, reason: "Auth error (\(httpResponse.statusCode))")
-            }
+            blockCurrentKey(reason: "Auth error (\(httpResponse.statusCode))")
             completion(.failure(.unauthorized))
             return
         case 429:
             // Block current key due to rate limiting
-            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
-                APIKeyManager.shared.blockKey(currentKey, reason: "Rate limited (429)")
-            }
+            blockCurrentKey(reason: "Rate limited (429)")
             completion(.failure(.rateLimited))
             return
         default:

@@ -770,15 +770,46 @@ struct NormalBetView: View {
         isProcessingOptimization = true
         
         do {
-            // Use the new sports-optimized function (if AIServices is available)
-            // Otherwise use the fallback optimization
-            let optimizedQuestion = try await AIServices.shared.generateSportsOptimizedBetQuestion(
-                originalQuestion: betPrompt,
-                category: selectedCategory,
-                wordLimit: maxWordsInBetPrompt
+            // Create a simple optimization prompt that considers bet type and category
+            let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
+            let betTypeContext = getBetTypeContext()
+            
+            let optimizationPrompt = """
+            You are optimizing a betting question. Here's the context:
+            - Category: \(categoryContext)
+            - Bet Type: \(betTypeContext)
+            - Word Limit: \(maxWordsInBetPrompt) words
+            - Original Question: "\(betPrompt)"
+            
+            Improve this question to be:
+            1. Clear and specific
+            2. Appropriate for \(betType) bets
+            3. Related to \(categoryContext)
+            4. Under \(maxWordsInBetPrompt) words
+            5. Easy to verify the outcome
+            
+            Return only the improved question, nothing else.
+            """
+            
+            let optimizedQuestion = try await AIServices.shared.sendPrompt(
+                optimizationPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.3,
+                maxTokens: 100
             )
             
-            optimizedBetPrompt = optimizedQuestion
+            // Apply word limit to the response
+            let words = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+            
+            let limitedWords = words.prefix(maxWordsInBetPrompt)
+            optimizedBetPrompt = limitedWords.joined(separator: " ")
+            
+            // Ensure it ends with a question mark
+            if !optimizedBetPrompt.hasSuffix("?") {
+                optimizedBetPrompt += "?"
+            }
             
             // Show the optimization section
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -789,8 +820,7 @@ struct NormalBetView: View {
             print("Failed to optimize bet question: \(error)")
             
             // Fallback to basic optimization
-            let basicOptimized = createBasicOptimization(betPrompt)
-            optimizedBetPrompt = basicOptimized
+            optimizedBetPrompt = createBasicOptimization(betPrompt)
             
             withAnimation(.easeInOut(duration: 0.3)) {
                 showOptimization = true
@@ -798,6 +828,19 @@ struct NormalBetView: View {
         }
         
         isProcessingOptimization = false
+    }
+    
+    private func getBetTypeContext() -> String {
+        switch betType {
+        case "normal":
+            return "a prediction or outcome-based bet where participants guess what will happen"
+        case "timed":
+            return "a time-based challenge where someone must complete a task within a time limit"
+        case "contest":
+            return "a competition where multiple people compete to see who performs best"
+        default:
+            return "a general betting situation"
+        }
     }
     
     // Fallback optimization function
@@ -829,60 +872,107 @@ struct NormalBetView: View {
         return optimized
     }
     
-    // Load AI suggestions (placeholder - implement according to your AI service)
     private func loadAISuggestions() {
-        // Placeholder implementation - replace with actual AI service call
-        if let category = selectedCategory {
-            switch category {
-            case .sports:
-                aiSuggestions = [
-                    "Who will win tonight's game?",
-                    "Which team will score first?",
-                    "Will there be overtime?",
-                    "Who will be the MVP?",
-                    "Which player will score the most points?"
-                ]
-            case .food:
-                aiSuggestions = [
-                    
-                ]
-            case .lifeEvents:
-                aiSuggestions = [
-                    
-                ]
-            case .politics:
-                aiSuggestions = [
-                    "Which candidate will win the election?",
-                    "What will be the voter turnout?",
-                    "Which issue will dominate debates?",
-                    "Who will endorse whom?",
-                    "What will be the final poll numbers?"
-                ]
-            case .entertainment:
-                aiSuggestions = [
-                    "Which movie will win Best Picture?",
-                    "Who will be the surprise guest?",
-                    "What song will top the charts?",
-                    "Which show will get renewed?",
-                    "Who will win the talent competition?"
-                ]
-            case .other:
-                aiSuggestions = [
-                    "What will happen next?",
-                    "Who will make the news?",
-                    "What will be the outcome?",
-                    "Which option will win?",
-                    "What will be the final result?"
-                ]
+        // Show loading state
+        aiSuggestions = ["Loading suggestions..."]
+        
+        Task {
+            do {
+                let suggestions = try await AIServices.shared.generateCategoryBetSuggestions(
+                    category: selectedCategory,
+                    count: 5,
+                    betType: betType,
+                    wordLimit: maxWordsInBetPrompt
+                )
+                
+                await MainActor.run {
+                    self.aiSuggestions = suggestions
+                }
+                
+            } catch {
+                print("Failed to load AI suggestions: \(error)")
+                
+                // Fallback suggestions based on bet type and category
+                await MainActor.run {
+                    self.aiSuggestions = getFallbackSuggestions()
+                }
             }
-        } else {
-            aiSuggestions = [
-                "What will happen next?",
-                "Who will win?",
-                "What will be the outcome?",
-                "Which option is most likely?",
-                "What will be the final result?"
-            ]
+        }
+    }
+    
+    private func getFallbackSuggestions() -> [String] {
+        switch betType {
+        case "normal":
+            return getNormalFallbackSuggestions()
+        case "timed":
+            return getTimedFallbackSuggestions()
+        case "contest":
+            return getContestFallbackSuggestions()
+        default:
+            return ["What will happen next?", "Who will win?", "What will be the outcome?"]
+        }
+    }
+    
+    private func getNormalFallbackSuggestions() -> [String] {
+        guard let category = selectedCategory else {
+            return ["What will happen next?", "Who will win?", "What will be the outcome?"]
+        }
+        
+        switch category {
+        case .sports:
+            return ["Who will win the game?", "What will the final score be?", "Which team will score first?"]
+        case .food:
+            return ["Which dish will taste better?", "Who will finish eating first?", "What will be the most popular menu item?"]
+        case .lifeEvents:
+            return ["Who will get promoted first?", "Which friend will move next?", "What major life change will happen?"]
+        case .politics:
+            return ["Who will win the election?", "What policy will pass first?", "Which candidate will lead in polls?"]
+        case .entertainment:
+            return ["Which movie will be more popular?", "Who will win the award?", "What show will get renewed?"]
+        case .other:
+            return ["What will happen tomorrow?", "Which option is most likely?", "Who will be right?"]
+        }
+    }
+    
+    private func getTimedFallbackSuggestions() -> [String] {
+        guard let category = selectedCategory else {
+            return ["Can you complete this challenge before time runs out?", "How fast can you finish this task?", "Can you beat the clock?"]
+        }
+        
+        switch category {
+        case .sports:
+            return ["Can you hit 10 free throws before time runs out?", "How many push-ups can you do quickly?", "Can you run a mile as fast as possible?"]
+        case .food:
+            return ["Can you eat a burger before time runs out?", "How fast can you chop vegetables?", "Can you bake cookies quickly?"]
+        case .lifeEvents:
+            return ["Can you clean your room before time runs out?", "How fast can you organize your desk?", "Can you reply to all emails quickly?"]
+        case .politics:
+            return ["Can you name 20 presidents before time runs out?", "How fast can you explain a policy?", "Can you register to vote quickly?"]
+        case .entertainment:
+            return ["Can you watch a movie before time runs out?", "How fast can you learn song lyrics?", "Can you finish a book quickly?"]
+        case .other:
+            return ["Can you solve this puzzle before time runs out?", "How fast can you complete this task?", "Can you finish before the timer?"]
+        }
+    }
+    
+    private func getContestFallbackSuggestions() -> [String] {
+        guard let category = selectedCategory else {
+            return ["Who can do this the fastest?", "Who will perform the best?", "Who can complete this first?"]
+        }
+        
+        switch category {
+        case .sports:
+            return ["Who can do the most push-ups?", "Who can run faster?", "Who has better aim?"]
+        case .food:
+            return ["Who can eat the most hot dogs?", "Who can cook faster?", "Who makes the best dish?"]
+        case .lifeEvents:
+            return ["Who can save the most money?", "Who will get a job first?", "Who can learn a skill faster?"]
+        case .politics:
+            return ["Who knows more about politics?", "Who can debate better?", "Who can name more senators?"]
+        case .entertainment:
+            return ["Who can sing better?", "Who knows more movie trivia?", "Who can dance longer?"]
+        case .other:
+            return ["Who can solve this faster?", "Who will be more accurate?", "Who performs better?"]
         }
     }
     
@@ -919,16 +1009,33 @@ struct NormalBetView: View {
         }
     }
     
-    // Refresh AI suggestions (placeholder - implement according to your AI service)
     private func refreshAISuggestions() async {
-        // Simulate API call delay
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        await MainActor.run {
+            self.aiSuggestions = ["Loading new suggestions..."]
+        }
         
-        // Generate new suggestions (placeholder implementation)
-        loadAISuggestions()
-        
-        // Shuffle the suggestions to make them appear different
-        aiSuggestions.shuffle()
+        do {
+            let suggestions = try await AIServices.shared.generateCategoryBetSuggestions(
+                category: selectedCategory,
+                count: 5,
+                betType: betType,
+                wordLimit: maxWordsInBetPrompt
+            )
+            
+            await MainActor.run {
+                self.aiSuggestions = suggestions
+            }
+            
+        } catch {
+            print("Failed to refresh AI suggestions: \(error)")
+            
+            // Use fallback suggestions
+            await MainActor.run {
+                self.aiSuggestions = getFallbackSuggestions()
+                // Shuffle to make them appear different
+                self.aiSuggestions.shuffle()
+            }
+        }
     }
     
     // Start cooldown timer
