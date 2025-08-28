@@ -167,6 +167,11 @@ public class AIServices {
     private let baseURL: String
     private let defaultModel: String
     
+    // API Key management
+    private var apiKeys: [String] = []
+    private var currentKeyIndex: Int = 0
+    private var blockedKeys: Set<String> = []
+    
     // MARK: - Initialization
     private init() {
         // Configure URLSession
@@ -178,6 +183,48 @@ public class AIServices {
         // Gemini API base URL and model
         self.baseURL = "https://generativelanguage.googleapis.com/v1beta/models/"
         self.defaultModel = "gemini-2.5-flash"
+        
+        // Load API keys from Info.plist
+        loadAPIKeys()
+    }
+    
+    // MARK: - API Key Management
+    private func loadAPIKeys() {
+        guard let path = Bundle.main.path(forResource: "Info", ofType: "plist"),
+              let dict = NSDictionary(contentsOfFile: path),
+              let keys = dict["GEMINI_API_KEYS"] as? [String] else {
+            print("Warning: No GEMINI_API_KEYS found in Info.plist")
+            return
+        }
+        
+        self.apiKeys = keys.filter { !$0.isEmpty }
+        print("Loaded \(apiKeys.count) API keys from Info.plist")
+    }
+    
+    private func getCurrentAPIKey() -> String? {
+        let availableKeys = apiKeys.filter { !blockedKeys.contains($0) }
+        guard !availableKeys.isEmpty else { return nil }
+        
+        // Use round-robin to distribute load
+        if currentKeyIndex >= availableKeys.count {
+            currentKeyIndex = 0
+        }
+        
+        return availableKeys[currentKeyIndex]
+    }
+    
+    private func blockCurrentKey(reason: String) {
+        guard let currentKey = getCurrentAPIKey() else { return }
+        blockedKeys.insert(currentKey)
+        print("Blocked API key (reason: \(reason)). Blocked keys: \(blockedKeys.count)/\(apiKeys.count)")
+        
+        // Move to next key
+        currentKeyIndex += 1
+    }
+    
+    private func incrementKeyUsage() {
+        // Move to next key for load balancing
+        currentKeyIndex += 1
     }
     
     // MARK: - Gemini API Methods
@@ -189,7 +236,7 @@ public class AIServices {
                      maxTokens: Int? = nil,
                      completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
-        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+        guard let apiKey = getCurrentAPIKey() else {
             completion(.failure(.allKeysExhausted))
             return
         }
@@ -252,7 +299,7 @@ public class AIServices {
         temperature: Double,
         maxTokens: Int
     ) async throws -> String {
-        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+        guard let apiKey = getCurrentAPIKey() else {
             throw AIServiceError.allKeysExhausted
         }
         
@@ -277,7 +324,24 @@ public class AIServices {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = jsonData
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Handle HTTP status codes
+        if let httpResponse = response as? HTTPURLResponse {
+            switch httpResponse.statusCode {
+            case 200...299:
+                incrementKeyUsage()
+                break
+            case 401, 403:
+                blockCurrentKey(reason: "Auth error (\(httpResponse.statusCode))")
+                throw AIServiceError.unauthorized
+            case 429:
+                blockCurrentKey(reason: "Rate limited (429)")
+                throw AIServiceError.rateLimited
+            default:
+                throw AIServiceError.apiError("HTTP \(httpResponse.statusCode)")
+            }
+        }
 
         // Debug: Print the raw response from Gemini
         if let raw = String(data: data, encoding: .utf8) {
@@ -330,7 +394,7 @@ public class AIServices {
                                model: String,
                                completion: @escaping (Result<GeminiResponse, AIServiceError>) -> Void) {
         
-        guard let apiKey = APIKeyManager.shared.getCurrentAPIKey() else {
+        guard let apiKey = getCurrentAPIKey() else {
             completion(.failure(.allKeysExhausted))
             return
         }
@@ -384,26 +448,20 @@ public class AIServices {
         // Handle HTTP status codes
         switch httpResponse.statusCode {
         case 200...299:
-            // Success - increment usage for the current key
-            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
-                APIKeyManager.shared.incrementUsage(for: currentKey)
-            }
+            // Success - increment usage for load balancing
+            incrementKeyUsage()
             break
         case 400:
             completion(.failure(.apiError("Bad Request - Check your request format")))
             return
         case 401, 403:
             // Block current key and retry
-            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
-                APIKeyManager.shared.blockKey(currentKey, reason: "Auth error (\(httpResponse.statusCode))")
-            }
+            blockCurrentKey(reason: "Auth error (\(httpResponse.statusCode))")
             completion(.failure(.unauthorized))
             return
         case 429:
             // Block current key due to rate limiting
-            if let currentKey = APIKeyManager.shared.getCurrentAPIKey() {
-                APIKeyManager.shared.blockKey(currentKey, reason: "Rate limited (429)")
-            }
+            blockCurrentKey(reason: "Rate limited (429)")
             completion(.failure(.rateLimited))
             return
         default:
@@ -886,67 +944,228 @@ public class AIServices {
     // MARK: - Multi-Source Sports Data Aggregation
     @available(iOS 15.0, *)
     func aggregateSportsDataFromMultipleSources(query: String, betDate: String) async throws -> String {
-        print("🔍 Starting multi-source sports data aggregation")
+        print("🔍 Starting consensus-based multi-source sports data aggregation")
         
-        var allResults: [String] = []
-        var sources: [String] = []
+        // Step 1: Extract team and league information
+        let entities = extractSportsEntitiesFromQuery(query)
+        print("📊 Detected: Teams=\(entities.teams), League=\(entities.league ?? "unknown")")
         
-        // Source 1: Enhanced Google Search
+        var searchResults: [(content: String, source: String, priority: Int, confidence: Double)] = []
+        
+        // Priority 1: Google Search (highest priority - most comprehensive)
         do {
+            let optimizedQuery = buildBetterGoogleQuery(from: query, entities: entities)
+            print("🔍 Google query: \(optimizedQuery)")
+            
             let googleResults = try await performDateAwareSportsSearch(
-                query: query,
+                query: optimizedQuery,
                 betDate: betDate,
-                numResults: 6
+                numResults: 8
             )
-            allResults.append(googleResults)
-            sources.append("Google Custom Search")
-            print("✅ Google search completed")
+            
+            let confidence = evaluateSearchResultQuality(googleResults)
+            searchResults.append((googleResults, "Google Search", 1, confidence))
+            print("✅ Google search completed with confidence: \(String(format: "%.1f", confidence))")
+            
+            // Small delay to avoid rate limiting
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
         } catch {
             print("❌ Google search failed: \(error)")
         }
         
-        // Source 2: Direct ESPN search (if we can construct a good query)
-        let entities = extractSportsEntitiesFromQuery(query)
+        // Priority 2: Official League Website (if league detected)
+        if let league = entities.league, !entities.teams.isEmpty {
+            do {
+                let leagueWebsite = getLeagueWebsite(for: league)
+                let leagueQuery = "site:\(leagueWebsite) \(entities.teams.joined(separator: " ")) game today score"
+                print("🔍 \(league) query: \(leagueQuery)")
+                
+                let leagueResults = try await performSportsOptimizedGoogleSearch(
+                    query: leagueQuery,
+                    numResults: 4
+                )
+                
+                let confidence = evaluateSearchResultQuality(leagueResults) + 1.0 // Bonus for official source
+                searchResults.append((leagueResults, "\(league) Official", 2, confidence))
+                print("✅ \(league) official search completed")
+                
+                try await Task.sleep(nanoseconds: 500_000_000)
+                
+            } catch {
+                print("❌ \(league) official search failed: \(error)")
+            }
+        }
+        
+        // Priority 3: ESPN (reliable fallback)
         if !entities.teams.isEmpty {
             do {
-                let espnQuery = "site:espn.com \(entities.teams.joined(separator: " ")) final score"
+                let espnQuery = "site:espn.com \(entities.teams.joined(separator: " ")) score game result"
+                print("🔍 ESPN query: \(espnQuery)")
+                
                 let espnResults = try await performSportsOptimizedGoogleSearch(
                     query: espnQuery,
                     numResults: 3
                 )
-                allResults.append("ESPN SPECIFIC SEARCH:\n\(espnResults)")
-                sources.append("ESPN Direct")
-                print("✅ ESPN direct search completed")
+                
+                let confidence = evaluateSearchResultQuality(espnResults)
+                searchResults.append((espnResults, "ESPN", 3, confidence))
+                print("✅ ESPN search completed")
+                
             } catch {
-                print("❌ ESPN direct search failed: \(error)")
+                print("❌ ESPN search failed: \(error)")
             }
         }
         
-        // Source 3: CBS Sports search
-        if !entities.teams.isEmpty {
-            do {
-                let cbsQuery = "site:cbssports.com \(entities.teams.joined(separator: " ")) result"
-                let cbsResults = try await performSportsOptimizedGoogleSearch(
-                    query: cbsQuery,
-                    numResults: 3
-                )
-                allResults.append("CBS SPORTS SPECIFIC SEARCH:\n\(cbsResults)")
-                sources.append("CBS Sports Direct")
-                print("✅ CBS Sports search completed")
-            } catch {
-                print("❌ CBS Sports search failed: \(error)")
-            }
+        // Step 2: Build consensus using Gemini
+        if !searchResults.isEmpty {
+            let consensusResult = try await buildConsensusWithGemini(
+                searchResults: searchResults,
+                originalQuery: query,
+                betDate: betDate
+            )
+            
+            return consensusResult
+        } else {
+            return "No search results were successfully retrieved from any source."
         }
+    }
+    
+    @available(iOS 15.0, *)
+    private func buildConsensusWithGemini(
+        searchResults: [(content: String, source: String, priority: Int, confidence: Double)],
+        originalQuery: String,
+        betDate: String
+    ) async throws -> String {
         
-        let aggregatedResult = """
-        AGGREGATED SPORTS DATA FROM \(sources.count) SOURCES:
-        Sources: \(sources.joined(separator: ", "))
+        // Sort by priority (lower number = higher priority)
+        let sortedResults = searchResults.sorted { $0.priority < $1.priority }
         
-        \(allResults.joined(separator: "\n\n" + String(repeating: "=", count: 50) + "\n\n"))
+        let sourceSummary = sortedResults.enumerated().map { index, result in
+            """
+            SOURCE \(index + 1): \(result.source.uppercased()) 
+            [Priority: \(result.priority), Confidence: \(String(format: "%.1f", result.confidence))]
+            
+            \(result.content.prefix(1200))
+            """
+        }.joined(separator: "\n\n" + String(repeating: "=", count: 60) + "\n\n")
+        
+        let consensusPrompt = """
+        You are analyzing sports information from multiple sources to provide a definitive consensus answer.
+        
+        ORIGINAL QUERY: "\(originalQuery)"
+        BET DATE: \(betDate)
+        
+        SEARCH RESULTS FROM MULTIPLE SOURCES (in priority order):
+        \(sourceSummary)
+        
+        CONSENSUS ANALYSIS INSTRUCTIONS:
+        1. **Prioritize sources in this order**: Google Search > Official League Site > ESPN
+        2. **Cross-reference information** between sources to identify the correct:
+           - Teams playing
+           - Game date and time  
+           - Current status (scheduled/live/final)
+           - Score (if game is completed)
+        3. **Resolve conflicts** by giving more weight to higher-priority sources
+        4. **Identify inconsistencies** and explain which source is likely more accurate
+        5. **Provide a clear, definitive answer** to the original query
+        
+        FORMAT YOUR RESPONSE AS:
+        
+        **CONSENSUS ANSWER:**
+        [Direct answer to the original query - be specific and definitive]
+        
+        **VERIFIED GAME DETAILS:**
+        - Teams: [Team A vs Team B]  
+        - Date/Time: [Specific date and time]
+        - Status: [scheduled/in progress/final]
+        - Score: [Current or final score if available]
+        - League: [League name]
+        
+        **SOURCE RELIABILITY ANALYSIS:**
+        [Brief explanation of which sources provided the most accurate information and how conflicts were resolved]
+        
+        **RECOMMENDATION FOR BET:**
+        [If applicable, provide specific guidance for the bet based on the consensus data]
         """
         
-        print("🔍 Multi-source aggregation completed with \(sources.count) sources")
-        return aggregatedResult
+        let consensusAnalysis = try await sendPrompt(
+            consensusPrompt,
+            model: defaultModel,
+            temperature: 0.2, // Low temperature for consistent analysis
+            maxTokens: 2000
+        )
+        
+        let finalResult = """
+        MULTI-SOURCE CONSENSUS ANALYSIS
+        Query: \(originalQuery)
+        Sources Analyzed: \(sortedResults.map { $0.source }.joined(separator: " → "))
+        
+        \(consensusAnalysis)
+        
+        \n\nDETAILED SOURCE DATA:
+        \(String(repeating: "=", count: 50))
+        \(sourceSummary)
+        """
+        
+        print("✅ Consensus analysis completed successfully")
+        return finalResult
+    }
+
+    private func buildBetterGoogleQuery(from query: String, entities: SimpleSportsEntities) -> String {
+        var queryParts: [String] = []
+        
+        // Add team information
+        if !entities.teams.isEmpty {
+            queryParts.append(entities.teams.joined(separator: " vs "))
+        } else {
+            // Extract capitalized words that might be teams
+            let words = query.components(separatedBy: .whitespaces)
+            let teamWords = words.filter { $0.first?.isUppercase == true && $0.count > 2 }
+            if !teamWords.isEmpty {
+                queryParts.append(teamWords.joined(separator: " "))
+            }
+        }
+        
+        // Add time context
+        let queryLower = query.lowercased()
+        if queryLower.contains("tonight") || queryLower.contains("today") {
+            queryParts.append("today")
+        } else if queryLower.contains("tomorrow") {
+            queryParts.append("tomorrow")
+        } else if queryLower.contains("yesterday") {
+            queryParts.append("yesterday")
+        }
+        
+        // Add result-focused terms based on query intent
+        if queryLower.contains("score") || queryLower.contains("result") || queryLower.contains("final") {
+            queryParts.append("final score")
+        } else if queryLower.contains("win") || queryLower.contains("winner") {
+            queryParts.append("winner result")
+        } else {
+            queryParts.append("game")
+        }
+        
+        return queryParts.joined(separator: " ")
+    }
+
+    private func getLeagueWebsite(for league: String) -> String {
+        switch league.uppercased() {
+        case "MLB":
+            return "mlb.com"
+        case "NFL":
+            return "nfl.com"
+        case "NBA":
+            return "nba.com"
+        case "NHL":
+            return "nhl.com"
+        case "MLS":
+            return "mlssoccer.com"
+        case "PREMIER LEAGUE":
+            return "premierleague.com"
+        default:
+            return "espn.com" // Fallback to ESPN
+        }
     }
     
     // MARK: - Sports Entity Extraction

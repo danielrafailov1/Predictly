@@ -12,16 +12,21 @@ struct NormalBetView: View {
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
     @State private var selectedDate = Date()
-    @State private var isDateEnabled = false // New toggle state
+    @State private var isDateEnabled = false
     @State private var isNextActive = false
     @State private var optionCount = 2
     @State private var max_selections = 1
-    @State private var showDateInfo = false // New state for showing date info
+    @State private var showDateInfo = false
     @State private var isOptimizingQuestion = false
     @State private var timerDays = 0
     @State private var timerHours = 0
     @State private var timerMinutes = 0
     @State private var timerSeconds = 0
+    
+    // NEW: Optimization states
+    @State private var optimizedBetPrompt: String = ""
+    @State private var showOptimization = false
+    @State private var isProcessingOptimization = false
     
     // Refresh cooldown states - using AppStorage for persistence
     @AppStorage("aiRefreshCount") private var refreshCount = 0
@@ -283,6 +288,103 @@ struct NormalBetView: View {
         }
     }
 
+    // NEW: Optimization section view
+    @ViewBuilder
+    private var optimizationSection: some View {
+        if showOptimization {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Optimized Question")
+                        .foregroundColor(.green)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    // Close optimization button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showOptimization = false
+                        }
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.title3)
+                    }
+                }
+                
+                // Display optimized version
+                Text(optimizedBetPrompt)
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .font(.system(size: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.green.opacity(0.5), lineWidth: 1)
+                    )
+                
+                // Action buttons
+                HStack(spacing: 12) {
+                    // Accept optimization button
+                    Button(action: {
+                        betPrompt = optimizedBetPrompt
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showOptimization = false
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Accept")
+                                .foregroundColor(.green)
+                                .fontWeight(.semibold)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.green.opacity(0.2))
+                        .cornerRadius(8)
+                    }
+                    
+                    // Regenerate button
+                    Button(action: {
+                        Task {
+                            await generateOptimizedBetQuestion()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isProcessingOptimization {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .orange))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundColor(.orange)
+                            }
+                            Text("Regenerate")
+                                .foregroundColor(.orange)
+                                .fontWeight(.semibold)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.orange.opacity(0.2))
+                        .cornerRadius(8)
+                    }
+                    .disabled(isProcessingOptimization)
+                    
+                    Spacer()
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.05))
+            .cornerRadius(12)
+            .padding(.horizontal)
+            .transition(.opacity.combined(with: .slide))
+        }
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -377,6 +479,13 @@ struct NormalBetView: View {
                                     } else {
                                         betPrompt = suggestion
                                     }
+                                    
+                                    // Hide optimization when new suggestion is selected
+                                    if showOptimization {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            showOptimization = false
+                                        }
+                                    }
                                 }) {
                                     Text(suggestion)
                                         .padding(.horizontal, 20)
@@ -400,15 +509,22 @@ struct NormalBetView: View {
                             
                             Spacer()
                             
+                            // UPDATED: Optimize button with new functionality
                             Button(action: {
                                 Task {
-                                    await optimizeBetQuestion()
+                                    await generateOptimizedBetQuestion()
                                 }
                             }) {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "wand.and.stars")
-                                        .foregroundColor(.yellow)
-                                        .font(.system(size: 16))
+                                    if isProcessingOptimization {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .yellow))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "wand.and.stars")
+                                            .foregroundColor(.yellow)
+                                            .font(.system(size: 16))
+                                    }
                                     Text("Optimize")
                                         .foregroundColor(.yellow)
                                         .font(.system(size: 14, weight: .semibold))
@@ -418,7 +534,7 @@ struct NormalBetView: View {
                                 .background(Color.yellow.opacity(0.2))
                                 .cornerRadius(8)
                             }
-                            .disabled(betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProcessingOptimization)
                         }
                         .padding(.vertical)
                         
@@ -458,6 +574,13 @@ struct NormalBetView: View {
                                 // Enforce word limit
                                 enforceBetPromptWordLimit(newValue)
                                 
+                                // Hide optimization when user starts typing
+                                if showOptimization && newValue != optimizedBetPrompt {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showOptimization = false
+                                    }
+                                }
+                                
                                 // Detect and process date
                                 Task {
                                     await detectAndProcessDate(from: newValue)
@@ -491,6 +614,9 @@ struct NormalBetView: View {
                         }
                     }
                     .padding(.horizontal)
+                    
+                    // NEW: Show optimization section
+                    optimizationSection
                     
                     // Date Toggle Section with Info Button
                     VStack(alignment: .leading, spacing: 12) {
@@ -597,6 +723,9 @@ struct NormalBetView: View {
         }
     }
     
+    // MARK: - Helper Functions
+    
+    // Complete the dateFromComponents function
     private func dateFromComponents() -> Date {
         let calendar = Calendar.current
         var components = DateComponents()
@@ -607,614 +736,847 @@ struct NormalBetView: View {
         if let date = calendar.date(from: components) {
             return date
         } else {
+            // Handle invalid date (e.g., February 30th)
             components.day = 1
             guard let firstOfMonth = calendar.date(from: components),
                   let range = calendar.range(of: .day, in: .month, for: firstOfMonth) else {
                 return Date()
             }
+            
+            // Set to the last valid day of the month
             components.day = min(selectedDay, range.count)
             return calendar.date(from: components) ?? Date()
         }
     }
     
+    // Update selected date when components change
     private func updateSelectedDate() {
-        let newDate = dateFromComponents()
-        selectedDate = newDate
+        selectedDate = dateFromComponents()
     }
     
+    // Format the selected date for display
     private func formattedSelectedDate() -> String {
         let formatter = DateFormatter()
-        formatter.dateStyle = .full
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
         return formatter.string(from: selectedDate)
     }
     
-    private func getCurrentTimestamp() -> Double {
-        return Date().timeIntervalSince1970
-    }
-    
-    private func checkCooldownStatus() {
-        let currentTime = getCurrentTimestamp()
-        let timeSinceLastRefresh = currentTime - lastRefreshTimestamp
-        
-        // Reset if more than 60 seconds have passed
-        if timeSinceLastRefresh >= 60 {
-            refreshCount = 0
-            isRefreshDisabled = false
-            timeRemaining = 0
-            cooldownTimer?.invalidate()
-            return
-        }
-        
-        // Check if we're in cooldown
-        if refreshCount >= maxRefreshesPerMinute {
-            isRefreshDisabled = true
-            timeRemaining = max(0, Int(60 - timeSinceLastRefresh))
-            startLiveTimer()
-        } else {
-            isRefreshDisabled = false
-            timeRemaining = 0
-        }
-    }
-    
-    private func startLiveTimer() {
-        cooldownTimer?.invalidate()
-        
-        cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            DispatchQueue.main.async {
-                let currentTime = getCurrentTimestamp()
-                let timeSinceLastRefresh = currentTime - lastRefreshTimestamp
-                
-                if timeSinceLastRefresh >= 60 {
-                    // Cooldown period has ended
-                    refreshCount = 0
-                    isRefreshDisabled = false
-                    timeRemaining = 0
-                    cooldownTimer?.invalidate()
-                } else {
-                    // Update remaining time
-                    timeRemaining = max(0, Int(60 - timeSinceLastRefresh))
-                    if timeRemaining == 0 {
-                        refreshCount = 0
-                        isRefreshDisabled = false
-                        cooldownTimer?.invalidate()
-                    }
-                }
-            }
-        }
-    }
-    
-    private func handleRefreshTap() async {
-        let currentTime = getCurrentTimestamp()
-        let timeSinceLastRefresh = currentTime - lastRefreshTimestamp
-        
-        // Reset counter if more than 60 seconds have passed
-        if timeSinceLastRefresh >= 60 {
-            refreshCount = 0
-        }
-        
-        // Check if we've exceeded the limit
-        if refreshCount >= maxRefreshesPerMinute {
-            isRefreshDisabled = true
-            timeRemaining = max(0, Int(60 - timeSinceLastRefresh))
-            startLiveTimer()
-            return
-        }
-        
-        // Increment counter and refresh
-        refreshCount += 1
-        lastRefreshTimestamp = currentTime
-        await refreshAISuggestions()
-        
-        // Start cooldown if we've hit the limit
-        if refreshCount >= maxRefreshesPerMinute {
-            isRefreshDisabled = true
-            timeRemaining = 60
-            startLiveTimer()
-        }
-    }
-    
+    // NEW: Generate optimized bet question function
     @MainActor
-    func detectAndProcessDate(from text: String) async {
-        // Don't process if already processing or text is too short
-        guard !isProcessingDate && text.count > 2 else { return }
-        
-        isProcessingDate = true
-        
-        if let detectedDate = parseNaturalLanguageDate(from: text) {
-            selectedDate = detectedDate
-            isDateEnabled = true
-            updateDateComponentsFromDate(detectedDate)
-            detectedDateText = "Auto-detected: \(formatDetectedDate(detectedDate))"
-        }
-        
-        isProcessingDate = false
-    }
-
-    func parseNaturalLanguageDate(from text: String) -> Date? {
-        let lowercasedText = text.lowercased()
-        let calendar = Calendar.current
-        let now = Date()
-        
-        // Helper to get next occurrence of a weekday
-        func getNextWeekday(_ weekday: Int) -> Date? {
-            let today = calendar.component(.weekday, from: now)
-            let daysUntilWeekday = (weekday - today + 7) % 7
-            let targetDays = daysUntilWeekday == 0 ? 7 : daysUntilWeekday // If it's today, get next week
-            return calendar.date(byAdding: .day, value: targetDays, to: now)
-        }
-        
-        // Helper to create date with specific time
-        func createDateWithTime(baseDate: Date, hour: Int, minute: Int = 0) -> Date? {
-            return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDate)
-        }
-        
-        // 1. Handle relative day keywords
-        if lowercasedText.contains("today") {
-            let timeHour = extractTimeFromText(lowercasedText) ?? (lowercasedText.contains("night") || lowercasedText.contains("evening") ? 20 :
-                          lowercasedText.contains("morning") ? 10 :
-                          lowercasedText.contains("afternoon") ? 14 : 19)
-            return createDateWithTime(baseDate: now, hour: timeHour)
-        }
-        
-        if lowercasedText.contains("tomorrow") {
-            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) else { return nil }
-            let timeHour = extractTimeFromText(lowercasedText) ?? (lowercasedText.contains("night") || lowercasedText.contains("evening") ? 20 :
-                          lowercasedText.contains("morning") ? 10 :
-                          lowercasedText.contains("afternoon") ? 14 : 19)
-            return createDateWithTime(baseDate: tomorrow, hour: timeHour)
-        }
-        
-        if lowercasedText.contains("tonight") {
-            return createDateWithTime(baseDate: now, hour: 20) // 8 PM
-        }
-        
-        // 2. Handle weekday names
-        let weekdays = [
-            ("sunday", 1), ("monday", 2), ("tuesday", 3), ("wednesday", 4),
-            ("thursday", 5), ("friday", 6), ("saturday", 7)
-        ]
-        
-        for (dayName, dayNumber) in weekdays {
-            if lowercasedText.contains(dayName) {
-                guard let weekdayDate = getNextWeekday(dayNumber) else { continue }
-                
-                let timeHour = extractTimeFromText(lowercasedText) ?? (
-                    lowercasedText.contains("morning") ? 10 :
-                    lowercasedText.contains("afternoon") ? 14 :
-                    lowercasedText.contains("evening") || lowercasedText.contains("night") ? 20 : 19
-                )
-                
-                return createDateWithTime(baseDate: weekdayDate, hour: timeHour)
-            }
-        }
-        
-        // 3. Handle "this weekend" / "next weekend"
-        if lowercasedText.contains("this weekend") || lowercasedText.contains("weekend") {
-            guard let saturday = getNextWeekday(7) else { return nil }
-            let timeHour = extractTimeFromText(lowercasedText) ?? 19
-            return createDateWithTime(baseDate: saturday, hour: timeHour)
-        }
-        
-        if lowercasedText.contains("next weekend") {
-            guard let nextSaturday = calendar.date(byAdding: .weekOfYear, value: 1, to: getNextWeekday(7) ?? now) else { return nil }
-            let timeHour = extractTimeFromText(lowercasedText) ?? 19
-            return createDateWithTime(baseDate: nextSaturday, hour: timeHour)
-        }
-        
-        // 4. Handle "next week"
-        if lowercasedText.contains("next week") {
-            guard let nextWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: now) else { return nil }
-            let timeHour = extractTimeFromText(lowercasedText) ?? 19
-            return createDateWithTime(baseDate: nextWeek, hour: timeHour)
-        }
-        
-        // 5. Handle holidays (add more as needed)
-        let holidays = getUpcomingHolidays()
-        for (holidayName, holidayDate) in holidays {
-            if lowercasedText.contains(holidayName) {
-                let timeHour = extractTimeFromText(lowercasedText) ?? 19
-                return createDateWithTime(baseDate: holidayDate, hour: timeHour)
-            }
-        }
-        
-        // 6. Handle specific dates (month day, year patterns)
-        if let specificDate = parseSpecificDate(from: lowercasedText) {
-            let timeHour = extractTimeFromText(lowercasedText) ?? 19
-            return createDateWithTime(baseDate: specificDate, hour: timeHour)
-        }
-        
-        return nil
-    }
-    
-    func extractTimeFromText(_ text: String) -> Int? {
-        // Regex patterns for various time formats
-        let timePatterns = [
-            "(?i)(\\d{1,2})\\s*pm", // "7pm", "7 pm"
-            "(?i)(\\d{1,2})\\s*am", // "7am", "7 am"
-            "(?i)(\\d{1,2}):(\\d{2})\\s*pm", // "7:30pm"
-            "(?i)(\\d{1,2}):(\\d{2})\\s*am"  // "7:30am"
-        ]
-        
-        for pattern in timePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern),
-               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
-                
-                let hourRange = match.range(at: 1)
-                let hourString = String(text[Range(hourRange, in: text)!])
-                
-                if let hour = Int(hourString) {
-                    // Handle AM/PM conversion
-                    if pattern.contains("pm") && hour != 12 {
-                        return hour + 12
-                    } else if pattern.contains("am") && hour == 12 {
-                        return 0
-                    } else {
-                        return hour
-                    }
-                }
-            }
-        }
-        
-        return nil
-    }
-    
-    func calculateThanksgiving(year: Int) -> Date? {
-        let calendar = Calendar.current
-        var components = DateComponents()
-        components.year = year
-        components.month = 11
-        components.day = 1
-        
-        guard let firstOfNovember = calendar.date(from: components) else { return nil }
-        
-        let firstWeekday = calendar.component(.weekday, from: firstOfNovember)
-        let daysUntilFirstThursday = (5 - firstWeekday + 7) % 7
-        let firstThursday = calendar.date(byAdding: .day, value: daysUntilFirstThursday, to: firstOfNovember)
-        
-        // 4th Thursday is 3 weeks after first Thursday
-        return calendar.date(byAdding: .weekOfYear, value: 3, to: firstThursday!)
-    }
-    
-    func getUpcomingHolidays() -> [(String, Date)] {
-        let calendar = Calendar.current
-        let currentYear = calendar.component(.year, from: Date())
-        var holidays: [(String, Date)] = []
-        
-        // Fixed date holidays
-        let fixedHolidays = [
-            ("new year", 1, 1),
-            ("valentine's day", 2, 14),
-            ("valentines day", 2, 14),
-            ("st patrick's day", 3, 17),
-            ("april fools", 4, 1),
-            ("independence day", 7, 4),
-            ("july 4th", 7, 4),
-            ("halloween", 10, 31),
-            ("christmas eve", 12, 24),
-            ("christmas", 12, 25),
-            ("new year's eve", 12, 31)
-        ]
-        
-        for (name, month, day) in fixedHolidays {
-            var components = DateComponents()
-            components.year = currentYear
-            components.month = month
-            components.day = day
-            
-            if let holidayDate = calendar.date(from: components) {
-                // If holiday has passed this year, use next year
-                if holidayDate < Date() {
-                    components.year = currentYear + 1
-                    if let nextYearDate = calendar.date(from: components) {
-                        holidays.append((name, nextYearDate))
-                    }
-                } else {
-                    holidays.append((name, holidayDate))
-                }
-            }
-        }
-        
-        // Add calculated holidays (like Thanksgiving - 4th Thursday in November)
-        if let thanksgiving = calculateThanksgiving(year: currentYear) {
-            if thanksgiving < Date() {
-                if let nextThanksgiving = calculateThanksgiving(year: currentYear + 1) {
-                    holidays.append(("thanksgiving", nextThanksgiving))
-                }
-            } else {
-                holidays.append(("thanksgiving", thanksgiving))
-            }
-        }
-        
-        return holidays
-    }
-    
-    func parseSpecificDate(from text: String) -> Date? {
-        let calendar = Calendar.current
-        let currentYear = calendar.component(.year, from: Date())
-        
-        // Month names mapping
-        let monthNames = [
-            "january": 1, "jan": 1, "february": 2, "feb": 2, "march": 3, "mar": 3,
-            "april": 4, "apr": 4, "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7,
-            "august": 8, "aug": 8, "september": 9, "sep": 9, "october": 10, "oct": 10,
-            "november": 11, "nov": 11, "december": 12, "dec": 12
-        ]
-        
-        // Pattern 1: "January 15", "March 3rd", "December 25th 2024"
-        let monthDayYearPattern = "(?i)(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+(\\d{4}))?"
-        
-        if let regex = try? NSRegularExpression(pattern: monthDayYearPattern),
-           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
-            
-            let monthRange = match.range(at: 1)
-            let dayRange = match.range(at: 2)
-            let yearRange = match.range(at: 3)
-            
-            let monthString = String(text[Range(monthRange, in: text)!]).lowercased()
-            let dayString = String(text[Range(dayRange, in: text)!])
-            
-            if let month = monthNames[monthString],
-               let day = Int(dayString) {
-                
-                let year: Int
-                if yearRange.location != NSNotFound {
-                    let yearString = String(text[Range(yearRange, in: text)!])
-                    year = Int(yearString) ?? currentYear
-                } else {
-                    // If no year specified, use current year or next year if date has passed
-                    var components = DateComponents()
-                    components.year = currentYear
-                    components.month = month
-                    components.day = day
-                    
-                    if let testDate = calendar.date(from: components), testDate < Date() {
-                        year = currentYear + 1
-                    } else {
-                        year = currentYear
-                    }
-                }
-                
-                var dateComponents = DateComponents()
-                dateComponents.year = year
-                dateComponents.month = month
-                dateComponents.day = day
-                
-                return calendar.date(from: dateComponents)
-            }
-        }
-        
-        // Pattern 2: "12/25", "12/25/2024", "3/15"
-        let numericDatePattern = "(\\d{1,2})/(\\d{1,2})(?:/(\\d{4}))?"
-        
-        if let regex = try? NSRegularExpression(pattern: numericDatePattern),
-           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {
-            
-            let monthRange = match.range(at: 1)
-            let dayRange = match.range(at: 2)
-            let yearRange = match.range(at: 3)
-            
-            let monthString = String(text[Range(monthRange, in: text)!])
-            let dayString = String(text[Range(dayRange, in: text)!])
-            
-            if let month = Int(monthString),
-               let day = Int(dayString),
-               month >= 1 && month <= 12 && day >= 1 && day <= 31 {
-                
-                let year: Int
-                if yearRange.location != NSNotFound {
-                    let yearString = String(text[Range(yearRange, in: text)!])
-                    year = Int(yearString) ?? currentYear
-                } else {
-                    // Use current year or next year if date has passed
-                    var components = DateComponents()
-                    components.year = currentYear
-                    components.month = month
-                    components.day = day
-                    
-                    if let testDate = calendar.date(from: components), testDate < Date() {
-                        year = currentYear + 1
-                    } else {
-                        year = currentYear
-                    }
-                }
-                
-                var dateComponents = DateComponents()
-                dateComponents.year = year
-                dateComponents.month = month
-                dateComponents.day = day
-                
-                return calendar.date(from: dateComponents)
-            }
-        }
-        
-        return nil
-    }
-
-    private func updateDateComponentsFromDate(_ date: Date) {
-        let calendar = Calendar.current
-        selectedMonth = calendar.component(.month, from: date)
-        selectedDay = calendar.component(.day, from: date)
-        selectedYear = calendar.component(.year, from: date)
-    }
-
-    private func formatDetectedDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .full
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-    
-    @MainActor
-    func optimizeBetQuestion() async {
+    private func generateOptimizedBetQuestion() async {
         guard !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        isOptimizingQuestion = true
+        isProcessingOptimization = true
         
         do {
+            // Create a simple optimization prompt that considers bet type and category
             let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
-            let categoryName = selectedCategory?.rawValue.lowercased() ?? "general"
+            let betTypeContext = getBetTypeContext()
             
-            let prompt = """
-            Optimize this betting question for clarity, engagement, and measurability: "\(betPrompt)"
+            let optimizationPrompt = """
+            You are optimizing a betting question. Here's the context:
+            - Category: \(categoryContext)
+            - Bet Type: \(betTypeContext)
+            - Word Limit: \(maxWordsInBetPrompt) words
+            - Original Question: "\(betPrompt)"
             
-            This is a \(categoryName) category bet and a \(betType) bet type. Please:
-            1. Add specific team names, player names, or event details if applicable
-            2. Make the question more specific and measurable
-            3. Ensure it's clear what constitutes a win/loss
-            4. Add relevant context or details that make it more engaging
-            5. Keep the core intent but make it better for betting
-            6. IMPORTANT: Keep the response under \(maxWordsInBetPrompt) words
+            Improve this question to be:
+            1. Clear and specific
+            2. Appropriate for \(betType) bets
+            3. Related to \(categoryContext)
+            4. Under \(maxWordsInBetPrompt) words
+            5. Easy to verify the outcome
             
-            Context: \(categoryContext)
-            
-            Return only the optimized question, no additional text or explanation.
+            Return only the improved question, nothing else.
             """
             
             let optimizedQuestion = try await AIServices.shared.sendPrompt(
-                prompt,
+                optimizationPrompt,
                 model: "gemini-2.5-flash-lite",
-                temperature: 0.7,
-                maxTokens: 200
+                temperature: 0.3,
+                maxTokens: 100
             )
             
-            let cleanedQuestion = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            // Apply word limit to AI-optimized question
-            let questionWords = cleanedQuestion.components(separatedBy: .whitespacesAndNewlines)
+            // Apply word limit to the response
+            let words = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: .whitespacesAndNewlines)
                 .filter { !$0.isEmpty }
             
-            if questionWords.count > maxWordsInBetPrompt {
-                let truncatedWords = Array(questionWords.prefix(maxWordsInBetPrompt))
-                betPrompt = truncatedWords.joined(separator: " ")
-            } else {
-                betPrompt = cleanedQuestion
+            let limitedWords = words.prefix(maxWordsInBetPrompt)
+            optimizedBetPrompt = limitedWords.joined(separator: " ")
+            
+            // Ensure it ends with a question mark
+            if !optimizedBetPrompt.hasSuffix("?") {
+                optimizedBetPrompt += "?"
+            }
+            
+            // Show the optimization section
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showOptimization = true
             }
             
         } catch {
             print("Failed to optimize bet question: \(error)")
+            
+            // Fallback to basic optimization
+            optimizedBetPrompt = createBasicOptimization(betPrompt)
+            
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showOptimization = true
+            }
         }
         
-        isOptimizingQuestion = false
+        isProcessingOptimization = false
     }
     
-    @MainActor
-    func loadAISuggestions() {
-        let calendar = Calendar.current
-        let currentDate = selectedDate
+    private func getBetTypeContext() -> String {
+        switch betType {
+        case "normal":
+            return "a prediction or outcome-based bet where participants guess what will happen"
+        case "timed":
+            return "a time-based challenge where someone must complete a task within a time limit"
+        case "contest":
+            return "a competition where multiple people compete to see who performs best"
+        default:
+            return "a general betting situation"
+        }
+    }
+    
+    // Fallback optimization function
+    private func createBasicOptimization(_ question: String) -> String {
+        var optimized = question.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        selectedMonth = calendar.component(.month, from: currentDate)
-        selectedDay = calendar.component(.day, from: currentDate)
-        selectedYear = calendar.component(.year, from: currentDate)
+        // Capitalize first letter
+        if let firstChar = optimized.first {
+            optimized = String(firstChar).uppercased() + String(optimized.dropFirst())
+        }
+        
+        // Add question mark if missing
+        if !optimized.hasSuffix("?") {
+            optimized += "?"
+        }
+        
+        // Apply word limit
+        let words = optimized.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        
+        if words.count > maxWordsInBetPrompt {
+            let truncatedWords = Array(words.prefix(maxWordsInBetPrompt))
+            optimized = truncatedWords.joined(separator: " ")
+            if !optimized.hasSuffix("?") {
+                optimized += "?"
+            }
+        }
+        
+        return optimized
+    }
+    
+    private func loadAISuggestions() {
+        // Show loading state
+        aiSuggestions = ["Loading suggestions..."]
         
         Task {
-            await refreshAISuggestions()
-        }
-    }
-
-    @MainActor
-    func refreshAISuggestions() async {
-        do {
-            print("Attempting to fetch category-based AI suggestions...")
-            
-            if betType == "normal" {
-                let result = try await AIServices.shared.generateCategoryBetSuggestions(
+            do {
+                let suggestions = try await AIServices.shared.generateCategoryBetSuggestions(
                     category: selectedCategory,
                     count: 5,
-                    betType: "normal",
+                    betType: betType,
                     wordLimit: maxWordsInBetPrompt
                 )
-                print("Raw AI Response: \(result)")
-                aiSuggestions = result
-            } else if betType == "timed" {
-                let result = try await AIServices.shared.generateCategoryBetSuggestions(
-                    category: selectedCategory,
-                    count: 5,
-                    betType: "timed",
-                    wordLimit: maxWordsInBetPrompt
-                )
-                print("Raw AI Response: \(result)")
-                aiSuggestions = result
-            } else if betType == "contest" {
-                let result = try await AIServices.shared.generateCategoryBetSuggestions(
-                    category: selectedCategory,
-                    count: 5,
-                    betType: "contest",
-                    wordLimit: maxWordsInBetPrompt
-                )
-                print("Raw AI Response: \(result)")
-                aiSuggestions = result
+                
+                await MainActor.run {
+                    self.aiSuggestions = suggestions
+                }
+                
+            } catch {
+                print("Failed to load AI suggestions: \(error)")
+                
+                // Fallback suggestions based on bet type and category
+                await MainActor.run {
+                    self.aiSuggestions = getFallbackSuggestions()
+                }
             }
-            
-        } catch {
-            print("AI decoding error: \(error.localizedDescription)")
-            
-            // Category-specific fallback suggestions
-            let fallbackSuggestions = getCategoryFallbackSuggestions()
-            aiSuggestions = fallbackSuggestions
         }
     }
     
-    private func getCategoryFallbackSuggestions() -> [String] {
+    private func getFallbackSuggestions() -> [String] {
+        switch betType {
+        case "normal":
+            return getNormalFallbackSuggestions()
+        case "timed":
+            return getTimedFallbackSuggestions()
+        case "contest":
+            return getContestFallbackSuggestions()
+        default:
+            return ["What will happen next?", "Who will win?", "What will be the outcome?"]
+        }
+    }
+    
+    private func getNormalFallbackSuggestions() -> [String] {
         guard let category = selectedCategory else {
-            return [
-                "Who will finish their coffee first this morning?",
-                "What will be the next song that comes on shuffle?",
-                "Which elevator will arrive first when we press the button?",
-                "How many red cars will we see in the next 10 minutes?",
-                "Who will get the most likes on their next social media post?"
-            ]
+            return ["What will happen next?", "Who will win?", "What will be the outcome?"]
         }
         
         switch category {
         case .sports:
-            return [
-                "Which team will score first in the next game?",
-                "Who will run the fastest mile in our group?",
-                "Which player will have the most assists this season?",
-                "Will the home team win their next match?",
-                "Who will make the most free throws out of 10 attempts?"
-            ]
+            return ["Who will win the game?", "What will the final score be?", "Which team will score first?"]
         case .food:
-            return [
-                "Which restaurant will we choose for dinner tonight?",
-                "Who can eat the spiciest food without drinking water?",
-                "What will be the most popular pizza topping ordered?",
-                "Which of us will finish our meal first?",
-                "Will the new restaurant get good reviews this week?"
-            ]
+            return ["Which dish will taste better?", "Who will finish eating first?", "What will be the most popular menu item?"]
         case .lifeEvents:
-            return [
-                "Who will get engaged first in our friend group?",
-                "Which of us will get promoted this year?",
-                "Who will move to a new city first?",
-                "Which couple will celebrate their anniversary first?",
-                "Who will learn a new skill by the end of the month?"
-            ]
+            return ["Who will get promoted first?", "Which friend will move next?", "What major life change will happen?"]
         case .politics:
-            return [
-                "Which candidate will win the local election?",
-                "What will be the voter turnout percentage?",
-                "Which political party will gain more seats?",
-                "Will the new policy be approved this quarter?",
-                "Which state will announce results first?"
-            ]
+            return ["Who will win the election?", "What policy will pass first?", "Which candidate will lead in polls?"]
         case .entertainment:
-            return [
-                "Which movie will win Best Picture at the Oscars?",
-                "Who will release a surprise album next?",
-                "Which TV show will get renewed for another season?",
-                "Will the next big blockbuster be a hit or a flop?",
-                "Which celebrity couple will make headlines this week?"
-            ]
+            return ["Which movie will be more popular?", "Who will win the award?", "What show will get renewed?"]
         case .other:
-            return [
-                "What will be the weather like tomorrow?",
-                "Which movie will be #1 at the box office this weekend?",
-                "Who will get the next text message first?",
-                "What color car will drive by next?",
-                "Which of us will wake up earliest tomorrow?"
-            ]
+            return ["What will happen tomorrow?", "Which option is most likely?", "Who will be right?"]
         }
+    }
+    
+    private func getTimedFallbackSuggestions() -> [String] {
+        guard let category = selectedCategory else {
+            return ["Can you complete this challenge before time runs out?", "How fast can you finish this task?", "Can you beat the clock?"]
+        }
+        
+        switch category {
+        case .sports:
+            return ["Can you hit 10 free throws before time runs out?", "How many push-ups can you do quickly?", "Can you run a mile as fast as possible?"]
+        case .food:
+            return ["Can you eat a burger before time runs out?", "How fast can you chop vegetables?", "Can you bake cookies quickly?"]
+        case .lifeEvents:
+            return ["Can you clean your room before time runs out?", "How fast can you organize your desk?", "Can you reply to all emails quickly?"]
+        case .politics:
+            return ["Can you name 20 presidents before time runs out?", "How fast can you explain a policy?", "Can you register to vote quickly?"]
+        case .entertainment:
+            return ["Can you watch a movie before time runs out?", "How fast can you learn song lyrics?", "Can you finish a book quickly?"]
+        case .other:
+            return ["Can you solve this puzzle before time runs out?", "How fast can you complete this task?", "Can you finish before the timer?"]
+        }
+    }
+    
+    private func getContestFallbackSuggestions() -> [String] {
+        guard let category = selectedCategory else {
+            return ["Who can do this the fastest?", "Who will perform the best?", "Who can complete this first?"]
+        }
+        
+        switch category {
+        case .sports:
+            return ["Who can do the most push-ups?", "Who can run faster?", "Who has better aim?"]
+        case .food:
+            return ["Who can eat the most hot dogs?", "Who can cook faster?", "Who makes the best dish?"]
+        case .lifeEvents:
+            return ["Who can save the most money?", "Who will get a job first?", "Who can learn a skill faster?"]
+        case .politics:
+            return ["Who knows more about politics?", "Who can debate better?", "Who can name more senators?"]
+        case .entertainment:
+            return ["Who can sing better?", "Who knows more movie trivia?", "Who can dance longer?"]
+        case .other:
+            return ["Who can solve this faster?", "Who will be more accurate?", "Who performs better?"]
+        }
+    }
+    
+    // Handle refresh tap with cooldown logic
+    private func handleRefreshTap() async {
+        let currentTime = Date().timeIntervalSince1970
+        
+        // Check if it's been more than a minute since last reset
+        if currentTime - lastRefreshTimestamp > 60 {
+            refreshCount = 0
+            lastRefreshTimestamp = currentTime
+        }
+        
+        // Check if user has exceeded refresh limit
+        if refreshCount >= maxRefreshesPerMinute {
+            isRefreshDisabled = true
+            timeRemaining = 60 - Int(currentTime - lastRefreshTimestamp)
+            startCooldownTimer()
+            return
+        }
+        
+        // Perform refresh
+        refreshCount += 1
+        lastRefreshTimestamp = currentTime
+        
+        // Reload suggestions (in a real app, this would call your AI service)
+        await refreshAISuggestions()
+        
+        // Check if cooldown should start
+        if refreshCount >= maxRefreshesPerMinute {
+            isRefreshDisabled = true
+            timeRemaining = 60
+            startCooldownTimer()
+        }
+    }
+    
+    private func refreshAISuggestions() async {
+        await MainActor.run {
+            self.aiSuggestions = ["Loading new suggestions..."]
+        }
+        
+        do {
+            let suggestions = try await AIServices.shared.generateCategoryBetSuggestions(
+                category: selectedCategory,
+                count: 5,
+                betType: betType,
+                wordLimit: maxWordsInBetPrompt
+            )
+            
+            await MainActor.run {
+                self.aiSuggestions = suggestions
+            }
+            
+        } catch {
+            print("Failed to refresh AI suggestions: \(error)")
+            
+            // Use fallback suggestions
+            await MainActor.run {
+                self.aiSuggestions = getFallbackSuggestions()
+                // Shuffle to make them appear different
+                self.aiSuggestions.shuffle()
+            }
+        }
+    }
+    
+    // Start cooldown timer
+    private func startCooldownTimer() {
+        cooldownTimer?.invalidate()
+        
+        cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                self.timeRemaining -= 1
+                
+                if self.timeRemaining <= 0 {
+                    self.isRefreshDisabled = false
+                    self.cooldownTimer?.invalidate()
+                    self.cooldownTimer = nil
+                }
+            }
+        }
+    }
+    
+    // Check cooldown status on appear
+    private func checkCooldownStatus() {
+        let currentTime = Date().timeIntervalSince1970
+        
+        // Reset refresh count if more than a minute has passed
+        if currentTime - lastRefreshTimestamp > 60 {
+            refreshCount = 0
+            isRefreshDisabled = false
+            return
+        }
+        
+        // Check if still in cooldown
+        if refreshCount >= maxRefreshesPerMinute {
+            timeRemaining = 60 - Int(currentTime - lastRefreshTimestamp)
+            if timeRemaining > 0 {
+                isRefreshDisabled = true
+                startCooldownTimer()
+            } else {
+                refreshCount = 0
+                isRefreshDisabled = false
+            }
+        }
+    }
+    
+    // Detect and process date from text
+    private func detectAndProcessDate(from text: String) async {
+        isProcessingDate = true
+        
+        // This is a placeholder - implement actual date detection logic
+        // You might use NLDataScanner or a custom natural language processing solution
+        let lowercaseText = text.lowercased()
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        if lowercaseText.contains("tonight") {
+            selectedDate = now
+            isDateEnabled = true
+            detectedDateText = "tonight"
+        } else if lowercaseText.contains("tomorrow") {
+            selectedDate = calendar.date(byAdding: .day, value: 1, to: now) ?? now
+            isDateEnabled = true
+            detectedDateText = "tomorrow"
+        } else if lowercaseText.contains("sunday") {
+            // Find next Sunday
+            let weekday = calendar.component(.weekday, from: now)
+            let daysUntilSunday = (1 - weekday + 7) % 7
+            let nextSunday = calendar.date(byAdding: .day, value: daysUntilSunday == 0 ? 7 : daysUntilSunday, to: now) ?? now
+            selectedDate = nextSunday
+            isDateEnabled = true
+            detectedDateText = "Sunday"
+        } else if lowercaseText.contains("monday") {
+            let weekday = calendar.component(.weekday, from: now)
+            let daysUntilMonday = (2 - weekday + 7) % 7
+            let nextMonday = calendar.date(byAdding: .day, value: daysUntilMonday == 0 ? 7 : daysUntilMonday, to: now) ?? now
+            selectedDate = nextMonday
+            isDateEnabled = true
+            detectedDateText = "Monday"
+        } else if lowercaseText.contains("friday") {
+            let weekday = calendar.component(.weekday, from: now)
+            let daysUntilFriday = (6 - weekday + 7) % 7
+            let nextFriday = calendar.date(byAdding: .day, value: daysUntilFriday == 0 ? 7 : daysUntilFriday, to: now) ?? now
+            selectedDate = nextFriday
+            isDateEnabled = true
+            detectedDateText = "Friday"
+        }
+        // Add more date detection patterns as needed
+        
+        // Update the date picker components
+        if isDateEnabled {
+            selectedYear = calendar.component(.year, from: selectedDate)
+            selectedMonth = calendar.component(.month, from: selectedDate)
+            selectedDay = calendar.component(.day, from: selectedDate)
+        }
+        
+        isProcessingDate = false
+    }
+}
+
+// Placeholder AIServices class if not defined elsewhere
+extension AIServices {
+    
+    func generateSportsOptimizedBetQuestion(
+        originalQuestion: String,
+        category: BetCategoryView.BetCategory?,
+        wordLimit: Int
+    ) async throws -> String {
+        print("🔄 Starting optimization for: '\(originalQuestion)'")
+        print("🏷️ Category: \(category?.rawValue ?? "nil")")
+        
+        let lowercaseQuestion = originalQuestion.lowercased()
+        
+        // Extract team/player and time information from the question
+        let (extractedTeam, timeInfo) = extractTeamAndTimeInfo(from: originalQuestion)
+        print("🔍 Extracted team: '\(extractedTeam)', time: '\(timeInfo)'")
+        
+        // Convert relative time to specific date
+        let targetDate = convertRelativeTimeToDate(timeInfo)
+        let dateString = formatDateForSearch(targetDate)
+        print("📅 Target date: \(dateString)")
+        
+        // For sports questions, always try to optimize even if no specific team is found
+        if category == .sports {
+            // If no specific team found, create a generic search based on the question
+            let teamOrQuery = extractedTeam.isEmpty ? extractSportsKeywords(from: originalQuestion) : extractedTeam
+            print("🏀 Using team/query: '\(teamOrQuery)'")
+            
+            if !teamOrQuery.isEmpty {
+                // Create search query to find opponent information
+                let searchQuery = buildSearchQuery(team: teamOrQuery, date: dateString, question: lowercaseQuestion)
+                print("🔎 Search query: '\(searchQuery)'")
+                
+                do {
+                    // Use the Google Search API to find opponent information
+                    let searchResults = try await performSportsOptimizedGoogleSearch(
+                        query: searchQuery,
+                        numResults: 8,
+                        dateRange: "d7" // Last week for more results
+                    )
+                    print("📋 Got search results (length: \(searchResults.count) chars)")
+                    
+                    // Extract opponent information from search results
+                    let opponentInfo = extractOpponentFromSearchResults(
+                        searchResults: searchResults,
+                        originalTeam: teamOrQuery,
+                        targetDate: targetDate
+                    )
+                    print("⚔️ Found opponent: '\(opponentInfo)'")
+                    
+                    // Create optimized question with opponent information
+                    let optimizedQuestion = createOptimizedQuestion(
+                        originalQuestion: originalQuestion,
+                        teamInfo: teamOrQuery,
+                        opponentInfo: opponentInfo,
+                        date: targetDate,
+                        wordLimit: wordLimit
+                    )
+                    print("✅ Final optimized question: '\(optimizedQuestion)'")
+                    return optimizedQuestion
+                    
+                } catch {
+                    print("❌ Google Search failed: \(error)")
+                    // Still try to create a better question with what we have
+                    return createEnhancedOptimization(originalQuestion, team: teamOrQuery, date: targetDate, wordLimit: wordLimit)
+                }
+            }
+        }
+        
+        print("🔄 Using basic optimization")
+        return createBasicOptimization(originalQuestion, wordLimit: wordLimit)
+    }
+    
+    private func extractTeamAndTimeInfo(from question: String) -> (team: String, timeInfo: String) {
+        let lowercaseQuestion = question.lowercased()
+        print("🔍 Analyzing question: '\(lowercaseQuestion)'")
+        
+        // Expanded team mappings including more variations
+        let teamMappings: [String: String] = [
+            "blue jays": "Toronto Blue Jays",
+            "jays": "Toronto Blue Jays",
+            "yankees": "New York Yankees",
+            "red sox": "Boston Red Sox",
+            "sox": "Boston Red Sox",
+            "lakers": "Los Angeles Lakers",
+            "warriors": "Golden State Warriors",
+            "celtics": "Boston Celtics",
+            "cowboys": "Dallas Cowboys",
+            "patriots": "New England Patriots",
+            "chiefs": "Kansas City Chiefs",
+            "dodgers": "Los Angeles Dodgers",
+            "giants": "San Francisco Giants",
+            "knicks": "New York Knicks",
+            "heat": "Miami Heat",
+            "bulls": "Chicago Bulls",
+            "packers": "Green Bay Packers",
+            "steelers": "Pittsburgh Steelers"
+        ]
+        
+        var extractedTeam = ""
+        var timeInfo = ""
+        
+        // Extract team names - check mappings first
+        for (shortName, fullName) in teamMappings {
+            if lowercaseQuestion.contains(shortName) {
+                extractedTeam = fullName
+                print("✅ Found team mapping: '\(shortName)' -> '\(fullName)'")
+                break
+            }
+        }
+        
+        // If no mapping found, look for potential team names or player names
+        if extractedTeam.isEmpty {
+            let words = question.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
+                .filter { !$0.isEmpty && $0.count > 2 }
+            
+            for word in words {
+                if word.first?.isUppercase == true {
+                    // Check if it's likely a team/player name (not common words)
+                    let commonWords = ["who", "will", "win", "game", "tonight", "tomorrow", "today", "the", "what", "when", "how"]
+                    if !commonWords.contains(word.lowercased()) {
+                        extractedTeam = word
+                        print("✅ Found potential team/player: '\(word)'")
+                        break
+                    }
+                }
+            }
+        }
+        
+        // Extract time information
+        let timeKeywords = ["tonight", "tomorrow", "today", "sunday", "monday", "tuesday",
+                           "wednesday", "thursday", "friday", "saturday", "next week", "this week"]
+        for keyword in timeKeywords {
+            if lowercaseQuestion.contains(keyword) {
+                timeInfo = keyword
+                print("✅ Found time keyword: '\(keyword)'")
+                break
+            }
+        }
+        
+        print("🏁 Extraction result - Team: '\(extractedTeam)', Time: '\(timeInfo)'")
+        return (extractedTeam, timeInfo)
+    }
+
+    // New function to extract sports keywords when no specific team is found
+    private func extractSportsKeywords(from question: String) -> String {
+        let lowercaseQuestion = question.lowercased()
+        
+        // Look for sport-specific keywords
+        let sportsKeywords = [
+            "basketball", "nba", "football", "nfl", "baseball", "mlb", "hockey", "nhl",
+            "soccer", "mls", "tennis", "ufc", "mma", "boxing", "golf", "pga"
+        ]
+        
+        for keyword in sportsKeywords {
+            if lowercaseQuestion.contains(keyword) {
+                return keyword.uppercased()
+            }
+        }
+        
+        // Look for general sports terms
+        if lowercaseQuestion.contains("game") || lowercaseQuestion.contains("match") {
+            return "sports game"
+        }
+        
+        return ""
+    }
+
+    private func convertRelativeTimeToDate(_ timeInfo: String) -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        switch timeInfo.lowercased() {
+        case "tonight", "today":
+            return now
+        case "tomorrow":
+            return calendar.date(byAdding: .day, value: 1, to: now) ?? now
+        case "sunday":
+            return getNextWeekday(1, from: now)
+        case "monday":
+            return getNextWeekday(2, from: now)
+        case "tuesday":
+            return getNextWeekday(3, from: now)
+        case "wednesday":
+            return getNextWeekday(4, from: now)
+        case "thursday":
+            return getNextWeekday(5, from: now)
+        case "friday":
+            return getNextWeekday(6, from: now)
+        case "saturday":
+            return getNextWeekday(7, from: now)
+        default:
+            return now
+        }
+    }
+
+    private func getNextWeekday(_ weekday: Int, from date: Date) -> Date {
+        let calendar = Calendar.current
+        let currentWeekday = calendar.component(.weekday, from: date)
+        let daysUntilTarget = (weekday - currentWeekday + 7) % 7
+        let targetDate = calendar.date(byAdding: .day, value: daysUntilTarget == 0 ? 7 : daysUntilTarget, to: date) ?? date
+        return targetDate
+    }
+
+    private func formatDateForSearch(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM dd yyyy"
+        return formatter.string(from: date)
+    }
+
+    private func buildSearchQuery(team: String, date: String, question: String) -> String {
+        // Determine if this is UFC/MMA, Tennis, or team sports
+        let lowercaseQuestion = question.lowercased()
+        
+        if lowercaseQuestion.contains("ufc") || lowercaseQuestion.contains("mma") || lowercaseQuestion.contains("fight") {
+            return "\(team) UFC fight opponent \(date)"
+        } else if lowercaseQuestion.contains("tennis") || lowercaseQuestion.contains("match") {
+            return "\(team) tennis match opponent \(date)"
+        } else {
+            // Team sports (baseball, basketball, football, etc.)
+            return "\(team) vs game \(date) opponent schedule"
+        }
+    }
+
+    private func extractOpponentFromSearchResults(searchResults: String, originalTeam: String, targetDate: Date) -> String {
+        print("🔍 Searching for opponent in results...")
+        let lines = searchResults.components(separatedBy: .newlines)
+        
+        // Look for various patterns that indicate matchups
+        let patterns = ["vs", " v ", "versus", "against", "@", "plays"]
+        
+        for line in lines {
+            let lowercaseLine = line.lowercased()
+            print("📋 Checking line: \(line.prefix(100))...")
+            
+            for pattern in patterns {
+                if lowercaseLine.contains(pattern) {
+                    if let matchup = extractMatchupFromLine(line: lowercaseLine, pattern: pattern, originalTeam: originalTeam) {
+                        print("✅ Found opponent: '\(matchup)'")
+                        return matchup
+                    }
+                }
+            }
+            
+            // Also look for team names in titles and snippets
+            if lowercaseLine.contains("title:") || lowercaseLine.contains("content:") {
+                if let opponent = extractTeamFromContent(content: lowercaseLine, originalTeam: originalTeam) {
+                    print("✅ Found opponent from content: '\(opponent)'")
+                    return opponent
+                }
+            }
+        }
+        
+        print("❌ No opponent found in search results")
+        return ""
+    }
+
+    private func extractMatchupFromLine(line: String, pattern: String, originalTeam: String) -> String? {
+        guard let patternRange = line.range(of: pattern) else { return nil }
+        
+        let beforePattern = String(line[..<patternRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let afterPattern = String(line[patternRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Check which side contains our original team
+        let originalTeamWords = originalTeam.lowercased().components(separatedBy: .whitespaces)
+        let beforeContainsTeam = originalTeamWords.allSatisfy { beforePattern.lowercased().contains($0) }
+        let afterContainsTeam = originalTeamWords.allSatisfy { afterPattern.lowercased().contains($0) }
+        
+        if beforeContainsTeam {
+            return extractCleanTeamName(from: afterPattern)
+        } else if afterContainsTeam {
+            return extractCleanTeamName(from: beforePattern)
+        }
+        
+        return nil
+    }
+
+    private func extractTeamFromContent(content: String, originalTeam: String) -> String? {
+        // Look for common team name patterns in the content
+        let teamPatterns = [
+            "new york", "los angeles", "boston", "chicago", "toronto", "miami", "philadelphia",
+            "dallas", "houston", "atlanta", "detroit", "denver", "seattle", "phoenix",
+            "yankees", "red sox", "dodgers", "giants", "cubs", "cardinals", "astros",
+            "lakers", "warriors", "celtics", "knicks", "heat", "bulls", "spurs",
+            "cowboys", "patriots", "steelers", "packers", "49ers", "ravens"
+        ]
+        
+        let contentLower = content.lowercased()
+        let originalLower = originalTeam.lowercased()
+        
+        for pattern in teamPatterns {
+            if contentLower.contains(pattern) && !originalLower.contains(pattern) {
+                // Found a different team, clean it up and return
+                return pattern.capitalized
+            }
+        }
+        
+        return nil
+    }
+
+    private func extractCleanTeamName(from text: String) -> String {
+        // Remove common prefixes and suffixes, extract team name
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters) }
+            .filter { !$0.isEmpty && $0.count > 2 }
+        
+        // Look for capitalized team names or known team patterns
+        let filteredWords = words.filter { word in
+            !["the", "vs", "game", "match", "against", "play", "tonight", "today", "tomorrow"].contains(word.lowercased())
+        }
+        
+        return filteredWords.prefix(2).joined(separator: " ").capitalized
+    }
+
+    private func createOptimizedQuestion(
+        originalQuestion: String,
+        teamInfo: String,
+        opponentInfo: String,
+        date: Date,
+        wordLimit: Int
+    ) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateString = dateFormatter.string(from: date)
+        
+        let lowercaseOriginal = originalQuestion.lowercased()
+        
+        // Determine question type and create appropriate format
+        var optimizedQuestion: String
+        
+        if lowercaseOriginal.contains("who will win") || lowercaseOriginal.contains("winner") {
+            if !opponentInfo.isEmpty {
+                optimizedQuestion = "Who will win: \(teamInfo) vs. \(opponentInfo)? (\(dateString))"
+            } else {
+                optimizedQuestion = "Who will win the \(teamInfo) game? (\(dateString))"
+            }
+        } else if lowercaseOriginal.contains("score") || lowercaseOriginal.contains("points") {
+            if !opponentInfo.isEmpty {
+                optimizedQuestion = "Who will score more: \(teamInfo) vs. \(opponentInfo)? (\(dateString))"
+            } else {
+                optimizedQuestion = "How many will \(teamInfo) score? (\(dateString))"
+            }
+        } else if lowercaseOriginal.contains("hits") || lowercaseOriginal.contains("stats") {
+            if !opponentInfo.isEmpty {
+                optimizedQuestion = "Who will get the most hits: \(teamInfo) vs. \(opponentInfo)? (\(dateString))"
+            } else {
+                optimizedQuestion = "Who will get the most hits in the \(teamInfo) game? (\(dateString))"
+            }
+        } else {
+            // Generic optimization
+            if !opponentInfo.isEmpty {
+                optimizedQuestion = "Who will win: \(teamInfo) vs. \(opponentInfo)? (\(dateString))"
+            } else {
+                optimizedQuestion = "\(teamInfo) game outcome? (\(dateString))"
+            }
+        }
+        
+        // Apply word limit
+        let words = optimizedQuestion.components(separatedBy: .whitespacesAndNewlines)
+        if words.count > wordLimit {
+            let truncatedWords = Array(words.prefix(wordLimit))
+            optimizedQuestion = truncatedWords.joined(separator: " ")
+            if !optimizedQuestion.hasSuffix("?") {
+                optimizedQuestion += "?"
+            }
+        }
+        
+        return optimizedQuestion
+    }
+
+    // Add this new function for enhanced optimization when search fails
+    private func createEnhancedOptimization(_ question: String, team: String, date: Date, wordLimit: Int) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateString = dateFormatter.string(from: date)
+        
+        let lowercaseOriginal = question.lowercased()
+        
+        // Create a better question even without opponent info
+        var optimizedQuestion: String
+        
+        if lowercaseOriginal.contains("who will win") || lowercaseOriginal.contains("winner") {
+            optimizedQuestion = "Who will win the \(team) game? (\(dateString))"
+        } else if lowercaseOriginal.contains("score") || lowercaseOriginal.contains("points") {
+            optimizedQuestion = "How many points will \(team) score? (\(dateString))"
+        } else if !team.isEmpty {
+            optimizedQuestion = "What will happen in the \(team) game? (\(dateString))"
+        } else {
+            optimizedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !optimizedQuestion.hasSuffix("?") {
+                optimizedQuestion += "?"
+            }
+            optimizedQuestion += " (\(dateString))"
+        }
+        
+        // Apply word limit
+        let words = optimizedQuestion.components(separatedBy: .whitespacesAndNewlines)
+        if words.count > wordLimit {
+            let truncatedWords = Array(words.prefix(wordLimit))
+            optimizedQuestion = truncatedWords.joined(separator: " ")
+            if !optimizedQuestion.hasSuffix("?") && !optimizedQuestion.contains("(") {
+                optimizedQuestion += "?"
+            }
+        }
+        
+        return optimizedQuestion
+    }
+
+    private func createBasicOptimization(_ question: String, wordLimit: Int) -> String {
+        var optimized = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Capitalize first letter
+        if let firstChar = optimized.first {
+            optimized = String(firstChar).uppercased() + String(optimized.dropFirst())
+        }
+        
+        // Add question mark if missing
+        if !optimized.hasSuffix("?") {
+            optimized += "?"
+        }
+        
+        // Try to add today's date at least
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayString = dateFormatter.string(from: Date())
+        
+        if !optimized.contains("(") {
+            optimized = optimized.replacingOccurrences(of: "?", with: "") + "? (\(todayString))"
+        }
+        
+        // Apply word limit
+        let words = optimized.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        
+        if words.count > wordLimit {
+            let truncatedWords = Array(words.prefix(wordLimit))
+            optimized = truncatedWords.joined(separator: " ")
+            if !optimized.hasSuffix("?") && !optimized.contains("(") {
+                optimized += "?"
+            }
+        }
+        
+        return optimized
     }
 }
 
