@@ -1,5 +1,4 @@
 // Updated Bet Creation Flow with Optional Date
-
 import SwiftUI
 
 struct NormalBetView: View {
@@ -22,72 +21,77 @@ struct NormalBetView: View {
     @State private var timerHours = 0
     @State private var timerMinutes = 0
     @State private var timerSeconds = 0
-    
+
     // NEW: Optimization states
     @State private var optimizedBetPrompt: String = ""
     @State private var showOptimization = false
     @State private var isProcessingOptimization = false
-    
-    // Refresh cooldown states - using AppStorage for persistence
-    @AppStorage("aiRefreshCount") private var refreshCount = 0
-    @AppStorage("lastRefreshTimestamp") private var lastRefreshTimestamp: Double = 0
-    @State private var isRefreshDisabled = false
+
+    // UPDATED: Shared cooldown states - using AppStorage for persistence
+    @AppStorage("sharedRefreshCount") private var sharedRefreshCount = 0
+    @AppStorage("lastSharedRefreshTimestamp") private var lastSharedRefreshTimestamp: Double = 0
+    @State private var isSharedRefreshDisabled = false
     @State private var cooldownTimer: Timer?
     @State private var timeRemaining: Int = 0
-    
+
     // Date picker states
     @State private var selectedMonth = Calendar.current.component(.month, from: Date())
     @State private var selectedDay = Calendar.current.component(.day, from: Date())
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
     @State private var isProcessingDate = false
     @State private var detectedDateText: String = ""
-    
+
     // Word limit constants for bet prompt
     private let maxWordsInBetPrompt = 100 // Adjust this value as needed
-    
+
     private let months = Array(1...12)
     private let currentYear = Calendar.current.component(.year, from: Date())
-    private let maxRefreshesPerMinute = 3
-    
+    private let maxSharedRefreshesPerMinute = 3
+
     private var years: [Int] {
         Array(currentYear...(currentYear + 5))
     }
-    
+
     private var days: [Int] {
         let calendar = Calendar.current
         var components = DateComponents()
         components.year = selectedYear
         components.month = selectedMonth
         components.day = 1
-        
+
         guard let date = calendar.date(from: components),
               let range = calendar.range(of: .day, in: .month, for: date) else {
             return Array(1...31)
         }
-        
+
         return Array(1...range.count)
     }
-    
+
     // Word count helper for bet prompt
     private func wordCount(in text: String) -> Int {
         let words = text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
         return words.count
     }
-    
+
     private var currentBetPromptWordCount: Int {
         wordCount(in: betPrompt)
     }
-    
+
     private var isBetPromptOverWordLimit: Bool {
         currentBetPromptWordCount > maxWordsInBetPrompt
     }
-    
+
     // Validation computed property
     private var canProceed: Bool {
         !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isBetPromptOverWordLimit
     }
-    
+
+    // UPDATED: Computed property for remaining shared refreshes
+    private var remainingSharedRefreshes: Int {
+        return maxSharedRefreshesPerMinute - sharedRefreshCount
+    }
+
     @ViewBuilder
     private var betTypeSpecificView: some View {
         if betType == "normal" {
@@ -96,7 +100,7 @@ struct NormalBetView: View {
             timedBetOptions
         }
     }
-    
+
     private var navigationSection: some View {
         Group {
             NavigationLink(
@@ -119,7 +123,7 @@ struct NormalBetView: View {
             ) {
                 EmptyView()
             }
-            
+
             Button(action: {
                 if canProceed {
                     isNextActive = true
@@ -134,7 +138,7 @@ struct NormalBetView: View {
                     .padding(.horizontal)
             }
             .disabled(!canProceed)
-            
+
             if !canProceed {
                 VStack(spacing: 4) {
                     if betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -142,7 +146,7 @@ struct NormalBetView: View {
                             .foregroundColor(.red)
                             .font(.caption)
                     }
-                    
+
                     if isBetPromptOverWordLimit {
                         Text("Challenge question exceeds \(maxWordsInBetPrompt) word limit (\(currentBetPromptWordCount) words)")
                             .foregroundColor(.red)
@@ -162,9 +166,9 @@ struct NormalBetView: View {
                     Text("Number of options")
                         .foregroundColor(.white)
                         .font(.system(size: 16, weight: .medium))
-                    
+
                     Spacer()
-                    
+
                     // Counter/Ticker on the right
                     HStack(spacing: 16) {
                         Button(action: {
@@ -177,12 +181,12 @@ struct NormalBetView: View {
                                 .font(.title2)
                         }
                         .disabled(optionCount <= 2)
-                        
+
                         Text("\(optionCount)")
                             .foregroundColor(.white)
                             .font(.system(size: 18, weight: .semibold))
                             .frame(minWidth: 30)
-                        
+
                         Button(action: {
                             if optionCount < 10 {
                                 optionCount += 1
@@ -201,16 +205,16 @@ struct NormalBetView: View {
             .background(Color.white.opacity(0.05))
             .cornerRadius(12)
             .padding(.horizontal)
-            
+
             // Maximum Selections Section
             VStack(spacing: 12) {
                 HStack {
                     Text("Max selections per user")
                         .foregroundColor(.white)
                         .font(.system(size: 16, weight: .medium))
-                    
+
                     Spacer()
-                    
+
                     // Counter/Ticker on the right
                     HStack(spacing: 16) {
                         Button(action: {
@@ -223,12 +227,12 @@ struct NormalBetView: View {
                                 .font(.title2)
                         }
                         .disabled(max_selections <= 1)
-                        
+
                         Text("\(max_selections)")
                             .foregroundColor(.white)
                             .font(.system(size: 18, weight: .semibold))
                             .frame(minWidth: 30)
-                        
+
                         Button(action: {
                             if max_selections < (optionCount - 1) {
                                 max_selections += 1
@@ -249,14 +253,14 @@ struct NormalBetView: View {
             .padding(.horizontal)
         }
     }
-    
+
     private var timedBetOptions: some View {
         VStack(alignment: .leading) {
             Text("Set Timer")
                 .font(.title2)
                 .foregroundColor(.white)
                 .padding(.leading)
-            
+
             HStack {
                 TimerSetView(title: "days", range: 0...7, binding: $timerDays)
                 TimerSetView(title: "hours", range: 0...23, binding: $timerHours)
@@ -271,17 +275,17 @@ struct NormalBetView: View {
     private func enforceBetPromptWordLimit(_ newValue: String) {
         let words = newValue.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
-        
+
         // If over the limit, truncate to the word limit
         if words.count > maxWordsInBetPrompt {
             let truncatedWords = Array(words.prefix(maxWordsInBetPrompt))
             let truncatedText = truncatedWords.joined(separator: " ")
-            
+
             // Use a dispatch to avoid binding update conflicts
             DispatchQueue.main.async {
                 self.betPrompt = truncatedText
             }
-            
+
             // Provide haptic feedback
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
             impactFeedback.impactOccurred()
@@ -298,9 +302,9 @@ struct NormalBetView: View {
                         .foregroundColor(.green)
                         .font(.title3)
                         .fontWeight(.semibold)
-                    
+
                     Spacer()
-                    
+
                     // Close optimization button
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -312,7 +316,7 @@ struct NormalBetView: View {
                             .font(.title3)
                     }
                 }
-                
+
                 // Display optimized version
                 Text(optimizedBetPrompt)
                     .padding()
@@ -324,7 +328,7 @@ struct NormalBetView: View {
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.green.opacity(0.5), lineWidth: 1)
                     )
-                
+
                 // Action buttons
                 HStack(spacing: 12) {
                     // Accept optimization button
@@ -346,11 +350,13 @@ struct NormalBetView: View {
                         .background(Color.green.opacity(0.2))
                         .cornerRadius(8)
                     }
-                    
-                    // Regenerate button
+
+                    // UPDATED: Regenerate button with shared cooldown
                     Button(action: {
                         Task {
-                            await generateOptimizedBetQuestion()
+                            await handleSharedRefreshAction {
+                                await generateOptimizedBetQuestion()
+                            }
                         }
                     }) {
                         HStack(spacing: 6) {
@@ -360,19 +366,19 @@ struct NormalBetView: View {
                                     .scaleEffect(0.8)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .foregroundColor(.orange)
+                                    .foregroundColor(isSharedRefreshDisabled ? .gray : .orange)
                             }
                             Text("Regenerate")
-                                .foregroundColor(.orange)
+                                .foregroundColor(isSharedRefreshDisabled ? .gray : .orange)
                                 .fontWeight(.semibold)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(Color.orange.opacity(0.2))
+                        .background((isSharedRefreshDisabled ? Color.gray : Color.orange).opacity(0.2))
                         .cornerRadius(8)
                     }
-                    .disabled(isProcessingOptimization)
-                    
+                    .disabled(isProcessingOptimization || isSharedRefreshDisabled)
+
                     Spacer()
                 }
             }
@@ -395,7 +401,7 @@ struct NormalBetView: View {
             .ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
-                    
+
                     // Category Header
                     if let category = selectedCategory {
                         HStack {
@@ -416,34 +422,36 @@ struct NormalBetView: View {
                         .padding(.horizontal)
                         .padding(.top)
                     }
-                    
-                    // AI Suggestions Header
+
+                    // UPDATED: AI Suggestions Header with shared cooldown
                     VStack(spacing: 12) {
                         HStack {
                             Text("AI Suggestions: Click to fill")
                                 .foregroundColor(.white)
                                 .font(.title2)
-                            
+
                             Spacer()
-                            
+
                             Button(action: {
                                 Task {
-                                    await handleRefreshTap()
+                                    await handleSharedRefreshAction {
+                                        await refreshAISuggestions()
+                                    }
                                 }
                             }) {
                                 Image(systemName: "arrow.clockwise")
-                                    .foregroundColor(isRefreshDisabled ? .gray : .white)
+                                    .foregroundColor(isSharedRefreshDisabled ? .gray : .white)
                                     .font(.title2)
                                     .padding(8)
-                                    .background((isRefreshDisabled ? Color.gray : Color.blue).opacity(0.7))
+                                    .background((isSharedRefreshDisabled ? Color.gray : Color.blue).opacity(0.7))
                                     .clipShape(Circle())
                             }
-                            .disabled(isRefreshDisabled)
+                            .disabled(isSharedRefreshDisabled)
                         }
                         .padding(.horizontal)
-                        
-                        // Cooldown message with live timer
-                        if isRefreshDisabled && timeRemaining > 0 {
+
+                        // UPDATED: Cooldown message with shared cooldown info
+                        if isSharedRefreshDisabled && timeRemaining > 0 {
                             HStack {
                                 Spacer()
                                 Text("Cooldown: \(timeRemaining)s remaining")
@@ -452,10 +460,10 @@ struct NormalBetView: View {
                                     .padding(.horizontal)
                                 Spacer()
                             }
-                        } else if refreshCount > 0 && !isRefreshDisabled {
+                        } else if sharedRefreshCount > 0 && !isSharedRefreshDisabled {
                             HStack {
                                 Spacer()
-                                Text("\(maxRefreshesPerMinute - refreshCount) refreshes remaining this minute")
+                                Text("\(remainingSharedRefreshes) refreshes remaining this minute")
                                     .foregroundColor(.white.opacity(0.6))
                                     .font(.caption)
                                     .padding(.horizontal)
@@ -463,7 +471,7 @@ struct NormalBetView: View {
                             }
                         }
                     }
-                    
+
                     // Scrollable Suggestion Buttons
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -472,14 +480,14 @@ struct NormalBetView: View {
                                     // Apply word limit when selecting AI suggestion
                                     let suggestionWords = suggestion.components(separatedBy: .whitespacesAndNewlines)
                                         .filter { !$0.isEmpty }
-                                    
+
                                     if suggestionWords.count > maxWordsInBetPrompt {
                                         let truncatedWords = Array(suggestionWords.prefix(maxWordsInBetPrompt))
                                         betPrompt = truncatedWords.joined(separator: " ")
                                     } else {
                                         betPrompt = suggestion
                                     }
-                                    
+
                                     // Hide optimization when new suggestion is selected
                                     if showOptimization {
                                         withAnimation(.easeInOut(duration: 0.3)) {
@@ -500,19 +508,21 @@ struct NormalBetView: View {
                         .padding(.horizontal)
                     }
                     .frame(height: 150)
-                    
+
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text("Write your Challenge")
                                 .foregroundColor(.white)
                                 .font(.title2)
-                            
+
                             Spacer()
-                            
-                            // UPDATED: Optimize button with new functionality
+
+                            // UPDATED: Optimize button with shared cooldown
                             Button(action: {
                                 Task {
-                                    await generateOptimizedBetQuestion()
+                                    await handleSharedRefreshAction {
+                                        await generateOptimizedBetQuestion()
+                                    }
                                 }
                             }) {
                                 HStack(spacing: 6) {
@@ -522,30 +532,30 @@ struct NormalBetView: View {
                                             .scaleEffect(0.8)
                                     } else {
                                         Image(systemName: "wand.and.stars")
-                                            .foregroundColor(.yellow)
+                                            .foregroundColor(isSharedRefreshDisabled ? .gray : .yellow)
                                             .font(.system(size: 16))
                                     }
                                     Text("Optimize")
-                                        .foregroundColor(.yellow)
+                                        .foregroundColor(isSharedRefreshDisabled ? .gray : .yellow)
                                         .font(.system(size: 14, weight: .semibold))
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(Color.yellow.opacity(0.2))
+                                .background((isSharedRefreshDisabled ? Color.gray : Color.yellow).opacity(0.2))
                                 .cornerRadius(8)
                             }
-                            .disabled(betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProcessingOptimization)
+                            .disabled(betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProcessingOptimization || isSharedRefreshDisabled)
                         }
                         .padding(.vertical)
-                        
+
                         // Word count indicator for bet prompt
                         HStack {
                             Text("Word count: \(currentBetPromptWordCount) / \(maxWordsInBetPrompt)")
                                 .font(.caption)
                                 .foregroundColor(isBetPromptOverWordLimit ? .red : (currentBetPromptWordCount > maxWordsInBetPrompt * 3/4 ? .orange : .gray))
-                            
+
                             Spacer()
-                            
+
                             if isBetPromptOverWordLimit {
                                 HStack(spacing: 4) {
                                     Image(systemName: "exclamationmark.triangle.fill")
@@ -558,7 +568,7 @@ struct NormalBetView: View {
                             }
                         }
                         .padding(.horizontal)
-                        
+
                         TextEditor(text: $betPrompt)
                             .scrollContentBackground(.hidden)
                             .frame(height: 130)
@@ -573,27 +583,27 @@ struct NormalBetView: View {
                             .onChange(of: betPrompt) { newValue in
                                 // Enforce word limit
                                 enforceBetPromptWordLimit(newValue)
-                                
+
                                 // Hide optimization when user starts typing
                                 if showOptimization && newValue != optimizedBetPrompt {
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         showOptimization = false
                                     }
                                 }
-                                
+
                                 // Detect and process date
                                 Task {
                                     await detectAndProcessDate(from: newValue)
                                 }
                             }
-                        
+
                         // Word limit warning for bet prompt
                         if isBetPromptOverWordLimit {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundColor(.red)
                                     .font(.caption)
-                                
+
                                 Text("Challenge question exceeds \(maxWordsInBetPrompt) word limit. Text has been automatically truncated.")
                                     .font(.caption)
                                     .foregroundColor(.red)
@@ -605,7 +615,7 @@ struct NormalBetView: View {
                                 Image(systemName: "exclamationmark.triangle")
                                     .foregroundColor(.orange)
                                     .font(.caption)
-                                
+
                                 Text("Approaching word limit. Consider keeping the bet question concise.")
                                     .font(.caption)
                                     .foregroundColor(.orange)
@@ -614,23 +624,23 @@ struct NormalBetView: View {
                         }
                     }
                     .padding(.horizontal)
-                    
+
                     // NEW: Show optimization section
                     optimizationSection
-                    
+
                     // Date Toggle Section with Info Button
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Set specific date for challenge")
                                 .foregroundColor(.white)
                                 .font(.title2)
-                            
+
                             if isProcessingDate {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .blue))
                                     .scaleEffect(0.7)
                             }
-                            
+
                             Button(action: {
                                 showDateInfo = true
                             }) {
@@ -638,14 +648,14 @@ struct NormalBetView: View {
                                     .foregroundColor(.blue)
                                     .font(.title3)
                             }
-                            
+
                             Spacer()
-                            
+
                             Toggle("", isOn: $isDateEnabled)
                                 .toggleStyle(SwitchToggleStyle(tint: .blue))
                         }
                         .padding(.horizontal)
-                        
+
                         // Date Picker Section (only shown when toggle is enabled)
                         if isDateEnabled {
                             VStack(alignment: .leading, spacing: 12) {
@@ -653,7 +663,7 @@ struct NormalBetView: View {
                                     .foregroundColor(.white.opacity(0.8))
                                     .font(.headline)
                                     .padding(.horizontal)
-                                
+
                                 HStack(spacing: 0) {
                                     DatePickerView(title: "Month",
                                                  range: 1...12,
@@ -661,11 +671,11 @@ struct NormalBetView: View {
                                                  formatter: { monthNumber in
                                                      Calendar.current.monthSymbols[monthNumber - 1]
                                                  })
-                                    
+
                                     DatePickerView(title: "Day",
                                                  range: 1...days.count,
                                                  binding: $selectedDay)
-                                    
+
                                     DatePickerView(title: "Year",
                                                  range: currentYear...(currentYear + 5),
                                                  binding: $selectedYear)
@@ -675,7 +685,7 @@ struct NormalBetView: View {
                                 .onChange(of: selectedMonth) { _ in updateSelectedDate() }
                                 .onChange(of: selectedDay) { _ in updateSelectedDate() }
                                 .onChange(of: selectedYear) { _ in updateSelectedDate() }
-                                
+
                                 // Display selected date
                                 HStack {
                                     Spacer()
@@ -695,16 +705,16 @@ struct NormalBetView: View {
                             max_selections = max(1, optionCount - 1)
                         }
                     }
-                    
+
                     betTypeSpecificView
-                    
+
                     navigationSection
-                    
+
                     Spacer()
                 }
                 .onAppear {
                     loadAISuggestions()
-                    checkCooldownStatus()
+                    checkSharedCooldownStatus()
                 }
                 .onDisappear {
                     cooldownTimer?.invalidate()
@@ -722,9 +732,9 @@ struct NormalBetView: View {
             Text("You can either manually select a date or simply type natural phrases like 'tonight', 'tomorrow night', 'Sunday morning', or 'next Friday at 7pm' in your challenge question - the app will automatically detect and set the date for you!")
         }
     }
-    
+
     // MARK: - Helper Functions
-    
+
     // Complete the dateFromComponents function
     private func dateFromComponents() -> Date {
         let calendar = Calendar.current
@@ -732,7 +742,7 @@ struct NormalBetView: View {
         components.year = selectedYear
         components.month = selectedMonth
         components.day = selectedDay
-        
+
         if let date = calendar.date(from: components) {
             return date
         } else {
@@ -742,18 +752,18 @@ struct NormalBetView: View {
                   let range = calendar.range(of: .day, in: .month, for: firstOfMonth) else {
                 return Date()
             }
-            
+
             // Set to the last valid day of the month
             components.day = min(selectedDay, range.count)
             return calendar.date(from: components) ?? Date()
         }
     }
-    
+
     // Update selected date when components change
     private func updateSelectedDate() {
         selectedDate = dateFromComponents()
     }
-    
+
     // Format the selected date for display
     private func formattedSelectedDate() -> String {
         let formatter = DateFormatter()
@@ -761,75 +771,140 @@ struct NormalBetView: View {
         formatter.timeStyle = .none
         return formatter.string(from: selectedDate)
     }
-    
+
     // NEW: Generate optimized bet question function
     @MainActor
     private func generateOptimizedBetQuestion() async {
         guard !betPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        
+
         isProcessingOptimization = true
-        
+
         do {
-            // Create a simple optimization prompt that considers bet type and category
             let categoryContext = selectedCategory?.aiPromptContext ?? "general activities"
             let betTypeContext = getBetTypeContext()
-            
+
+            // Step 1: Create a more specific search query
+            let searchQueryPrompt = """
+            Generate a specific Google search query to find key details about: "\(betPrompt)"
+
+            Focus on finding:
+            - Exact dates and times
+            - Names of people, teams, or entities involved
+            - Specific locations or venues
+            - Final scores, results, or outcomes
+            - Any other verifiable facts
+
+            Return only the search query, no explanation.
+            """
+
+            let searchQuery = try await AIServices.shared.sendPrompt(
+                searchQueryPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.1,
+                maxTokens: 50
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Step 2: Get search results
+            let searchResults = try await AIServices.shared.requestWithSearch(prompt: searchQuery)
+
+            // Step 3: Extract key facts from search results
+            let factExtractionPrompt = """
+            Extract the key verifiable facts from this information: "\(searchResults)"
+
+            Related to the question: "\(betPrompt)"
+
+            Focus on:
+            - Specific dates (include day, month, year)
+            - Names of all parties/teams/people involved
+            - Final scores or results
+            - Locations or venues
+            - Any other concrete details that make the question more specific
+
+            Return only the key facts in a concise format, no extra text.
+            """
+
+            let keyFacts = try await AIServices.shared.sendPrompt(
+                factExtractionPrompt,
+                model: "gemini-2.5-flash-lite",
+                temperature: 0.1,
+                maxTokens: 150
+            )
+
+            // Step 4: Create optimized question with specific details
             let optimizationPrompt = """
-            You are optimizing a betting question. Here's the context:
-            - Category: \(categoryContext)
-            - Bet Type: \(betTypeContext)
-            - Word Limit: \(maxWordsInBetPrompt) words
-            - Original Question: "\(betPrompt)"
-            
-            Improve this question to be:
-            1. Clear and specific
-            2. Appropriate for \(betType) bets
-            3. Related to \(categoryContext)
-            4. Under \(maxWordsInBetPrompt) words
-            5. Easy to verify the outcome
-            
+            Transform this betting question using the provided facts:
+
+            Original question: "\(betPrompt)"
+            Key facts: "\(keyFacts)"
+            Category: \(categoryContext)
+            Bet type: \(betTypeContext)
+            Word limit: \(maxWordsInBetPrompt) words
+
+            Create an improved question that:
+            1. Includes specific names of all parties involved (teams, people, etc.)
+            2. Includes the exact date when relevant
+            3. Is phrased as a clear choice between specific options when possible
+            4. Remains under \(maxWordsInBetPrompt) words
+            5. Ends with a question mark
+            6. Is easily verifiable
+
+            Examples of good transformations:
+            - "Who won the 2019 NBA finals" → "Who won the NBA Finals on June 13, 2019: the Toronto Raptors or the Golden State Warriors?"
+            - "Will it rain tomorrow" → "Will it rain in [City] on [Date]?"
+
             Return only the improved question, nothing else.
             """
-            
+
             let optimizedQuestion = try await AIServices.shared.sendPrompt(
                 optimizationPrompt,
                 model: "gemini-2.5-flash-lite",
-                temperature: 0.3,
-                maxTokens: 100
+                temperature: 0.2,
+                maxTokens: 150
             )
-            
-            // Apply word limit to the response
-            let words = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
-                .components(separatedBy: .whitespacesAndNewlines)
-                .filter { !$0.isEmpty }
-            
-            let limitedWords = words.prefix(maxWordsInBetPrompt)
-            optimizedBetPrompt = limitedWords.joined(separator: " ")
-            
-            // Ensure it ends with a question mark
-            if !optimizedBetPrompt.hasSuffix("?") {
-                optimizedBetPrompt += "?"
+
+            // Clean up and apply word limit
+            var cleanedQuestion = optimizedQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Remove any quotes if the AI wrapped the response
+            if cleanedQuestion.hasPrefix("\"") && cleanedQuestion.hasSuffix("\"") {
+                cleanedQuestion = String(cleanedQuestion.dropFirst().dropLast())
             }
-            
+
+            // Apply word limit
+            let words = cleanedQuestion.components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+
+            if words.count > maxWordsInBetPrompt {
+                let limitedWords = words.prefix(maxWordsInBetPrompt)
+                cleanedQuestion = limitedWords.joined(separator: " ")
+            }
+
+            // Ensure it ends with a question mark
+            if !cleanedQuestion.hasSuffix("?") {
+                cleanedQuestion += "?"
+            }
+
+            optimizedBetPrompt = cleanedQuestion
+
             // Show the optimization section
             withAnimation(.easeInOut(duration: 0.3)) {
                 showOptimization = true
             }
-            
+
         } catch {
             print("Failed to optimize bet question: \(error)")
-            
+
             // Fallback to basic optimization
             optimizedBetPrompt = createBasicOptimization(betPrompt)
-            
+
             withAnimation(.easeInOut(duration: 0.3)) {
                 showOptimization = true
             }
         }
-        
+
         isProcessingOptimization = false
     }
-    
+
     private func getBetTypeContext() -> String {
         switch betType {
         case "normal":
@@ -842,25 +917,25 @@ struct NormalBetView: View {
             return "a general betting situation"
         }
     }
-    
+
     // Fallback optimization function
     private func createBasicOptimization(_ question: String) -> String {
         var optimized = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         // Capitalize first letter
         if let firstChar = optimized.first {
             optimized = String(firstChar).uppercased() + String(optimized.dropFirst())
         }
-        
+
         // Add question mark if missing
         if !optimized.hasSuffix("?") {
             optimized += "?"
         }
-        
+
         // Apply word limit
         let words = optimized.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
-        
+
         if words.count > maxWordsInBetPrompt {
             let truncatedWords = Array(words.prefix(maxWordsInBetPrompt))
             optimized = truncatedWords.joined(separator: " ")
@@ -868,14 +943,46 @@ struct NormalBetView: View {
                 optimized += "?"
             }
         }
-        
+
         return optimized
     }
-    
+
+    // UPDATED: New shared cooldown handling function
+    private func handleSharedRefreshAction(_ action: @escaping () async -> Void) async {
+        let currentTime = Date().timeIntervalSince1970
+
+        // Check if it's been more than a minute since last reset
+        if currentTime - lastSharedRefreshTimestamp > 60 {
+            sharedRefreshCount = 0
+            lastSharedRefreshTimestamp = currentTime
+        }
+
+        // Check if user has exceeded refresh limit
+        if sharedRefreshCount >= maxSharedRefreshesPerMinute {
+            isSharedRefreshDisabled = true
+            timeRemaining = 60 - Int(currentTime - lastSharedRefreshTimestamp)
+            startSharedCooldownTimer()
+            return
+        }
+
+        // Perform the action
+        sharedRefreshCount += 1
+        lastSharedRefreshTimestamp = currentTime
+
+        await action()
+
+        // Check if cooldown should start
+        if sharedRefreshCount >= maxSharedRefreshesPerMinute {
+            isSharedRefreshDisabled = true
+            timeRemaining = 60
+            startSharedCooldownTimer()
+        }
+    }
+
     private func loadAISuggestions() {
         // Show loading state
         aiSuggestions = ["Loading suggestions..."]
-        
+
         Task {
             do {
                 let suggestions = try await AIServices.shared.generateCategoryBetSuggestions(
@@ -884,14 +991,14 @@ struct NormalBetView: View {
                     betType: betType,
                     wordLimit: maxWordsInBetPrompt
                 )
-                
+
                 await MainActor.run {
                     self.aiSuggestions = suggestions
                 }
-                
+
             } catch {
                 print("Failed to load AI suggestions: \(error)")
-                
+
                 // Fallback suggestions based on bet type and category
                 await MainActor.run {
                     self.aiSuggestions = getFallbackSuggestions()
@@ -899,7 +1006,7 @@ struct NormalBetView: View {
             }
         }
     }
-    
+
     private func getFallbackSuggestions() -> [String] {
         switch betType {
         case "normal":
@@ -912,12 +1019,12 @@ struct NormalBetView: View {
             return ["What will happen next?", "Who will win?", "What will be the outcome?"]
         }
     }
-    
+
     private func getNormalFallbackSuggestions() -> [String] {
         guard let category = selectedCategory else {
             return ["What will happen next?", "Who will win?", "What will be the outcome?"]
         }
-        
+
         switch category {
         case .sports:
             return ["Who will win the game?", "What will the final score be?", "Which team will score first?"]
@@ -933,12 +1040,12 @@ struct NormalBetView: View {
             return ["What will happen tomorrow?", "Which option is most likely?", "Who will be right?"]
         }
     }
-    
+
     private func getTimedFallbackSuggestions() -> [String] {
         guard let category = selectedCategory else {
             return ["Can you complete this challenge before time runs out?", "How fast can you finish this task?", "Can you beat the clock?"]
         }
-        
+
         switch category {
         case .sports:
             return ["Can you hit 10 free throws before time runs out?", "How many push-ups can you do quickly?", "Can you run a mile as fast as possible?"]
@@ -954,12 +1061,12 @@ struct NormalBetView: View {
             return ["Can you solve this puzzle before time runs out?", "How fast can you complete this task?", "Can you finish before the timer?"]
         }
     }
-    
+
     private func getContestFallbackSuggestions() -> [String] {
         guard let category = selectedCategory else {
             return ["Who can do this the fastest?", "Who will perform the best?", "Who can complete this first?"]
         }
-        
+
         switch category {
         case .sports:
             return ["Who can do the most push-ups?", "Who can run faster?", "Who has better aim?"]
@@ -975,45 +1082,12 @@ struct NormalBetView: View {
             return ["Who can solve this faster?", "Who will be more accurate?", "Who performs better?"]
         }
     }
-    
-    // Handle refresh tap with cooldown logic
-    private func handleRefreshTap() async {
-        let currentTime = Date().timeIntervalSince1970
-        
-        // Check if it's been more than a minute since last reset
-        if currentTime - lastRefreshTimestamp > 60 {
-            refreshCount = 0
-            lastRefreshTimestamp = currentTime
-        }
-        
-        // Check if user has exceeded refresh limit
-        if refreshCount >= maxRefreshesPerMinute {
-            isRefreshDisabled = true
-            timeRemaining = 60 - Int(currentTime - lastRefreshTimestamp)
-            startCooldownTimer()
-            return
-        }
-        
-        // Perform refresh
-        refreshCount += 1
-        lastRefreshTimestamp = currentTime
-        
-        // Reload suggestions (in a real app, this would call your AI service)
-        await refreshAISuggestions()
-        
-        // Check if cooldown should start
-        if refreshCount >= maxRefreshesPerMinute {
-            isRefreshDisabled = true
-            timeRemaining = 60
-            startCooldownTimer()
-        }
-    }
-    
+
     private func refreshAISuggestions() async {
         await MainActor.run {
             self.aiSuggestions = ["Loading new suggestions..."]
         }
-        
+
         do {
             let suggestions = try await AIServices.shared.generateCategoryBetSuggestions(
                 category: selectedCategory,
@@ -1021,14 +1095,14 @@ struct NormalBetView: View {
                 betType: betType,
                 wordLimit: maxWordsInBetPrompt
             )
-            
+
             await MainActor.run {
                 self.aiSuggestions = suggestions
             }
-            
+
         } catch {
             print("Failed to refresh AI suggestions: \(error)")
-            
+
             // Use fallback suggestions
             await MainActor.run {
                 self.aiSuggestions = getFallbackSuggestions()
@@ -1037,59 +1111,59 @@ struct NormalBetView: View {
             }
         }
     }
-    
-    // Start cooldown timer
-    private func startCooldownTimer() {
+
+    // UPDATED: Shared cooldown timer
+    private func startSharedCooldownTimer() {
         cooldownTimer?.invalidate()
-        
+
         cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             DispatchQueue.main.async {
                 self.timeRemaining -= 1
-                
+
                 if self.timeRemaining <= 0 {
-                    self.isRefreshDisabled = false
+                    self.isSharedRefreshDisabled = false
                     self.cooldownTimer?.invalidate()
                     self.cooldownTimer = nil
                 }
             }
         }
     }
-    
-    // Check cooldown status on appear
-    private func checkCooldownStatus() {
+
+    // UPDATED: Check shared cooldown status on appear
+    private func checkSharedCooldownStatus() {
         let currentTime = Date().timeIntervalSince1970
-        
+
         // Reset refresh count if more than a minute has passed
-        if currentTime - lastRefreshTimestamp > 60 {
-            refreshCount = 0
-            isRefreshDisabled = false
+        if currentTime - lastSharedRefreshTimestamp > 60 {
+            sharedRefreshCount = 0
+            isSharedRefreshDisabled = false
             return
         }
-        
+
         // Check if still in cooldown
-        if refreshCount >= maxRefreshesPerMinute {
-            timeRemaining = 60 - Int(currentTime - lastRefreshTimestamp)
+        if sharedRefreshCount >= maxSharedRefreshesPerMinute {
+            timeRemaining = 60 - Int(currentTime - lastSharedRefreshTimestamp)
             if timeRemaining > 0 {
-                isRefreshDisabled = true
-                startCooldownTimer()
+                isSharedRefreshDisabled = true
+                startSharedCooldownTimer()
             } else {
-                refreshCount = 0
-                isRefreshDisabled = false
+                sharedRefreshCount = 0
+                isSharedRefreshDisabled = false
             }
         }
     }
-    
+
     // Detect and process date from text
     private func detectAndProcessDate(from text: String) async {
         isProcessingDate = true
-        
+
         // This is a placeholder - implement actual date detection logic
         // You might use NLDataScanner or a custom natural language processing solution
         let lowercaseText = text.lowercased()
-        
+
         let calendar = Calendar.current
         let now = Date()
-        
+
         if lowercaseText.contains("tonight") {
             selectedDate = now
             isDateEnabled = true
@@ -1122,14 +1196,14 @@ struct NormalBetView: View {
             detectedDateText = "Friday"
         }
         // Add more date detection patterns as needed
-        
+
         // Update the date picker components
         if isDateEnabled {
             selectedYear = calendar.component(.year, from: selectedDate)
             selectedMonth = calendar.component(.month, from: selectedDate)
             selectedDay = calendar.component(.day, from: selectedDate)
         }
-        
+
         isProcessingDate = false
     }
 }

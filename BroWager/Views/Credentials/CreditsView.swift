@@ -57,6 +57,19 @@ struct CreditsView: View {
                             ]
                         )
                         
+                        CreditsSectionView(
+                            title: "Contributers",
+                            iconName: "person.3",
+                            iconColor: .yellow,
+                            credits: [
+                                CreditItem(
+                                    name: "Ali Rahbar",
+                                    role: "AI Optimizer",
+                                    description: "3rd year Computer Science Specialist at University of Toronto"
+                                )
+                            ]
+                        )
+                        
                         // Design Team Section
                         CreditsSectionView(
                             title: "Structural Engineer",
@@ -80,7 +93,6 @@ struct CreditsView: View {
                                 CreditItem(name: "Christian Nicholas Fisla", role: "Beta Tester", description: nil),
                                 CreditItem(name: "Julian George Fisla", role: "Beta Tester", description: nil),
                                 CreditItem(name: "Ben Adam Rafailov", role: "Beta Tester", description: nil),
-                                CreditItem(name: "Ali Rahbar", role: "Beta Tester", description: nil),
                                 CreditItem(name: "Jonathan Sin-Sara", role: "Beta Tester", description: nil),
                                 CreditItem(name: "Alexei Sokolovski", role: "Beta Tester", description: nil)
                             ]
