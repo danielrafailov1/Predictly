@@ -775,20 +775,24 @@ struct NormalBetView: View {
             let betTypeContext = getBetTypeContext()
             
             let optimizationPrompt = """
-            You are optimizing a betting question. Here's the context:
-            - Category: \(categoryContext)
-            - Bet Type: \(betTypeContext)
-            - Word Limit: \(maxWordsInBetPrompt) words
-            - Original Question: "\(betPrompt)"
-            
-            Improve this question to be:
-            1. Clear and specific
-            2. Appropriate for \(betType) bets
-            3. Related to \(categoryContext)
-            4. Under \(maxWordsInBetPrompt) words
-            5. Easy to verify the outcome
-            
-            Return only the improved question, nothing else.
+            **Role:** You are an expert oddsmaker specializing in creating clear, verifiable, and precise betting questions.
+
+            **Task:** Your goal is to refine the user's "Original Bet Idea" into a high-quality, optimized question. Use your knowledge and perform a web search to gather specific details (like full team names, event dates, specific metrics, etc.) to make the question unambiguous.
+    
+            **Context:**
+            * **Original Bet Idea:** "\(betPrompt)"
+            * **Betting Category:** "\(categoryContext)"
+            * **Bet Type:** "\(betTypeContext)"
+    
+            **Rules for the Optimized Question:**
+            1.  **Clarity & Specificity:** It must be crystal clear. Replace vague terms (e.g., "the game tonight") with specific facts found via search (e.g., "the Lakers vs. Celtics game on August 29, 2025").
+            2.  **Verifiability:** The outcome must be easily and objectively verifiable from a reputable public source after the event.
+            3.  **Format Compliance:** The question must be perfectly formatted for a "\(betTypeContext)" bet. For a 'Binary' bet, it must be a simple Yes/No question.
+            4.  **Conciseness:** The final question must be under \(maxWordsInBetPrompt) words.
+            5.  **Relevance:** The question must be directly related to the original idea and the provided category.
+    
+            **Output Format:**
+            Provide ONLY the final, optimized betting question. Do not include any explanation, preamble, or quotation marks.
             """
             
             let optimizedQuestion = try await AIServices.shared.sendPrompt(
