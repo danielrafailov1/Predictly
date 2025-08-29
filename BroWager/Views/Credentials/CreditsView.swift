@@ -65,7 +65,7 @@ struct CreditsView: View {
                                 CreditItem(
                                     name: "Ali Rahbar",
                                     role: "AI Optimizer",
-                                    description: "3rd year Computer Science Specialist with a minor in Economics at University of Toronto"
+                                    description: "3rd year Computer Science Specialist at University of Toronto"
                                 )
                             ]
                         )
