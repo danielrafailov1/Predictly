@@ -130,14 +130,11 @@ struct PartyDetailsView: View {
                         VStack(spacing: 24) {
                             // Party Info Section
                             VStack(spacing: 16) {
-                                hostCard
-                                partyCodeCard
-                                betTypeCard
-                                // NEW: Show timer/contest specific info
+                                ChallengeCard
+                                optionsCard
                                 if betType.lowercased() == "timer" || betType.lowercased() == "contest" {
                                     timerContestInfoCard
                                 }
-                                buyInAndPotCard
                                 membersCard
                             }
                             
@@ -535,39 +532,97 @@ struct PartyDetailsView: View {
     
     // MARK: - Custom Header with Back Button
     
+    // States for header actions
+    @State private var showInfoSheet = false
+
     private var customHeaderView: some View {
-        VStack(spacing: 8) {
-            // Top row with back button
+        VStack {
             HStack {
+                // 🔙 Back Button (left)
                 Button(action: {
-                    navigateToMyParties()
+                    dismiss()
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+
+                Spacer()
+                
+                // Copy Code Button
+                Button(action: {
+                    UIPasteboard.general.string = party_code
+                    withAnimation {
+                        showCopied = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation {
+                            showCopied = false
+                        }
+                    }
                 }) {
                     HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                        Text("Back")
-                            .font(.system(size: 16, weight: .medium))
+                        Image(systemName: "doc.on.doc")
+                        Text("Code")
                     }
-                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .semibold))
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
                 
-                Spacer()
+                // Info Button
+                Button(action: {
+                    showInfoSheet = true
+                }) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                .padding(.leading, 6)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal)
+            .overlay(
+                Group {
+                    if showCopied {
+                        Text("Copied!")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .padding(.top, 35)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                },
+                alignment: .topTrailing
+            )
+            .sheet(isPresented: $showInfoSheet) {
+                VStack(spacing: 16) {
+                    Text("Challenge Info")
+                        .font(.headline)
+                    Divider()
+                    Text("Challenge Type: \(betType)")
+                        .font(.subheadline)
+                    Text("Terms & Conditions")
+                        .font(.subheadline)
+                        .bold()
+                    ScrollView {
+                        Text(betTerms.isEmpty ? "No terms provided." : betTerms)
+                            .font(.body)
+                            .padding()
+                    }
+                    Spacer()
+                }
+                .padding()
+            }
             
-            // Second row with party name - full width
+            // Party Name centered below
             Text(partyName)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold))
                 .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-                .padding(.horizontal, 16)
         }
-        .padding(.top, 15)
-        .onAppear { print("PartyDetailsView: loaded, partyName = \(partyName), partyId = \(String(describing: partyId))") }
     }
-    
+
+
     // MARK: - Navigation Functions
     
     private func navigateToMyParties() {
@@ -875,51 +930,64 @@ struct PartyDetailsView: View {
     
     // MARK: - View Components
 
-    private var hostCard: some View {
-        partyInfoCard(
-            icon: "person.crop.circle.fill",
-            title: "Host",
-            value: hostUsername.isEmpty ? hostUserId : hostUsername
+    private func betTypeDisplayName(_ type: String) -> String {
+        switch type.lowercased() {
+        case "normal": return "Normal Challenge"
+        case "timer": return "Timed Challenge"
+        case "contest": return "Contest Challenge"
+        default: return type.capitalized
+        }
+    }
+    
+    private var ChallengeCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "flag.checkered")
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .frame(width: 24, height: 24)
+                
+                Text("Challenge")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+            }
+
+            Text(betPrompt)
+                .foregroundColor(.white.opacity(0.9))
+                .font(.body)
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
+        .padding(.horizontal, 24)
     }
 
-    private var partyCodeCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var optionsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "number.square")
+                Image(systemName: "list.bullet")
                     .foregroundColor(.white.opacity(0.7))
                     .frame(width: 24)
-                Text("Party Code")
+                Text("Options")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 Spacer()
             }
-            HStack(spacing: 12) {
-                Text(party_code)
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 16)
-                    .background(Color.white.opacity(0.08))
-                    .cornerRadius(10)
-                Button(action: {
-                    UIPasteboard.general.string = party_code
-                    withAnimation { showCopied = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                        withAnimation { showCopied = false }
-                    }
-                }) {
-                    Image(systemName: "doc.on.doc")
+            
+            ForEach(partyBets, id: \.self) { option in
+                HStack {
+                    Text(option)
                         .foregroundColor(.white)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
+                    Spacer()
                 }
-                if showCopied {
-                    Text("Copied!")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.green)
-                        .transition(.opacity)
-                }
-                Spacer()
+                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
             }
         }
         .padding(16)
@@ -932,22 +1000,6 @@ struct PartyDetailsView: View {
         .padding(.horizontal, 24)
     }
 
-    private var betTypeCard: some View {
-        partyInfoCard(
-            icon: "questionmark.circle.fill",
-            title: "Challenge Type",
-            value: betTypeDisplayName(betType)
-        )
-    }
-
-    private func betTypeDisplayName(_ type: String) -> String {
-        switch type.lowercased() {
-        case "normal": return "Normal Challenge"
-        case "timer": return "Timed Challenge"
-        case "contest": return "Contest Challenge"
-        default: return type.capitalized
-        }
-    }
 
     private var buyInAndPotCard: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1016,10 +1068,17 @@ struct PartyDetailsView: View {
                 Image(systemName: "person.2.fill")
                     .foregroundColor(.white.opacity(0.7))
                     .frame(width: 24)
+                
                 Text("Party Members")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
+                
                 Spacer()
+                
+                // ✅ Member count (current / max)
+                Text("\(memberUsernames.count)/\(maxMembers)")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.7))
             }
             if memberUsernames.isEmpty {
                 Text("No members yet.")
