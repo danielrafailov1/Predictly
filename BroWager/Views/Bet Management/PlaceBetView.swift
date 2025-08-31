@@ -41,7 +41,8 @@ struct PlaceBetView: View {
     @State private var elapsedTime: Int = 0
     @State private var elapsedTimer: Timer?
     @State private var targetAchievedTime: Int? = nil // NEW: Track when target was achieved
-    
+    @State private var isTermsExpanded = false // NEW: Track terms expansion state
+
     private struct BetCompletionUpdate: Encodable {
         let completed_in_time: Bool
         let score: Int
@@ -537,16 +538,33 @@ struct PlaceBetView: View {
             
             if !betTerms.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Terms & Conditions:")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.yellow)
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isTermsExpanded.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text("Terms & Conditions:")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.yellow)
+                            
+                            Spacer()
+                            
+                            Image(systemName: isTermsExpanded ? "chevron.up" : "chevron.down")
+                                .foregroundColor(.yellow)
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
                     
-                    Text(betTerms)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding()
-                        .background(Color.yellow.opacity(0.1))
-                        .cornerRadius(10)
+                    if isTermsExpanded {
+                        Text(betTerms)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                            .padding()
+                            .background(Color.yellow.opacity(0.1))
+                            .cornerRadius(10)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
                 }
                 .padding(.horizontal, 24)
             }
