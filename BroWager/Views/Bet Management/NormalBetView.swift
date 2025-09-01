@@ -7,11 +7,11 @@ struct NormalBetView: View {
     let userId: UUID?
     let selectedCategory: BetCategoryView.BetCategory?
     let betType: String
-
+    
+    @State private var isDateEnabled = false
     @State private var aiSuggestions: [String] = []
     @State private var betPrompt: String = ""
     @State private var selectedDate = Date()
-    @State private var isDateEnabled = false
     @State private var isNextActive = false
     @State private var optionCount = 2
     @State private var max_selections = 1
@@ -107,7 +107,7 @@ struct NormalBetView: View {
                 destination: BetOptionsView(
                     navPath: $navPath,
                     betPrompt: betPrompt,
-                    selectedDate: isDateEnabled ? selectedDate : nil,
+                    selectedDate:  selectedDate,
                     email: email,
                     userId: userId,
                     optionCount: optionCount,
@@ -628,10 +628,13 @@ struct NormalBetView: View {
                     // NEW: Show optimization section
                     optimizationSection
 
-                    // Date Toggle Section with Info Button
+                    // Auto-detected Date Display
+                    // Auto-detected Date Display
+                    // Date Toggle Section with Auto-Detection
+                    // Date Toggle Section with Auto-Detection and Manual Override
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Set specific date for challenge")
+                            Text("Use specific date for challenge")
                                 .foregroundColor(.white)
                                 .font(.title2)
 
@@ -656,10 +659,10 @@ struct NormalBetView: View {
                         }
                         .padding(.horizontal)
 
-                        // Date Picker Section (only shown when toggle is enabled)
+                        // Date Picker Section (shown when toggle is enabled)
                         if isDateEnabled {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("Select time of match")
+                                Text("Select or modify the challenge date")
                                     .foregroundColor(.white.opacity(0.8))
                                     .font(.headline)
                                     .padding(.horizontal)
@@ -699,12 +702,6 @@ struct NormalBetView: View {
                             .transition(.opacity.combined(with: .slide))
                         }
                     }
-                    .onChange(of: optionCount) { _ in
-                        // Ensure max_selections doesn't exceed optionCount - 1
-                        if max_selections >= optionCount {
-                            max_selections = max(1, optionCount - 1)
-                        }
-                    }
 
                     betTypeSpecificView
 
@@ -715,6 +712,10 @@ struct NormalBetView: View {
                 .onAppear {
                     loadAISuggestions()
                     checkSharedCooldownStatus()
+                    
+                    Task {
+                        await detectAndProcessDate(from: betPrompt)
+                    }
                 }
                 .onDisappear {
                     cooldownTimer?.invalidate()
@@ -729,7 +730,7 @@ struct NormalBetView: View {
         .alert("Date Selection Info", isPresented: $showDateInfo) {
             Button("Got it!", role: .cancel) { }
         } message: {
-            Text("You can either manually select a date or simply type natural phrases like 'tonight', 'tomorrow night', 'Sunday morning', or 'next Friday at 7pm' in your challenge question - the app will automatically detect and set the date for you!")
+            Text("The app automatically detects dates from your challenge question when you type phrases like 'tonight', 'tomorrow', 'Christmas', 'January 5th', or '12/25/2025'. Toggle this on to use the detected date, and you can manually adjust it using the date picker below. Leave it off for a general challenge with no specific date.")
         }
     }
 
@@ -1156,55 +1157,150 @@ struct NormalBetView: View {
     // Detect and process date from text
     private func detectAndProcessDate(from text: String) async {
         isProcessingDate = true
-
-        // This is a placeholder - implement actual date detection logic
-        // You might use NLDataScanner or a custom natural language processing solution
-        let lowercaseText = text.lowercased()
-
-        let calendar = Calendar.current
-        let now = Date()
-
-        if lowercaseText.contains("tonight") {
-            selectedDate = now
-            isDateEnabled = true
-            detectedDateText = "tonight"
-        } else if lowercaseText.contains("tomorrow") {
-            selectedDate = calendar.date(byAdding: .day, value: 1, to: now) ?? now
-            isDateEnabled = true
-            detectedDateText = "tomorrow"
-        } else if lowercaseText.contains("sunday") {
-            // Find next Sunday
-            let weekday = calendar.component(.weekday, from: now)
-            let daysUntilSunday = (1 - weekday + 7) % 7
-            let nextSunday = calendar.date(byAdding: .day, value: daysUntilSunday == 0 ? 7 : daysUntilSunday, to: now) ?? now
-            selectedDate = nextSunday
-            isDateEnabled = true
-            detectedDateText = "Sunday"
-        } else if lowercaseText.contains("monday") {
-            let weekday = calendar.component(.weekday, from: now)
-            let daysUntilMonday = (2 - weekday + 7) % 7
-            let nextMonday = calendar.date(byAdding: .day, value: daysUntilMonday == 0 ? 7 : daysUntilMonday, to: now) ?? now
-            selectedDate = nextMonday
-            isDateEnabled = true
-            detectedDateText = "Monday"
-        } else if lowercaseText.contains("friday") {
-            let weekday = calendar.component(.weekday, from: now)
-            let daysUntilFriday = (6 - weekday + 7) % 7
-            let nextFriday = calendar.date(byAdding: .day, value: daysUntilFriday == 0 ? 7 : daysUntilFriday, to: now) ?? now
-            selectedDate = nextFriday
-            isDateEnabled = true
-            detectedDateText = "Friday"
-        }
-        // Add more date detection patterns as needed
-
-        // Update the date picker components
-        if isDateEnabled {
+        
+        let detectedDate = parseDate(from: text) ?? Date() // Always fallback to today
+        
+        await MainActor.run {
+            selectedDate = detectedDate
+            
+            // Update picker components so manual selection shows the detected date
+            let calendar = Calendar.current
             selectedYear = calendar.component(.year, from: selectedDate)
             selectedMonth = calendar.component(.month, from: selectedDate)
             selectedDay = calendar.component(.day, from: selectedDate)
         }
-
+        
         isProcessingDate = false
+    }
+
+    private func parseDate(from text: String) -> Date? {
+        let lowercaseText = text.lowercased()
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Holiday keywords mapping to 2025 dates
+        let holidays: [String: (month: Int, day: Int)] = [
+            "halloween": (10, 31),
+            "christmas": (12, 25),
+            "new years": (1, 1),
+            "new year": (1, 1),
+            "easter": (4, 20), // Easter 2025
+            "valentines": (2, 14),
+            "valentine": (2, 14),
+            "thanksgiving": (11, 27), // Thanksgiving 2025
+            "independence day": (7, 4),
+            "july 4th": (7, 4),
+            "memorial day": (5, 26), // Memorial Day 2025
+            "labor day": (9, 1) // Labor Day 2025
+        ]
+        
+        // Check for holiday keywords first
+        for (keyword, date) in holidays {
+            if lowercaseText.contains(keyword) {
+                var components = DateComponents()
+                components.year = 2025 // Default to 2025 for holidays
+                components.month = date.month
+                components.day = date.day
+                return calendar.date(from: components)
+            }
+        }
+        
+        // Relative date keywords
+        if lowercaseText.contains("tonight") || lowercaseText.contains("today") {
+            return now
+        } else if lowercaseText.contains("tomorrow") {
+            return calendar.date(byAdding: .day, value: 1, to: now)
+        } else if lowercaseText.contains("sunday") {
+            return getNextWeekday(1, from: now)
+        } else if lowercaseText.contains("monday") {
+            return getNextWeekday(2, from: now)
+        } else if lowercaseText.contains("tuesday") {
+            return getNextWeekday(3, from: now)
+        } else if lowercaseText.contains("wednesday") {
+            return getNextWeekday(4, from: now)
+        } else if lowercaseText.contains("thursday") {
+            return getNextWeekday(5, from: now)
+        } else if lowercaseText.contains("friday") {
+            return getNextWeekday(6, from: now)
+        } else if lowercaseText.contains("saturday") {
+            return getNextWeekday(7, from: now)
+        }
+        
+        // Try various date formats
+        let dateFormats = [
+            "MMMM d, yyyy",      // January 5, 2025
+            "MMMM dd, yyyy",     // January 05, 2025
+            "MMM d, yyyy",       // Jan 5, 2025
+            "MMM dd, yyyy",      // Jan 05, 2025
+            "MM/dd/yyyy",        // 01/05/2025
+            "MM/dd/yy",          // 01/05/25
+            "M/d/yyyy",          // 1/5/2025
+            "M/d/yy",            // 1/5/25
+            "dd/MM/yyyy",        // 05/01/2025
+            "d/MM/yyyy",         // 5/01/2025
+            "yyyy-MM-dd",        // 2025-01-05
+            "MMMM d",            // January 5 (current year)
+            "MMM d",             // Jan 5 (current year)
+            "MM/dd",             // 01/05 (current year)
+            "M/d"                // 1/5 (current year)
+        ]
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US")
+        
+        for format in dateFormats {
+            dateFormatter.dateFormat = format
+            
+            // Try to find date patterns in the text
+            let words = text.components(separatedBy: .whitespacesAndNewlines)
+            for word in words {
+                if let date = dateFormatter.date(from: word) {
+                    // For formats without year, assume current year or next year if date has passed
+                    if !format.contains("yyyy") && !format.contains("yy") {
+                        var components = calendar.dateComponents([.year, .month, .day], from: date)
+                        components.year = calendar.component(.year, from: now)
+                        
+                        if let dateWithYear = calendar.date(from: components) {
+                            // If the date has already passed this year, assume next year
+                            if dateWithYear < now {
+                                components.year! += 1
+                                return calendar.date(from: components)
+                            }
+                            return dateWithYear
+                        }
+                    }
+                    return date
+                }
+            }
+            
+            // Also try multi-word combinations
+            let text = text.replacingOccurrences(of: "st|nd|rd|th", with: "", options: .regularExpression)
+            if let date = dateFormatter.date(from: text) {
+                if !format.contains("yyyy") && !format.contains("yy") {
+                    var components = calendar.dateComponents([.year, .month, .day], from: date)
+                    components.year = calendar.component(.year, from: now)
+                    
+                    if let dateWithYear = calendar.date(from: components) {
+                        if dateWithYear < now {
+                            components.year! += 1
+                            return calendar.date(from: components)
+                        }
+                        return dateWithYear
+                    }
+                }
+                return date
+            }
+        }
+        
+        return nil // Return nil to use fallback (today's date)
+    }
+
+    private func getNextWeekday(_ weekday: Int, from date: Date) -> Date {
+        let calendar = Calendar.current
+        let currentWeekday = calendar.component(.weekday, from: date)
+        let daysUntilTarget = (weekday - currentWeekday + 7) % 7
+        let targetDate = calendar.date(byAdding: .day, value: daysUntilTarget == 0 ? 7 : daysUntilTarget, to: date) ?? date
+        return targetDate
     }
 }
 
@@ -1858,6 +1954,9 @@ struct BetOptionsView: View {
     @State private var termsCooldownTimer: Timer?
     @State private var termsTimeRemaining: Int = 0
     
+    @State private var isTermsEnabled = false
+    @State private var effectiveSelectedDate: Date = Date() // Default to today
+    
     private let maxRefreshesPerMinute = 3
     
     private var filledOptionsCount: Int {
@@ -1866,8 +1965,9 @@ struct BetOptionsView: View {
     
     // Validation computed property
     private var canProceed: Bool {
-        betOptions.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } &&
-        !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let optionsValid = betOptions.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let termsValid = !isTermsEnabled || !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return optionsValid && termsValid
     }
     
     private let maxWordsInTerms = 300
@@ -1884,6 +1984,116 @@ struct BetOptionsView: View {
     
     private var isOverWordLimit: Bool {
         currentWordCount > maxWordsInTerms
+    }
+    
+    private var displayDate: Date {
+        // First priority: explicit selectedDate from parent (NormalBetView)
+        if let explicitDate = selectedDate {
+            return explicitDate
+        }
+        
+        // Second priority: date extracted from terms (if terms are enabled)
+        if isTermsEnabled, let extractedDate = extractDateFromTerms(betTerms) {
+            return extractedDate
+        }
+        
+        // Third priority: date extracted from bet prompt (using NormalBetView's logic)
+        if let promptDate = extractDateFromBetPrompt(betPrompt) {
+            return promptDate
+        }
+        
+        // Fallback: today's date
+        return effectiveSelectedDate
+    }
+    
+    private func extractDateFromTerms(_ terms: String) -> Date? {
+        let dateFormatter = DateFormatter()
+        let formats = [
+            "MMMM dd, yyyy",     // January 15, 2024
+            "MMM dd, yyyy",      // Jan 15, 2024
+            "MM/dd/yyyy",        // 01/15/2024
+            "M/d/yyyy",          // 1/15/2024
+            "yyyy-MM-dd",        // 2024-01-15
+            "dd/MM/yyyy",        // 15/01/2024
+            "MMMM dd",           // January 15 (current year)
+            "MMM dd",            // Jan 15 (current year)
+            "MM/dd",             // 01/15 (current year)
+            "M/d"                // 1/15 (current year)
+        ]
+        
+        let currentYear = Calendar.current.component(.year, from: Date())
+        
+        // Remove common words that might interfere with date parsing
+        let cleanedTerms = terms.replacingOccurrences(of: "by ", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "on ", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "until ", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "before ", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "after ", with: "", options: .caseInsensitive)
+        
+        for format in formats {
+            dateFormatter.dateFormat = format
+            dateFormatter.locale = Locale(identifier: "en_US")
+            
+            // Try to find dates in the text
+            let scanner = Scanner(string: cleanedTerms)
+            scanner.charactersToBeSkipped = CharacterSet.whitespacesAndNewlines
+            
+            while !scanner.isAtEnd {
+                if let scannedString = scanner.scanUpToCharacters(from: .whitespacesAndNewlines) {
+                    if let date = dateFormatter.date(from: scannedString) {
+                        // For formats without year, add current year
+                        if !format.contains("yyyy") {
+                            var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+                            components.year = currentYear
+                            if let dateWithYear = Calendar.current.date(from: components) {
+                                return dateWithYear
+                            }
+                        }
+                        return date
+                    }
+                }
+            }
+            
+            // Also try scanning the entire string for partial matches
+            let words = cleanedTerms.components(separatedBy: .whitespacesAndNewlines)
+            for word in words {
+                if let date = dateFormatter.date(from: word) {
+                    if !format.contains("yyyy") {
+                        var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+                        components.year = currentYear
+                        if let dateWithYear = Calendar.current.date(from: components) {
+                            return dateWithYear
+                        }
+                    }
+                    return date
+                }
+            }
+        }
+        
+        return nil
+    }
+    
+    private func extractDateFromBetPrompt(_ prompt: String) -> Date? {
+        let lowercaseText = prompt.lowercased()
+        let calendar = Calendar.current
+        let now = Date()
+
+        if lowercaseText.contains("tonight") {
+            return now
+        } else if lowercaseText.contains("tomorrow") {
+            return calendar.date(byAdding: .day, value: 1, to: now)
+        } else if lowercaseText.contains("sunday") {
+            let weekday = calendar.component(.weekday, from: now)
+            let daysUntilSunday = (1 - weekday + 7) % 7
+            return calendar.date(byAdding: .day, value: daysUntilSunday == 0 ? 7 : daysUntilSunday, to: now)
+        } else if lowercaseText.contains("friday") {
+            let weekday = calendar.component(.weekday, from: now)
+            let daysUntilFriday = (6 - weekday + 7) % 7
+            return calendar.date(byAdding: .day, value: daysUntilFriday == 0 ? 7 : daysUntilFriday, to: now)
+        }
+        // Add other day patterns as needed
+        
+        return nil
     }
 
     var body: some View {
@@ -1914,7 +2124,10 @@ struct BetOptionsView: View {
                     }
                     
                     termsHeaderSection
-                    termsEditorSection
+                    
+                    if isTermsEnabled {
+                        termsEditorSection
+                    }
                     
                     Spacer(minLength: 20)
                     
@@ -1930,6 +2143,10 @@ struct BetOptionsView: View {
             setupInitialOptions()
             checkOptionsCooldownStatus()
             checkTermsCooldownStatus()
+            
+            if selectedDate == nil {
+                effectiveSelectedDate = Date()
+            }
         }
         .onDisappear {
             optionsCooldownTimer?.invalidate()
@@ -2138,49 +2355,57 @@ struct BetOptionsView: View {
     }
 
     private var termsHeaderSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Terms (Penalties, Prizes, Rules)")
                     .foregroundColor(.white)
                 Spacer()
-                generateTermsButton
+                Toggle("", isOn: $isTermsEnabled)
+                    .toggleStyle(SwitchToggleStyle(tint: .blue))
             }
             
-            // Terms cooldown message with live timer
-            if isTermsRefreshDisabled && termsTimeRemaining > 0 {
+            if isTermsEnabled {
                 HStack {
                     Spacer()
-                    Text("Terms cooldown: \(termsTimeRemaining)s remaining")
-                        .foregroundColor(.orange)
-                        .font(.caption)
-                    Spacer()
+                    generateTermsButton
                 }
-            } else if termsRefreshCount > 0 && !isTermsRefreshDisabled {
-                HStack {
-                    Spacer()
-                    Text("\(maxRefreshesPerMinute - termsRefreshCount) terms refreshes remaining this minute")
-                        .foregroundColor(.white.opacity(0.6))
-                        .font(.caption)
-                    Spacer()
-                }
-            }
-            
-            // Word count indicator
-            HStack {
-                Text("Word count: \(currentWordCount) / \(maxWordsInTerms)")
-                    .font(.caption)
-                    .foregroundColor(isOverWordLimit ? .red : (currentWordCount > maxWordsInTerms * 3/4 ? .orange : .gray))
                 
-                Spacer()
-                
-                if isOverWordLimit {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
+                // Terms cooldown message with live timer
+                if isTermsRefreshDisabled && termsTimeRemaining > 0 {
+                    HStack {
+                        Spacer()
+                        Text("Terms cooldown: \(termsTimeRemaining)s remaining")
+                            .foregroundColor(.orange)
                             .font(.caption)
-                        Text("Exceeds limit")
-                            .font(.caption2)
-                            .foregroundColor(.red)
+                        Spacer()
+                    }
+                } else if termsRefreshCount > 0 && !isTermsRefreshDisabled {
+                    HStack {
+                        Spacer()
+                        Text("\(maxRefreshesPerMinute - termsRefreshCount) terms refreshes remaining this minute")
+                            .foregroundColor(.white.opacity(0.6))
+                            .font(.caption)
+                        Spacer()
+                    }
+                }
+                
+                // Word count indicator
+                HStack {
+                    Text("Word count: \(currentWordCount) / \(maxWordsInTerms)")
+                        .font(.caption)
+                        .foregroundColor(isOverWordLimit ? .red : (currentWordCount > maxWordsInTerms * 3/4 ? .orange : .gray))
+                    
+                    Spacer()
+                    
+                    if isOverWordLimit {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.red)
+                                .font(.caption)
+                            Text("Exceeds limit")
+                                .font(.caption2)
+                                .foregroundColor(.red)
+                        }
                     }
                 }
             }
@@ -2385,13 +2610,13 @@ struct BetOptionsView: View {
                         .font(.caption)
                 }
                 
-                if betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if isTermsEnabled && betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("• Please add terms and conditions")
                         .foregroundColor(.red)
                         .font(.caption)
                 }
                 
-                if isOverWordLimit {
+                if isTermsEnabled && isOverWordLimit {
                     Text("• Terms exceed \(maxWordsInTerms) word limit (\(currentWordCount) words)")
                         .foregroundColor(.red)
                         .font(.caption)
@@ -2479,7 +2704,7 @@ struct BetOptionsView: View {
         // Increment counter and refresh
         optionsRefreshCount += 1
         lastOptionsRefreshTimestamp = currentTime
-        await generateOptions(betPrompt: betPrompt, date: selectedDate)
+        await generateOptions(betPrompt: betPrompt, date: displayDate)
         
         // Start cooldown if we've hit the limit
         if optionsRefreshCount >= maxRefreshesPerMinute {
@@ -2561,7 +2786,7 @@ struct BetOptionsView: View {
         // Increment counter and refresh
         termsRefreshCount += 1
         lastTermsRefreshTimestamp = currentTime
-        generateTerms(date: selectedDate)
+        generateTerms(date: displayDate)
         
         // Start cooldown if we've hit the limit
         if termsRefreshCount >= maxRefreshesPerMinute {
@@ -2577,7 +2802,7 @@ struct BetOptionsView: View {
         if betOptions.isEmpty {
             betOptions = Array(repeating: "", count: optionCount)
             Task {
-                await generateOptions(betPrompt: betPrompt, date: selectedDate)
+                await generateOptions(betPrompt: betPrompt, date: displayDate)
             }
         }
     }
