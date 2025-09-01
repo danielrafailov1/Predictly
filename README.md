@@ -36,5 +36,6 @@ An **AI-powered sports betting app** built with **Swift** and **SwiftUI**, desig
 
 ## 📱 Installation
 
-1. **Soon to be released to the Apple App Store**
+1. **Version 1 is officially released to the appstore!**
+https://lnkd.in/gDTazjis
 
