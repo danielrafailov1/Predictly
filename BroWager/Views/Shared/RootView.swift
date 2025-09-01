@@ -38,6 +38,11 @@ struct RootView: View {
                             .tabItem { Label("Profile", systemImage: "person.crop.circle") }
                             .tag(4)
                     }
+                    .onAppear {
+                        // Configure only the icon colors to be white
+                        UITabBar.appearance().unselectedItemTintColor = UIColor.white
+                        UITabBar.appearance().tintColor = UIColor.white
+                    }
                 }
             } else {
                 NavigationStack(path: $navPath) {
