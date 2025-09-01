@@ -141,6 +141,7 @@ struct MyPartiesView: View {
                                 Task { await joinOpenParty(row.party) }
                             }
                         )
+                        .contentShape(Rectangle()) // Make the entire area tappable for accessibility but prevent navigation
                     } else {
                         NavigationLink(value: PartyNavigation(party_code: row.party.party_code ?? "", email: email)) {
                             PartyCard(
@@ -674,7 +675,7 @@ struct MyPartiesView: View {
             let userPartyRows = try JSONDecoder().decode([UserPartyRow].self, from: userPartiesResponse.data)
             let userPartyIds = Set(userPartyRows.map { $0.party_id })
             
-            // Replace the two separate queries (openResponse and publicResponse) with:
+            // Fetch all open/public parties that haven't ended
             let combinedResponse = try await supabaseClient
                 .from("Parties")
                 .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
@@ -729,7 +730,7 @@ struct MyPartiesView: View {
             
             DispatchQueue.main.async {
                 self.openParties = loadedOpenParties
-                print("✅ Loaded \(loadedOpenParties.count) open parties")
+                print("✅ Loaded \(loadedOpenParties.count) open parties (filtered out \(allOpenParties.count - loadedOpenParties.count) parties user is already in)")
             }
             
         } catch {
@@ -849,12 +850,14 @@ struct MyPartiesView: View {
             
             let partiesChunk = try JSONDecoder().decode([PartyRow].self, from: partiesResponse.data)
             
-            // Always load win/loss data for complete state
+            // Load win/loss data, but only check UserBets where is_winner is explicitly set
+            // This prevents parties from being categorized as losses when they shouldn't be
             async let winsTask = supabaseClient
                 .from("User Bets")
                 .select("party_id")
                 .eq("user_id", value: userId)
                 .eq("is_winner", value: true)
+                .not("is_winner", operator: .is, value: "null") // Explicitly exclude null values
                 .execute()
             
             async let lossesTask = supabaseClient
@@ -862,6 +865,7 @@ struct MyPartiesView: View {
                 .select("party_id")
                 .eq("user_id", value: userId)
                 .eq("is_winner", value: false)
+                .not("is_winner", operator: .is, value: "null") // Explicitly exclude null values
                 .execute()
             
             let (winsResponse, lossesResponse) = try await (winsTask, lossesTask)
@@ -940,6 +944,7 @@ struct MyPartiesView: View {
                 
                 print("✅ Loaded \(newParties.count) parties. Total: \(self.parties.count)")
                 print("   Active: \(self.filteredParties.count) (after filtering)")
+                print("   Wins: \(winPartyIds.count), Losses: \(lossPartyIds.count)")
             }
             
         } catch {
@@ -1038,6 +1043,7 @@ struct OpenPartyCard: View {
                         .background(Color.green)
                         .cornerRadius(8)
                     }
+                    .buttonStyle(PlainButtonStyle()) // Prevent button from inheriting list row tap behavior
                 }
             }
         }
@@ -1048,6 +1054,6 @@ struct OpenPartyCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
+            )
     }
 }

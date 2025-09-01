@@ -2579,7 +2579,8 @@ struct BetOptionsView: View {
             timerMinutes: timerMinutes,
             timerSeconds: timerSeconds,
             target: target,
-            isContestAmountPickerEnabled: isContestAmountPickerEnabled
+            isContestAmountPickerEnabled: isContestAmountPickerEnabled,
+            isTermsEnabled: isTermsEnabled
         )
     }
 
@@ -3616,6 +3617,7 @@ struct FinalizeBetView: View {
     let timerSeconds: Int
     let target: Int
     let isContestAmountPickerEnabled: Bool
+    let isTermsEnabled: Bool
 
     @State private var party_name: String = ""
     @State private var privacy: String = "Open" // Set default to "Open"
@@ -3648,7 +3650,7 @@ struct FinalizeBetView: View {
     // Validation computed property - privacy is now mandatory
     private var canProceed: Bool {
         let hasValidOptions = betOptions.allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        let hasValidTerms = !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasValidTerms = !isTermsEnabled || !betTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let isWithinWordLimit = !isOverWordLimit // Add word limit check
         
         return hasValidOptions && hasValidTerms && isWithinWordLimit
