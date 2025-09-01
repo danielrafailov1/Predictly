@@ -87,24 +87,6 @@ struct PlaceBetView: View {
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
                                     .multilineTextAlignment(.center)
-                                
-                                Text(partyName)
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .multilineTextAlignment(.center)
-                                
-                                HStack {
-                                    Image(systemName: betTypeIcon)
-                                        .foregroundColor(.blue)
-                                        .font(.system(size: 16))
-                                    Text("\(betType.capitalized) Challenge")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(.blue)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(20)
                             }
                             .padding(.top, 20)
                             
@@ -129,7 +111,6 @@ struct PlaceBetView: View {
                             .padding(.horizontal, 24)
                             
                             if betType.lowercased() == "normal" && !betOptions.isEmpty {
-                                selectionRulesSection
                                 termsSection
                                 optionsSelectionSection
                             } else if betType.lowercased() == "timed" {
@@ -491,35 +472,6 @@ struct PlaceBetView: View {
     
     // MARK: - Normal Bet Sections
     
-    private var selectionRulesSection: some View {
-        HStack {
-            Image(systemName: "info.circle.fill")
-                .foregroundColor(.blue)
-                .font(.system(size: 16))
-            
-            Text(maxSelections == 1 ?
-                 "Select exactly 1 option" :
-                 "Select up to \(maxSelections) options")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.blue)
-            
-            Spacer()
-            
-            Text("\(selectedOptions.count)/\(maxSelections)")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(selectedOptions.count > maxSelections ? .red : .blue)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 8)
-        .background(Color.blue.opacity(0.05))
-        .cornerRadius(10)
-        .padding(.horizontal, 24)
-    }
-    
     private var termsSection: some View {
         Group {
             if selectedOptions.count > maxSelections {
@@ -573,47 +525,84 @@ struct PlaceBetView: View {
     
     private var optionsSelectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
+            optionsHeader
+            scrollableOptionsList
+        }
+        .frame(height: UIScreen.main.bounds.height * 0.3)
+    }
+    
+    private var optionsHeader: some View {
+        HStack {
             Text("Choose your answer(s):")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white)
-                .padding(.horizontal, 24)
             
-            ForEach(betOptions, id: \.self) { option in
-                Button(action: {
-                    toggleOption(option)
-                }) {
-                    HStack {
-                        Image(systemName: selectedOptions.contains(option) ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(selectedOptions.contains(option) ? .blue : .white.opacity(0.6))
-                            .font(.system(size: 20))
-                        
-                        Text(option)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.leading)
-                        
-                        Spacer()
-                    }
-                    .padding()
-                    .background(
-                        selectedOptions.contains(option)
-                        ? Color.blue.opacity(0.2)
-                        : Color.white.opacity(0.1)
-                    )
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                selectedOptions.contains(option)
-                                ? Color.blue
-                                : Color.white.opacity(0.2),
-                                lineWidth: selectedOptions.contains(option) ? 2 : 1
-                            )
-                    )
-                }
-                .padding(.horizontal, 24)
-            }
+            Spacer()
+            
+            optionsCounter
         }
+        .padding(.horizontal, 24)
+    }
+    
+    private var optionsCounter: some View {
+        Text("\(selectedOptions.count)/\(maxSelections)")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundColor(selectedOptions.count > maxSelections ? .red : .blue)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(8)
+    }
+    
+    private var scrollableOptionsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(betOptions, id: \.self) { option in
+                    optionButton(for: option)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .frame(maxHeight: .infinity)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    private func optionButton(for option: String) -> some View {
+        let isSelected = selectedOptions.contains(option)
+        
+        return Button(action: {
+            toggleOption(option)
+        }) {
+            HStack {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(isSelected ? .blue : .white.opacity(0.6))
+                    .font(.system(size: 20))
+                
+                Text(option)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.leading)
+                
+                Spacer()
+            }
+            .padding()
+            .background(isSelected ? Color.blue.opacity(0.2) : Color.white.opacity(0.1))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        isSelected ? Color.blue : Color.white.opacity(0.2),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .padding(.horizontal, 16)
     }
     
     private var submitButtonSection: some View {
