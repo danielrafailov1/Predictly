@@ -473,6 +473,7 @@ struct MyPartiesView: View {
     }
     
     /// Handle party deletion based on user role
+    /// Handle party deletion based on user role
     private func handlePartyDeletion(_ party: Party) async {
         guard let partyId = party.id else {
             print("❌ Cannot delete party: missing party ID")
@@ -503,8 +504,8 @@ struct MyPartiesView: View {
                 print("✅ Updated local state after party deletion")
             }
             
-            // Refresh the current view to ensure consistency
-            await resetAndLoadParties()
+            // Removed: await resetAndLoadParties()
+            // The local state update above is sufficient
             
         } catch {
             print("❌ Error handling party deletion: \(error)")
