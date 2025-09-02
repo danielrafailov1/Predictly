@@ -111,6 +111,7 @@ struct BetCategoryView: View {
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
+                        .padding(.top, 35)
                     
                     Text("Select the type of challenge you want to create")
                         .font(.system(size: 16, weight: .medium))
