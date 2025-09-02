@@ -237,7 +237,10 @@ struct ProfileView: View {
                 }
             }
         }
+        .navigationBarHidden(true)
+        .toolbarBackground(.hidden, for: .tabBar)
     }
+    
 
     // MARK: - Subviews
     

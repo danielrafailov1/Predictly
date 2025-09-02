@@ -636,7 +636,7 @@ struct NormalBetView: View {
                         HStack {
                             Text("Use specific date for challenge")
                                 .foregroundColor(.white)
-                                .font(.title2)
+                                .font(.system(size: 18))
 
                             if isProcessingDate {
                                 ProgressView()
@@ -656,6 +656,8 @@ struct NormalBetView: View {
 
                             Toggle("", isOn: $isDateEnabled)
                                 .toggleStyle(SwitchToggleStyle(tint: .blue))
+                                .frame(width: 40)
+                                .padding(.trailing, 16)
                         }
                         .padding(.horizontal)
 
@@ -732,6 +734,7 @@ struct NormalBetView: View {
         } message: {
             Text("The app automatically detects dates from your challenge question when you type phrases like 'tonight', 'tomorrow', 'Christmas', 'January 5th', or '12/25/2025'. Toggle this on to use the detected date, and you can manually adjust it using the date picker below. Leave it off for a general challenge with no specific date.")
         }
+
     }
 
     // MARK: - Helper Functions
@@ -2152,6 +2155,7 @@ struct BetOptionsView: View {
             optionsCooldownTimer?.invalidate()
             termsCooldownTimer?.invalidate()
         }
+        
     }
 
     // MARK: - Extracted View Components
@@ -2359,9 +2363,12 @@ struct BetOptionsView: View {
             HStack {
                 Text("Terms (Penalties, Prizes, Rules)")
                     .foregroundColor(.white)
+                    .font(.system(size: 18))
                 Spacer()
                 Toggle("", isOn: $isTermsEnabled)
                     .toggleStyle(SwitchToggleStyle(tint: .blue))
+                    .frame(width: 40)
+                    .padding(.trailing, 16)
             }
             
             if isTermsEnabled {
@@ -3922,44 +3929,13 @@ struct FinalizeBetView: View {
     }
     
     private var customHeaderView: some View {
-        HStack {
-            Button(action: {
-                // Navigate back in the navigation path instead of navigateToMyParties()
-                navPath.removeLast()
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                    Text("Back")
-                        .font(.system(size: 16, weight: .medium))
-                }
-                .foregroundColor(.white)
-            }
-            .padding(.leading, 16)
-            
-            Spacer()
-            
-            Text(truncatedPartyName.isEmpty ? "New Party" : truncatedPartyName)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity)
-            
-            Spacer()
-            
-            // Invisible spacer to balance the back button
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
-                Text("Back")
-                    .font(.system(size: 16, weight: .medium))
-            }
-            .opacity(0)
-            .padding(.trailing, 16)
-        }
-        .padding(.top, 15)
+        Text(truncatedPartyName.isEmpty ? "New Party" : truncatedPartyName)
+            .font(.system(size: 24, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .multilineTextAlignment(.center)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity)
     }
     
     private var partyNameSection: some View {
