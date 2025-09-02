@@ -636,7 +636,7 @@ struct NormalBetView: View {
                         HStack {
                             Text("Use specific date for challenge")
                                 .foregroundColor(.white)
-                                .font(.title2)
+                                .font(.system(size: 18))
 
                             if isProcessingDate {
                                 ProgressView()
@@ -656,6 +656,8 @@ struct NormalBetView: View {
 
                             Toggle("", isOn: $isDateEnabled)
                                 .toggleStyle(SwitchToggleStyle(tint: .blue))
+                                .frame(width: 40)
+                                .padding(.trailing, 16)
                         }
                         .padding(.horizontal)
 
