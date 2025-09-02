@@ -323,6 +323,8 @@ struct MyPartiesView: View {
             .navigationDestination(for: PartyNavigation.self) { details in
                 PartyDetailsView(party_code: details.party_code, email: details.email)
             }
+            .navigationBarHidden(true)
+            .toolbarBackground(.hidden, for: .tabBar)
         }
         .sheet(isPresented: $showJoinParty, onDismiss: {
             Task { await resetAndLoadParties() }
