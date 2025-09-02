@@ -7,6 +7,7 @@ struct NormalBetView: View {
     let userId: UUID?
     let selectedCategory: BetCategoryView.BetCategory?
     let betType: String
+    @Environment(\.dismiss) private var dismiss
     
     @State private var isDateEnabled = false
     @State private var aiSuggestions: [String] = []
@@ -401,26 +402,50 @@ struct NormalBetView: View {
             .ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 20) {
-
+                    
                     // Category Header
                     if let category = selectedCategory {
                         HStack {
+                            Button(action: {
+                                dismiss()
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("Back")
+                                        .font(.system(size: 16, weight: .medium))
+                                }
+                                .foregroundColor(.blue)
+                                .padding(.trailing, 16)
+                                .padding(.vertical, 8)
+                                .cornerRadius(20)
+                                
+                            }
+                            .padding(.trailing)
+                            
+                            Spacer()
+                            
                             Image(systemName: category.icon)
                                 .foregroundColor(category.color)
                                 .font(.title2)
-                            VStack(alignment: .leading) {
-                                Text(category.rawValue)
-                                    .foregroundColor(.white)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                Text(category.description)
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .font(.caption)
-                            }
+                            
+                            Spacer()
+                            
+                            Text(category.rawValue)
+                                .foregroundColor(.white)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            Spacer()
+                            
+                            Text(category.description)
+                                .foregroundColor(.white.opacity(0.7))
+                                .font(.caption)
+                            
                             Spacer()
                         }
-                        .padding(.horizontal)
-                        .padding(.top)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
                     }
 
                     // UPDATED: AI Suggestions Header with shared cooldown
