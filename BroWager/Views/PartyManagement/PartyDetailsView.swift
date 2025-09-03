@@ -78,6 +78,8 @@ struct PartyDetailsView: View {
     @State private var memberToKick: (userId: String, username: String)?
     @State private var memberToPromote: (userId: String, username: String)?
     
+    @State private var isBetOutcomeConfirmed = false
+    
     // Computed property to check if current user is host
     private var isHost: Bool {
         return currentUserId == hostUserId
@@ -252,7 +254,11 @@ struct PartyDetailsView: View {
                     partyId: partyId,
                     partyName: partyName,
                     betOptions: partyBets,
-                    betPrompt: betPrompt
+                    betPrompt: betPrompt,
+                    onOutcomeConfirmed: {
+                        // This closure will be called when the outcome is actually confirmed
+                        isBetOutcomeConfirmed = true
+                    }
                 )
             }
         }
@@ -276,21 +282,13 @@ struct PartyDetailsView: View {
             Button("End") {
                 Task {
                     await endGame()
-                    // Skip ConfirmBetOutcomeView for timer/contest bets
-                    if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
-                        // Automatically determine winners based on completion/scores
-                        await determineTimerContestWinners()
-                        showGameResultsView = true
-                    } else {
-                        showConfirmOutcomeView = true
-                    }
                 }
             }
         } message: {
             if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
                 Text("Ready to end the game? Winners will be automatically determined based on completion.")
             } else {
-                Text("Ready to end the game and confirm the challenge outcome?")
+                Text("Ready to end the game? You'll need to confirm the challenge outcome next.")
             }
         }
         // NEW: Bet warning alert
@@ -700,7 +698,10 @@ struct PartyDetailsView: View {
             
             // Game Results button - Show for ALL users when game is ended
             if gameStatus == "ended" {
-                gameResultsButton
+                // Game Results button - Show for ALL users when game is ended AND bet outcome is confirmed
+                if gameStatus == "ended" && isBetOutcomeConfirmed {
+                    gameResultsButton
+                }
             }
         }
         .padding(.horizontal, 24)
@@ -845,10 +846,31 @@ struct PartyDetailsView: View {
             case "started":
                 endGameButton
             case "ended":
-                EmptyView()
+                if !isBetOutcomeConfirmed && (betType.lowercased() != "timed" && betType.lowercased() != "contest") {
+                    confirmBetOutcomeButton
+                }
             default:
                 EmptyView()
             }
+        }
+    }
+    
+    private var confirmBetOutcomeButton: some View {
+        Button(action: {
+            showConfirmOutcomeView = true
+        }) {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("Confirm Challenge Outcome")
+                    .font(.system(size: 18, weight: .bold))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.orange.opacity(0.9))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -1244,25 +1266,32 @@ struct PartyDetailsView: View {
         do {
             let response = try await supabaseClient
                 .from("Parties")
-                .select("game_status")
+                .select("game_status, winning_options")
                 .eq("id", value: Int(partyId))
                 .limit(1)
                 .execute()
             
-            struct GameStatusResult: Codable { let game_status: String? }
+            struct GameStatusResult: Codable {
+                let game_status: String?
+                let winning_options: [String]?
+            }
             let results = try JSONDecoder().decode([GameStatusResult].self, from: response.data)
             
             if let result = results.first, let gameStatus = result.game_status {
                 await MainActor.run {
                     self.gameStatus = gameStatus
+                    // Check if bet outcome has been confirmed by checking if winning_options exists
+                    if gameStatus == "ended" {
+                        self.isBetOutcomeConfirmed = (result.winning_options != nil && !result.winning_options!.isEmpty)
+                    }
                 }
             }
 
         } catch {
             print("Error fetching game status: \(error)")
-            // Default to waiting if there's an error
             await MainActor.run {
                 self.gameStatus = "waiting"
+                self.isBetOutcomeConfirmed = false
             }
         }
     }
@@ -1301,6 +1330,15 @@ struct PartyDetailsView: View {
             await MainActor.run {
                 self.gameStatus = "ended"
             }
+            
+            // For timer/contest bets, automatically determine winners and mark as confirmed
+            if betType.lowercased() == "timed" || betType.lowercased() == "contest" {
+                await determineTimerContestWinners()
+                await MainActor.run {
+                    self.isBetOutcomeConfirmed = true
+                }
+            }
+            
         } catch {
             print("Error ending game: \(error)")
             await MainActor.run {
