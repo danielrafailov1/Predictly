@@ -21,7 +21,7 @@ struct RootView: View {
                             .tag(0)
                         
                         FriendsView(email: email)
-                            .tabItem { Label("Friends", systemImage: "person.2.fill") }
+                            .tabItem { Label("Open Parties", systemImage: "globe") }
                             .tag(1)
                         
                         NavigationStack {
