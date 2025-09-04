@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import PhotosUI
 import Auth
+import Supabase
 
 struct ProfileView: View {
     
@@ -26,14 +27,25 @@ struct ProfileView: View {
     @State private var isEditingPassword = false
     @State private var newPassword = ""
     @State private var authProvider: String? = nil
-    @State private var friendsWithImages: [FriendWithImage] = []
-    @StateObject private var profileCache = ProfileCache.shared
-    @State private var isLoadingFromCache = false
     @State private var showDeleteAccountConfirmation = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String? = nil
     @EnvironmentObject var sessionManager: SessionManager
+    @StateObject private var profileCache = ProfileCache.shared
+    @State private var isLoadingFromCache = false
     
+    // Friends functionality states
+    @State private var friends: [FriendUser] = []
+    @State private var pendingRequests: [FriendRequest] = []
+    @State private var isFriendsLoading = true
+    @State private var showAddFriend = false
+    @State private var showRequests = false
+    @State private var inviteTarget: FriendUser? = nil
+    @State private var showPartyPicker = false
+    @State private var userParties: [Party1] = []
+    @State private var isLoadingParties = false
+    @State private var inviteStatus: String? = nil
+    @State private var activeChatFriend: FriendUser? = nil
 
     init(navPath: Binding<NavigationPath>, email: String) {
         _navPath = navPath
@@ -68,67 +80,8 @@ struct ProfileView: View {
                         profileHeader
                         accountInfoSection
                         
-                        // Friends Section (updated with profile pictures)
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Friends")
-                                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 24)
-                            .padding(.top, 8)
-                            
-                            if friendsWithImages.isEmpty {
-                                Text("No friends yet.")
-                                    .foregroundColor(.white.opacity(0.5))
-                                    .font(.system(size: 16))
-                                    .padding(.horizontal, 24)
-                            } else {
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 16) {
-                                        ForEach(friendsWithImages, id: \.id) { friend in
-                                            VStack(spacing: 8) {
-                                                // Profile picture with async loading
-                                                AsyncImage(url: friend.profileImageURL) { image in
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                        .frame(width: 48, height: 48)
-                                                        .clipShape(Circle())
-                                                        .overlay(
-                                                            Circle()
-                                                                .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                                                        )
-                                                } placeholder: {
-                                                    // Fallback to default icon while loading or if no image
-                                                    Image(systemName: "person.crop.circle.fill")
-                                                        .resizable()
-                                                        .frame(width: 48, height: 48)
-                                                        .foregroundColor(.blue)
-                                                }
-                                                
-                                                Text(friend.username)
-                                                    .font(.system(size: 16, weight: .medium))
-                                                    .foregroundColor(.white)
-                                                    .lineLimit(1)
-                                                    .truncationMode(.tail)
-                                            }
-                                            .padding(12)
-                                            .background(Color.white.opacity(0.08))
-                                            .cornerRadius(16)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 16)
-                                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                            )
-                                        }
-                                    }
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 8)
-                                }
-                            }
-                        }
-                        .padding(.bottom, 8)
+                        // Enhanced Friends Section with full functionality
+                        friendsSectionWithFullFunctionality
                         
                         if let message = updateMessage {
                             Text(message)
@@ -236,13 +189,280 @@ struct ProfileView: View {
                     Text(error)
                 }
             }
+            // Friends sheets
+            .sheet(isPresented: $showAddFriend, onDismiss: { Task { await loadFriends() } }) {
+                AddFriendView(email: currentEmail)
+                    .environment(\.supabaseClient, supabaseClient)
+            }
+            .sheet(isPresented: $showRequests, onDismiss: { Task { await loadFriends() } }) {
+                FriendRequestsView(email: currentEmail)
+                    .environment(\.supabaseClient, supabaseClient)
+            }
+            .sheet(isPresented: $showPartyPicker) {
+                VStack(spacing: 20) {
+                    Text("Invite \(inviteTarget != nil ? "\(inviteTarget!.username)#\(inviteTarget!.identifier)" : "Friend") to a Party")
+                        .font(.title2)
+                        .padding(.top, 24)
+                    if isLoadingParties {
+                        ProgressView()
+                    } else if userParties.isEmpty {
+                        Text("You have no active parties to invite to.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                ForEach(userParties, id: \.id) { party in
+                                    Button(action: {
+                                        Task { await inviteFriendToParty(friend: inviteTarget!, party: party) }
+                                    }) {
+                                        HStack {
+                                            Text(party.party_name ?? "Unnamed Party")
+                                                .foregroundColor(.primary)
+                                            Spacer()
+                                            Image(systemName: "arrowshape.turn.up.right.fill")
+                                                .foregroundColor(.blue)
+                                        }
+                                        .padding()
+                                        .background(Color.blue.opacity(0.08))
+                                        .cornerRadius(10)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                    if let status = inviteStatus {
+                        Text(status)
+                            .foregroundColor(.green)
+                            .padding(.top, 8)
+                    }
+                    Spacer()
+                    Button("Cancel") { showPartyPicker = false }
+                        .padding(.bottom, 24)
+                }
+                .onDisappear { inviteStatus = nil }
+                .padding()
+                .background(Color(.systemBackground))
+            }
+            .sheet(item: $activeChatFriend) { friend in
+                DirectMessageView(friend: friend, currentUserId: userId ?? "")
+            }
         }
         .navigationBarHidden(true)
         .toolbarBackground(.hidden, for: .tabBar)
     }
-    
 
-    // MARK: - Subviews
+    // MARK: - Friends Section View
+    
+    private var friendsSectionWithFullFunctionality: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section Header
+            HStack {
+                Text("Friends")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+                
+                // Friend actions buttons
+                HStack(spacing: 12) {
+                    Button(action: { showRequests = true }) {
+                        Image(systemName: "envelope")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Color.green.opacity(0.8))
+                            .clipShape(Circle())
+                    }
+                    
+                    Button(action: { showAddFriend = true }) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Color.blue.opacity(0.8))
+                            .clipShape(Circle())
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+            
+            // Friends List
+            if isFriendsLoading {
+                HStack {
+                    Spacer()
+                    ProgressView("Loading friends...")
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .foregroundColor(.white)
+                    Spacer()
+                }
+                .padding()
+            } else if friends.isEmpty {
+                VStack(spacing: 12) {
+                    Text("No friends yet.")
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 16))
+                    
+                    Button(action: { showAddFriend = true }) {
+                        HStack {
+                            Image(systemName: "person.badge.plus")
+                            Text("Add Your First Friend")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.8))
+                        .cornerRadius(8)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(friends, id: \.user_id) { friend in
+                        HStack(spacing: 12) {
+                            AsyncProfileImage(userId: friend.user_id, supabaseClient: supabaseClient)
+                                .frame(width: 40, height: 40)
+                                .clipShape(Circle())
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(friend.username)#\(friend.identifier)")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                            }
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 8) {
+                                Button(action: {
+                                    inviteTarget = friend
+                                    Task { await loadUserParties() }
+                                    showPartyPicker = true
+                                }) {
+                                    Image(systemName: "person.crop.circle.badge.plus")
+                                        .foregroundColor(.blue)
+                                        .font(.system(size: 18))
+                                        .padding(6)
+                                        .background(Color.blue.opacity(0.15))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Button(action: {
+                                    activeChatFriend = friend
+                                }) {
+                                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                                        .foregroundColor(.green)
+                                        .font(.system(size: 18))
+                                        .padding(6)
+                                        .background(Color.green.opacity(0.15))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
+        }
+    }
+    
+    // MARK: - Friends Functionality Methods
+    
+    private func loadFriends() async {
+        let currentUserId: String
+        if let existingUserId = userId {
+            currentUserId = existingUserId
+        } else {
+            // Try to get userId first
+            if let fetchedUserId = try? await fetchUserId() {
+                await MainActor.run { self.userId = fetchedUserId }
+                currentUserId = fetchedUserId
+            } else {
+                print("[ProfileView] Cannot load friends: User ID not found")
+                await MainActor.run { self.isFriendsLoading = false }
+                return
+            }
+        }
+        
+        await MainActor.run { self.isFriendsLoading = true }
+        
+        do {
+            // Get accepted friends using the RPC function
+            let friendsResp = try await supabaseClient
+                .rpc("get_friends", params: ["uid": currentUserId])
+                .execute()
+            let friendsArr = try JSONDecoder().decode([FriendUser].self, from: friendsResp.data)
+            print("[ProfileView] Friends fetched: \(friendsArr)")
+            
+            await MainActor.run {
+                self.friends = friendsArr
+                self.isFriendsLoading = false
+            }
+        } catch {
+            print("[ProfileView] Error loading friends: \(error)")
+            await MainActor.run { self.isFriendsLoading = false }
+        }
+    }
+    
+    private func loadUserParties() async {
+        guard let currentUserId = userId else { return }
+        
+        isLoadingParties = true
+        do {
+            // Fetch parties where user is a member and not expired/deleted
+            let partiesResp = try await supabaseClient
+                .rpc("get_user_parties", params: ["uid": currentUserId])
+                .execute()
+            let allParties = try JSONDecoder().decode([Party1].self, from: partiesResp.data)
+            // Filter to only active/joinable parties
+            userParties = allParties.filter { ($0.status ?? "active") != "expired" && ($0.status ?? "active") != "deleted" }
+        } catch {
+            print("[ProfileView] Error loading user parties: \(error)")
+            userParties = []
+        }
+        isLoadingParties = false
+    }
+    
+    private func inviteFriendToParty(friend: FriendUser, party: Party1) async {
+        guard let partyId = party.id, let currentUserId = userId else {
+            await MainActor.run {
+                inviteStatus = "Failed to send invite: invalid party ID or user ID."
+            }
+            return
+        }
+        
+        do {
+            let invite = PartyInvite1(
+                party_id: partyId,
+                inviter_user_id: currentUserId,
+                invitee_user_id: friend.user_id,
+                status: "pending"
+            )
+            _ = try await supabaseClient
+                .from("Party Invites")
+                .insert(invite)
+                .execute()
+            await MainActor.run {
+                inviteStatus = "Invite sent to \(friend.username)!"
+            }
+        } catch {
+            print("[ProfileView] Error inviting friend: \(error)")
+            await MainActor.run {
+                inviteStatus = "Failed to send invite."
+            }
+        }
+    }
+
+    // MARK: - Original ProfileView Subviews and Methods
     
     private var profileHeader: some View {
         VStack(spacing: 16) {
@@ -427,7 +647,8 @@ struct ProfileView: View {
         .disabled(isDeletingAccount)
     }
 
-    // MARK: - Functions
+    // MARK: - Original ProfileView Functions
+    
     private func fetchUserProfile() async {
         do {
             var fetchedUserId: String? = nil
@@ -468,7 +689,6 @@ struct ProfileView: View {
                     self.identifier = cachedProfile.identifier
                     self.currentEmail = cachedProfile.email
                     self.authProvider = cachedProfile.authProvider
-                    self.friendsWithImages = cachedProfile.friendsWithImages
                     if let uiImage = cachedProfile.profileImage, let swiftUIImage = cachedProfile.profileImageSwiftUI {
                         self.profileUIImage = uiImage
                         self.profileImage = swiftUIImage
@@ -477,6 +697,8 @@ struct ProfileView: View {
                     self.updateMessage = nil
                     self.isLoadingFromCache = false
                 }
+                // Load friends after setting user info
+                await loadFriends()
                 return
             }
             
@@ -496,17 +718,15 @@ struct ProfileView: View {
             let emailRows = try JSONDecoder().decode([EmailRow].self, from: emailResponse.data)
             let fetchedEmail = emailRows.first?.email ?? ""
 
-            // Fetch username, profile image, and friends in parallel
+            // Fetch username and profile image in parallel
             async let usernameTask = fetchUsernameAndIdentifier(for: userId)
             async let profileImageTask = fetchAndLoadProfileImage(for: userId)
-            async let friendsTask = fetchFriendsWithProfileImages(for: userId)
 
             let (fetchedUsername, fetchedIdentifier) = await (try? usernameTask) ?? ("", "")
             let loadedImage = await (try? profileImageTask)
-            let fetchedFriends = await (try? friendsTask) ?? []
             let fetchedAuthProvider = await MainActor.run { self.authProvider ?? "email" }
 
-            // Cache the data
+            // Cache the data (without friends for now)
             let cachedProfile = CachedProfile(
                 userId: userId,
                 username: fetchedUsername,
@@ -515,7 +735,7 @@ struct ProfileView: View {
                 profileImage: loadedImage?.0,
                 profileImageSwiftUI: loadedImage?.1,
                 authProvider: fetchedAuthProvider,
-                friendsWithImages: fetchedFriends,
+                friendsWithImages: [], // We'll load friends separately
                 timestamp: Date()
             )
             profileCache.setCachedProfile(cachedProfile, for: cacheKey)
@@ -528,17 +748,21 @@ struct ProfileView: View {
                     self.profileUIImage = uiImage
                     self.profileImage = image
                 }
-                self.friendsWithImages = fetchedFriends
                 self.isErrorUpdate = false
                 self.updateMessage = nil
                 self.isLoadingFromCache = false
             }
+            
+            // Load friends after setting user info
+            await loadFriends()
+            
         } catch {
             print("❌ Error fetching user profile: \(error.localizedDescription)")
             await MainActor.run {
                 self.isErrorUpdate = true
                 self.updateMessage = "Error loading profile. Please try again."
                 self.isLoadingFromCache = false
+                self.isFriendsLoading = false
             }
         }
     }
@@ -657,6 +881,7 @@ struct ProfileView: View {
             }
         }
     }
+    
     private func updatePassword(newPassword: String) async {
         guard !newPassword.isEmpty else {
             await MainActor.run {
@@ -725,75 +950,6 @@ struct ProfileView: View {
         }
         return nil
     }
-
-    // Updated function to fetch friends with their profile images
-    func fetchFriendsWithProfileImages(for userId: String) async throws -> [FriendWithImage] {
-        // Get all accepted friends where user is either user_id or friend_id
-        let friendsResp = try await supabaseClient
-            .from("Friends")
-            .select("user_id, friend_id, status")
-            .or("user_id.eq.\(userId),friend_id.eq.\(userId)")
-            .eq("status", value: "accepted")
-            .execute()
-        
-        struct FriendRow: Decodable {
-            let user_id: String
-            let friend_id: String
-        }
-        
-        let friendRows = try JSONDecoder().decode([FriendRow].self, from: friendsResp.data)
-        
-        // Get the other user's id
-        let friendIds = friendRows.map { $0.user_id == userId ? $0.friend_id : $0.user_id }
-        
-        if friendIds.isEmpty { return [] }
-        
-        // Fetch usernames for all friendIds
-        let usernamesResp = try await supabaseClient
-            .from("Username")
-            .select("user_id, username")
-            .in("user_id", values: friendIds)
-            .execute()
-        
-        struct UsernameResponse: Decodable {
-            let user_id: String
-            let username: String
-        }
-        
-        let usernamesData = try JSONDecoder().decode([UsernameResponse].self, from: usernamesResp.data)
-        
-        // Create ProfileManager instance
-        let profileManager = ProfileManager(supabaseClient: supabaseClient)
-        
-        // Fetch profile images for each friend
-        var friendsWithImages: [FriendWithImage] = []
-        
-        for usernameData in usernamesData {
-            let profileImageURL: URL?
-            
-            do {
-                // Try to fetch profile image URL
-                if let urlString = try await profileManager.fetchProfileImageURL(for: usernameData.user_id),
-                   let url = URL(string: urlString + "?t=\(Int(Date().timeIntervalSince1970))") {
-                    profileImageURL = url
-                } else {
-                    profileImageURL = nil
-                }
-            } catch {
-                print("⚠️ Could not fetch profile image for user \(usernameData.user_id): \(error)")
-                profileImageURL = nil
-            }
-            
-            let friend = FriendWithImage(
-                id: usernameData.user_id,
-                username: usernameData.username,
-                profileImageURL: profileImageURL
-            )
-            friendsWithImages.append(friend)
-        }
-        
-        return friendsWithImages
-    }
     
     // MARK: - Account Deletion
     
@@ -838,11 +994,68 @@ struct ProfileView: View {
     }
 }
 
-// MARK: - FriendWithImage Model (separate from your existing Friend struct)
+// MARK: - Required Models and Structs
+
+struct FriendUser: Decodable, Identifiable {
+    let user_id: String
+    let username: String
+    let identifier: String
+    var id: String { user_id }
+}
+
+struct FriendRequest: Decodable {
+    let id: Int64
+    let user_id: String
+    let friend_id: String
+    let status: String
+    let created_at: String
+}
+
+// FriendWithImage Model (for the simplified friends display)
 struct FriendWithImage: Identifiable {
     let id: String
     let username: String
     let profileImageURL: URL?
+}
+
+// Party models needed for party invitations
+struct Party1: Decodable, Identifiable {
+    let id: Int64?
+    let party_name: String?
+    let status: String?
+}
+
+struct PartyInvite1: Codable {
+    let party_id: Int64
+    let inviter_user_id: String
+    let invitee_user_id: String
+    let status: String
+}
+
+struct AsyncProfileImage: View {
+    let userId: String
+    let supabaseClient: SupabaseClient
+    @State private var image: Image? = nil
+    
+    var body: some View {
+        Group {
+            if let image = image {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFill()
+                    .foregroundColor(.blue)
+            }
+        }
+        .onAppear {
+            Task {
+                image = await fetchProfileImage(forUserId: userId, supabaseClient: supabaseClient)
+            }
+        }
+    }
 }
 
 // A reusable view for displaying static info
@@ -1034,15 +1247,6 @@ struct EditablePasswordRow: View {
         )
         .padding(.horizontal, 24)
     }
-}
-
-#Preview {
-    // This preview will require a mock navigation path to work correctly.
-    // For now, it shows the basic layout.
-    ProfileView(
-        navPath: .constant(NavigationPath()),
-        email: "test@example.com"
-    )
 }
 
 struct UsernameRow: Codable {

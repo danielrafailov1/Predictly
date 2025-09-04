@@ -10,7 +10,6 @@ struct PartyNavigation: Hashable {
 struct MyPartiesView: View {
     @Environment(\.supabaseClient) private var supabaseClient
     @State private var parties: [Party] = []
-    @State private var openParties: [Party] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedPartyDetails: (party_code: String, email: String)? = nil
@@ -50,7 +49,6 @@ struct MyPartiesView: View {
         case active = "Active"
         case wins = "Wins"
         case losses = "Losses"
-        case open = "Open"
         var id: String { rawValue }
         
         var displayName: String {
@@ -58,7 +56,6 @@ struct MyPartiesView: View {
             case .active: return "Active"
             case .wins: return "Wins"
             case .losses: return "Losses"
-            case .open: return "Open"
             }
         }
         
@@ -67,7 +64,6 @@ struct MyPartiesView: View {
             case .active: return "Active"
             case .wins: return "Wins"
             case .losses: return "Losses"
-            case .open: return "Open Parties"
             }
         }
     }
@@ -91,8 +87,6 @@ struct MyPartiesView: View {
                 // Show parties where user is marked as loser AND game is not waiting
                 return lostPartyIds.contains(partyId) && party.game_status != "waiting"
             }
-        case .open:
-            return openParties
         }
     }
 
@@ -130,49 +124,32 @@ struct MyPartiesView: View {
     private var partiesListView: some View {
         List {
             ForEach(Array(partyRows.enumerated()), id: \.element.party.id) { index, row in
-                Group {
-                    if partyFilter == .open {
-                        OpenPartyCard(
-                            party: row.party,
-                            memberCount: row.memberCount,
-                            betType: row.betType,
-                            backgroundColor: cardBackgroundColor(for: row.party),
-                            onJoin: {
-                                Task { await joinOpenParty(row.party) }
-                            }
-                        )
-                        .contentShape(Rectangle()) // Make the entire area tappable for accessibility but prevent navigation
-                    } else {
-                        NavigationLink(value: PartyNavigation(party_code: row.party.party_code ?? "", email: email)) {
-                            PartyCard(
-                                party: row.party,
-                                memberCount: row.memberCount,
-                                betType: row.betType,
-                                backgroundColor: cardBackgroundColor(for: row.party)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
+                NavigationLink(value: PartyNavigation(party_code: row.party.party_code ?? "", email: email)) {
+                    PartyCard(
+                        party: row.party,
+                        memberCount: row.memberCount,
+                        betType: row.betType,
+                        backgroundColor: cardBackgroundColor(for: row.party)
+                    )
                 }
+                .buttonStyle(PlainButtonStyle())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    if partyFilter != .open {
-                        Button(role: .destructive) {
-                            Task { await handlePartyDeletion(row.party) }
+                    Button(role: .destructive) {
+                        Task { await handlePartyDeletion(row.party) }
+                    } label: {
+                        Label(isPartyLeader(row.party) ? "Delete" : "Leave",
+                              systemImage: isPartyLeader(row.party) ? "trash" : "rectangle.portrait.and.arrow.right")
+                    }
+                    
+                    if partyFilter == .active {
+                        Button {
+                            archiveParty(row.party)
                         } label: {
-                            Label(isPartyLeader(row.party) ? "Delete" : "Leave",
-                                  systemImage: isPartyLeader(row.party) ? "trash" : "rectangle.portrait.and.arrow.right")
+                            Label("Archive", systemImage: "archivebox")
                         }
-                        
-                        if partyFilter == .active {
-                            Button {
-                                archiveParty(row.party)
-                            } label: {
-                                Label("Archive", systemImage: "archivebox")
-                            }
-                            .tint(.orange)
-                        }
+                        .tint(.orange)
                     }
                 }
                 .onAppear {
@@ -236,18 +213,14 @@ struct MyPartiesView: View {
         } else if filteredParties.isEmpty {
             Spacer()
             VStack(spacing: 16) {
-                Image(systemName: partyFilter == .open ? "globe" : "person.3.fill")
+                Image(systemName: "person.3.fill")
                     .font(.system(size: 48))
                     .foregroundColor(.white.opacity(0.5))
-                Text(partyFilter == .open ? "No open parties" : "No \(partyFilter.fullName.lowercased()) parties")
+                Text("No \(partyFilter.fullName.lowercased()) parties")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 if partyFilter == .active {
                     Text("Create a new party to get started")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.5))
-                } else if partyFilter == .open {
-                    Text("No open parties available to join")
                         .font(.system(size: 16))
                         .foregroundColor(.white.opacity(0.5))
                 }
@@ -273,10 +246,10 @@ struct MyPartiesView: View {
                 VStack(spacing: 0) {
                     // Header section - always visible at top
                     VStack(spacing: 8) {
-                        Text(partyFilter == .open ? "Open Parties" : "My Parties")
+                        Text("My Parties")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
-                        Text(partyFilter == .open ? "Discover and join public parties" : "View and manage your active parties")
+                        Text("View and manage your active parties")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                     }
@@ -299,22 +272,20 @@ struct MyPartiesView: View {
 
                     Spacer().frame(height: 14)
 
-                    if partyFilter != .open {
-                        Button(action: { showPartyInvites = true }) {
-                            HStack {
-                                Image(systemName: "envelope.open.fill")
-                                Text("Party Invites")
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(Color.purple)
-                            .cornerRadius(12)
+                    Button(action: { showPartyInvites = true }) {
+                        HStack {
+                            Image(systemName: "envelope.open.fill")
+                            Text("Party Invites")
+                                .font(.system(size: 18, weight: .semibold))
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 8)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.purple)
+                        .cornerRadius(12)
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
                     
                     // Content section - takes remaining space
                     partyListSection
@@ -395,13 +366,9 @@ struct MyPartiesView: View {
             self.errorMessage = nil
         }
         
-        if newFilter == .open {
-            await loadOpenParties()
-        } else {
-            // Reset pagination state when switching filters
-            resetPaginationState()
-            await loadPartiesChunked(isInitialLoad: true)
-        }
+        // Reset pagination state when switching filters
+        resetPaginationState()
+        await loadPartiesChunked(isInitialLoad: true)
     }
     
     /// Reset pagination state
@@ -421,11 +388,7 @@ struct MyPartiesView: View {
         }
         
         resetPaginationState()
-        if partyFilter == .open {
-            await loadOpenParties()
-        } else {
-            await loadPartiesChunked(isInitialLoad: true)
-        }
+        await loadPartiesChunked(isInitialLoad: true)
     }
     
     /// Archive a party locally
@@ -454,7 +417,7 @@ struct MyPartiesView: View {
     
     /// Load more parties for pagination
     private func loadMoreParties() async {
-        guard !isLoadingMore && hasMoreParties && partyFilter != .open && !isCurrentlyLoading else { return }
+        guard !isLoadingMore && hasMoreParties && !isCurrentlyLoading else { return }
         
         DispatchQueue.main.async {
             self.isLoadingMore = true
@@ -472,6 +435,7 @@ struct MyPartiesView: View {
         return party.created_by == userId
     }
     
+    /// Handle party deletion based on user role
     /// Handle party deletion based on user role
     private func handlePartyDeletion(_ party: Party) async {
         guard let partyId = party.id else {
@@ -494,7 +458,6 @@ struct MyPartiesView: View {
             DispatchQueue.main.async {
                 // Remove from all local arrays
                 self.parties.removeAll { $0.id == partyId }
-                self.openParties.removeAll { $0.id == partyId }
                 self.wonPartyIds.remove(partyId)
                 self.lostPartyIds.remove(partyId)
                 self.loadedPartyIds.remove(partyId)
@@ -503,8 +466,8 @@ struct MyPartiesView: View {
                 print("✅ Updated local state after party deletion")
             }
             
-            // Refresh the current view to ensure consistency
-            await resetAndLoadParties()
+            // Removed: await resetAndLoadParties()
+            // The local state update above is sufficient
             
         } catch {
             print("❌ Error handling party deletion: \(error)")
@@ -580,169 +543,6 @@ struct MyPartiesView: View {
             .execute()
         
         print("✅ Successfully left party with ID: \(partyId)")
-    }
-
-    /// Join an open party
-    private func joinOpenParty(_ party: Party) async {
-        guard let partyId = party.id else {
-            print("❌ Cannot join party: missing party ID")
-            return
-        }
-        
-        do {
-            let memberCheckResponse = try await supabaseClient
-                .from("Party Members")
-                .select("id")
-                .eq("party_id", value: String(partyId))
-                .eq("user_id", value: userId)
-                .execute()
-            
-            struct MemberCheck: Decodable { let id: Int64 }
-            let existingMembers = try JSONDecoder().decode([MemberCheck].self, from: memberCheckResponse.data)
-            
-            if !existingMembers.isEmpty {
-                DispatchQueue.main.async {
-                    self.errorMessage = "You're already a member of this party"
-                }
-                return
-            }
-            
-            let memberData = [
-                "party_id": String(partyId),
-                "user_id": userId,
-                "joined_at": ISO8601DateFormatter().string(from: Date())
-            ]
-            
-            try await supabaseClient
-                .from("Party Members")
-                .insert(memberData)
-                .execute()
-            
-            await resetAndLoadParties()
-            
-            print("✅ Successfully joined party: \(party.party_name ?? "Unknown")")
-            
-        } catch {
-            print("❌ Error joining party: \(error)")
-            DispatchQueue.main.async {
-                self.errorMessage = "Failed to join party: \(error.localizedDescription)"
-            }
-        }
-    }
-    
-    private func loadOpenParties() async {
-        guard !userId.isEmpty else {
-            print("⚠️ Attempted to load open parties but userId is empty.")
-            return
-        }
-        
-        // Set loading state to prevent concurrent operations
-        isCurrentlyLoading = true
-        defer { isCurrentlyLoading = false }
-        
-        struct OpenPartyRow: Decodable {
-            let id: Int64?
-            let party_name: String?
-            let bet_type: String?
-            let party_code: String?
-            let created_by: String?
-            let privacy_option: String?
-            let game_status: String
-            let created_at: String?
-            let bet: String?
-            let terms: String?
-            let options: [String]?
-            let max_members: Int?
-            let status: String?
-            let max_selections: Int?
-            let timer_duration: Int?
-            let allow_early_finish: Bool?
-            let contest_unit: String?
-            let contest_target: Int?
-            let allow_ties: Bool?
-        }
-        
-        struct UserPartyRow: Decodable {
-            let party_id: Int64
-        }
-        
-        do {
-            // Get parties user is already a member of
-            let userPartiesResponse = try await supabaseClient
-                .from("Party Members")
-                .select("party_id")
-                .eq("user_id", value: userId)
-                .execute()
-            
-            let userPartyRows = try JSONDecoder().decode([UserPartyRow].self, from: userPartiesResponse.data)
-            let userPartyIds = Set(userPartyRows.map { $0.party_id })
-            
-            // Fetch all open/public parties that haven't ended
-            let combinedResponse = try await supabaseClient
-                .from("Parties")
-                .select("id, party_name, bet_type, party_code, created_by, privacy_option, game_status, created_at, bet, terms, options, max_members, status, max_selections, timer_duration, allow_early_finish, contest_unit, contest_target, allow_ties")
-                .in("privacy_option", values: ["Open", "Public"])
-                .neq("game_status", value: "ended")
-                .order("created_at", ascending: false)
-                .range(from: 0, to: chunkSize - 1)
-                .execute()
-
-            let allOpenParties = try JSONDecoder().decode([OpenPartyRow].self, from: combinedResponse.data)
-            
-            // Filter out parties that user is already member of
-            let availableOpenParties = allOpenParties.filter { party in
-                guard let partyId = party.id else { return false }
-                return !userPartyIds.contains(partyId)
-            }
-            
-            let loadedOpenParties = availableOpenParties.compactMap { p -> Party? in
-                guard let partyId = p.id else { return nil }
-                
-                return Party(
-                    id: partyId,
-                    party_code: p.party_code,
-                    created_by: p.created_by,
-                    party_name: p.party_name,
-                    privacy_option: p.privacy_option,
-                    max_members: p.max_members,
-                    bet: p.bet,
-                    bet_type: p.bet_type,
-                    options: p.options,
-                    terms: p.terms,
-                    status: p.status,
-                    game_status: p.game_status,
-                    max_selections: p.max_selections,
-                    timer_duration: p.timer_duration,
-                    allow_early_finish: p.allow_early_finish,
-                    contest_unit: p.contest_unit,
-                    contest_target: p.contest_target,
-                    allow_ties: p.allow_ties
-                )
-            }
-            
-            // Load member counts for open parties
-            await withTaskGroup(of: Void.self) { group in
-                for party in loadedOpenParties {
-                    guard let partyId = party.id else { continue }
-                    group.addTask {
-                        await self.loadMemberCount(for: partyId)
-                    }
-                }
-            }
-            
-            DispatchQueue.main.async {
-                self.openParties = loadedOpenParties
-                print("✅ Loaded \(loadedOpenParties.count) open parties (filtered out \(allOpenParties.count - loadedOpenParties.count) parties user is already in)")
-            }
-            
-        } catch {
-            print("❌ Error loading open parties: \(error)")
-            DispatchQueue.main.async {
-                if self.partyFilter == .open {
-                    self.errorMessage = "Error loading open parties: \(error.localizedDescription)"
-                }
-            }
-        }
     }
     
     /// Load member count for a specific party
@@ -1007,55 +807,5 @@ struct PartyCard: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
-    }
-}
-
-struct OpenPartyCard: View {
-    let party: Party
-    let memberCount: Int
-    let betType: String
-    let backgroundColor: Color
-    let onJoin: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(party.party_name ?? "Unnamed Party")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                    Text("Members: \(memberCount)")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(betType)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                    Button(action: onJoin) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Join")
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.green)
-                        .cornerRadius(8)
-                    }
-                    .buttonStyle(PlainButtonStyle()) // Prevent button from inheriting list row tap behavior
-                }
-            }
-        }
-        .padding()
-        .background(backgroundColor)
-        .cornerRadius(14)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
     }
 }

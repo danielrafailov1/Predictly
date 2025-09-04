@@ -25,6 +25,8 @@ struct ConfirmBetOutcomeView: View {
     @State private var searchQuery: String = ""
     @State private var showDetailedAnalysis = false
     
+    let onOutcomeConfirmed: (() -> Void)?
+    
     enum AIVerificationStatus {
         case correct      // Green checkmark ✓
         case incorrect    // Red X ✗
@@ -1054,6 +1056,12 @@ struct ConfirmBetOutcomeView: View {
                 self.isLoading = false
             }
             
+            await MainActor.run {
+                self.isLoading = false
+                // Call the completion callback to notify PartyDetailsView
+                onOutcomeConfirmed?()
+            }
+
             dismiss()
             
         } catch {

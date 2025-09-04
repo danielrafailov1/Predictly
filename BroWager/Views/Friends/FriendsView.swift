@@ -4,305 +4,291 @@ import Supabase
 struct FriendsView: View {
     let email: String
     @Environment(\.supabaseClient) private var supabaseClient
-    @State private var userId: String = ""
-    @State private var friends: [FriendUser] = []
-    @State private var pendingRequests: [FriendRequest] = []
+    @EnvironmentObject var sessionManager: SessionManager
+    @State private var openParties: [PartyData] = []
     @State private var isLoading = true
-    @State private var showAddFriend = false
-    @State private var showRequests = false
-    @State private var showProfile = false
-    @State private var profileImage: Image? = nil
-    @State private var inviteTarget: FriendUser? = nil
-    @State private var showPartyPicker = false
-    @State private var userParties: [Party] = []
-    @State private var isLoadingParties = false
-    @State private var inviteStatus: String? = nil
-    @State private var activeChatFriend: FriendUser? = nil
+    @State private var errorMessage: String? = nil
+    @State private var searchText: String = ""
+    
+    struct PartyData: Identifiable, Codable {
+        let id: Int64
+        let party_name: String
+        let bet: String
+        let bet_type: String?
+        let options: [String]?
+        let max_members: Int64?
+        let privacy_option: String?
+        let status: String?
+        let created_by: String
+        let created_at: String?
+        let terms: String?
+        
+        var displayOptions: String {
+            return options?.joined(separator: ", ") ?? "No options available"
+        }
+        
+        var memberLimit: String {
+            if let max = max_members {
+                return "Max: \(max) members"
+            }
+            return "No member limit"
+        }
+    }
+    
+    var filteredParties: [PartyData] {
+        if searchText.isEmpty {
+            return openParties
+        }
+        
+        let lowercaseSearch = searchText.lowercased()
+        return openParties.filter { party in
+            party.bet.lowercased().contains(lowercaseSearch) ||
+            party.party_name.lowercased().contains(lowercaseSearch) ||
+            party.options?.joined(separator: " ").lowercased().contains(lowercaseSearch) == true ||
+            party.bet_type?.lowercased().contains(lowercaseSearch) == true
+        }
+    }
     
     var body: some View {
-        ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
-                    Color(red: 0.15, green: 0.15, blue: 0.25)
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            ).ignoresSafeArea()
-            VStack(spacing: 24) {
-                Text("Friends")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .padding(.top, 16)
-                if isLoading {
-                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else {
-                    if friends.isEmpty {
-                        Text("No friends yet.")
-                            .foregroundColor(.white.opacity(0.7))
-                    } else {
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                ForEach(friends, id: \.user_id) { friend in
-                                    HStack {
-                                        AsyncProfileImage(userId: friend.user_id, supabaseClient: supabaseClient)
-                                            .frame(width: 40, height: 40)
-                                            .clipShape(Circle())
-                                        Text("\(friend.username)#\(friend.identifier)")
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Button(action: {
-                                            inviteTarget = friend
-                                            Task { await loadUserParties() }
-                                            showPartyPicker = true
-                                        }) {
-                                            Image(systemName: "person.crop.circle.badge.plus")
-                                                .foregroundColor(.blue)
-                                                .font(.system(size: 22))
-                                        }
-                                        .buttonStyle(.plain)
-                                        Button(action: {
-                                            activeChatFriend = friend
-                                        }) {
-                                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                                .foregroundColor(.green)
-                                                .font(.system(size: 22))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding()
-                                    .background(Color.white.opacity(0.08))
-                                    .cornerRadius(10)
-                                }
-                            }.padding(.horizontal)
-                        }
-                    }
-                }
-                Spacer()
-                HStack {
-                    Button(action: { showAddFriend = true }) {
-                        HStack {
-                            Image(systemName: "person.badge.plus")
-                            Text("Add Friend")
-                        }
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                    }
-                    Button(action: { showRequests = true }) {
-                        HStack {
-                            Image(systemName: "envelope")
-                            Text("Friend Requests")
-                        }
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.green)
-                        .cornerRadius(12)
-                    }
-                }
+        NavigationView {
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color(red: 0.15, green: 0.15, blue: 0.25)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                ).ignoresSafeArea()
                 
-            }
-            .sheet(isPresented: $showAddFriend, onDismiss: { Task { await loadFriends() } }) {
-                AddFriendView(email: email)
-                    .environment(\.supabaseClient, supabaseClient)
-            }
-            .sheet(isPresented: $showRequests, onDismiss: { Task { await loadFriends() } }) {
-                FriendRequestsView(email: email)
-                    .environment(\.supabaseClient, supabaseClient)
-            }
-            .sheet(isPresented: $showPartyPicker) {
-                VStack(spacing: 20) {
-                    Text("Invite \(inviteTarget != nil ? "\(inviteTarget!.username)#\(inviteTarget!.identifier)" : "Friend") to a Party")
-                        .font(.title2)
-                        .padding(.top, 24)
-                    if isLoadingParties {
-                        ProgressView()
-                    } else if userParties.isEmpty {
-                        Text("You have no active parties to invite to.")
-                            .foregroundColor(.secondary)
+                VStack(spacing: 0) {
+                    // Header
+                    VStack(spacing: 12) {
+                        Text("Open Parties")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text("Find and join betting parties")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .padding(.top, 20)
+                    .padding(.horizontal)
+                    
+                    // Search bar
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        
+                        TextField("Search parties, bets, or options...", text: $searchText)
+                            .foregroundColor(.white)
+                            .accentColor(.blue)
+                    }
+                    .padding()
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    .padding(.top, 20)
+                    
+                    // Content
+                    if isLoading {
+                        Spacer()
+                        ProgressView("Loading open parties...")
+                            .tint(.white)
+                            .foregroundColor(.white)
+                        Spacer()
+                    } else if let error = errorMessage {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 50))
+                                .foregroundColor(.orange)
+                            
+                            Text("Error")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            Text(error)
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                            
+                            Button("Retry") {
+                                loadOpenParties()
+                            }
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .padding()
+                        Spacer()
+                    } else if filteredParties.isEmpty {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: searchText.isEmpty ? "person.3" : "magnifyingglass")
+                                .font(.system(size: 50))
+                                .foregroundColor(.gray)
+                            
+                            Text(searchText.isEmpty ? "No Open Parties" : "No Results")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            Text(searchText.isEmpty ? "There are no open parties available to join right now." : "No parties match your search.")
+                                .foregroundColor(.white.opacity(0.7))
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding()
+                        Spacer()
                     } else {
+                        // Parties list
                         ScrollView {
-                            VStack(spacing: 12) {
-                                ForEach(userParties, id: \.id) { party in
-                                    Button(action: {
-                                        Task { await inviteFriendToParty(friend: inviteTarget!, party: party) }
-                                    }) {
-                                        HStack {
-                                            Text(party.party_name ?? "Unnamed Party")
-                                                .foregroundColor(.primary)
-                                            Spacer()
-                                            Image(systemName: "arrowshape.turn.up.right.fill")
-                                                .foregroundColor(.blue)
-                                        }
-                                        .padding()
-                                        .background(Color.blue.opacity(0.08))
-                                        .cornerRadius(10)
-                                    }
+                            LazyVStack(spacing: 12) {
+                                ForEach(filteredParties) { party in
+                                    OpenPartyCardView(party: party)
                                 }
                             }
                             .padding(.horizontal)
+                            .padding(.top, 20)
                         }
                     }
-                    if let status = inviteStatus {
-                        Text(status)
-                            .foregroundColor(.green)
-                            .padding(.top, 8)
-                    }
-                    Spacer()
-                    Button("Cancel") { showPartyPicker = false }
-                        .padding(.bottom, 24)
                 }
-                .onDisappear { inviteStatus = nil }
-                .padding()
-                .background(Color(.systemBackground))
-            }
-        }
-        .sheet(isPresented: $showProfile) {
-            ProfileView(navPath: .constant(NavigationPath()), email: email)
-        }
-        .sheet(item: $activeChatFriend) { friend in
-            DirectMessageView(friend: friend, currentUserId: userId)
-        }
-        .task { 
-            await loadFriends()
-            profileImage = await fetchProfileImage(for: email, supabaseClient: supabaseClient)
-        }
-    }
-    
-    private func loadFriends() async {
-        isLoading = true
-        do {
-            // Get user_id
-            let userResp = try await supabaseClient
-                .from("Login Information")
-                .select("user_id")
-                .eq("email", value: email)
-                .limit(1)
-                .execute()
-            struct UserIdRow: Decodable { let user_id: String }
-            let userIdRows = try JSONDecoder().decode([UserIdRow].self, from: userResp.data)
-            guard let userIdRow = userIdRows.first else {
-                print("[FriendsView] User not found for email: \(email)")
-                await MainActor.run { self.isLoading = false }
-                return
-            }
-            userId = userIdRow.user_id
-            // Get accepted friends
-            let friendsResp = try await supabaseClient
-                .rpc("get_friends", params: ["uid": userId])
-                .execute()
-            let friendsArr = try JSONDecoder().decode([FriendUser].self, from: friendsResp.data)
-            print("[FriendsView] Friends fetched: \(friendsArr)")
-            await MainActor.run {
-                self.friends = friendsArr
-                self.isLoading = false
-            }
-        } catch {
-            print("[FriendsView] Error loading friends: \(error)")
-            await MainActor.run { self.isLoading = false }
-        }
-    }
-    
-    private func loadUserParties() async {
-        isLoadingParties = true
-        do {
-            // Get user_id if not already loaded
-            if userId.isEmpty {
-                let userResp = try await supabaseClient
-                    .from("Login Information")
-                    .select("user_id")
-                    .eq("email", value: email)
-                    .limit(1)
-                    .execute()
-                struct UserIdRow: Decodable { let user_id: String }
-                let userIdRows = try JSONDecoder().decode([UserIdRow].self, from: userResp.data)
-                guard let userIdRow = userIdRows.first else { isLoadingParties = false; return }
-                userId = userIdRow.user_id
-            }
-            // Fetch parties where user is a member and not expired/deleted
-            let partiesResp = try await supabaseClient
-                .rpc("get_user_parties", params: ["uid": userId])
-                .execute()
-            let allParties = try JSONDecoder().decode([Party].self, from: partiesResp.data)
-            // Filter to only active/joinable parties
-            userParties = allParties.filter { ($0.status ?? "active") != "expired" && ($0.status ?? "active") != "deleted" }
-        } catch {
-            print("[FriendsView] Error loading user parties: \(error)")
-            userParties = []
-        }
-        isLoadingParties = false
-    }
-    
-    private func inviteFriendToParty(friend: FriendUser, party: Party) async {
-        guard let partyId = party.id else {
-            print("[FriendsView] Error: party.id is nil")
-            await MainActor.run {
-                inviteStatus = "Failed to send invite: invalid party ID."
-            }
-            return
-        }
-        
-        do {
-            let invite = PartyInvite(
-                party_id: partyId,
-                inviter_user_id: userId,
-                invitee_user_id: friend.user_id,
-                status: "pending"
-            )
-            _ = try await supabaseClient
-                .from("Party Invites")
-                .insert(invite)
-                .execute()
-            await MainActor.run {
-                inviteStatus = "Invite sent to \(friend.username)!"
-            }
-        } catch {
-            print("[FriendsView] Error inviting friend: \(error)")
-            await MainActor.run {
-                inviteStatus = "Failed to send invite."
-            }
-        }
-    }
-
-}
-
-struct FriendUser: Decodable, Identifiable {
-    let user_id: String
-    let username: String
-    let identifier: String
-    var id: String { user_id }
-}
-
-struct FriendRequest: Decodable {
-    let id: Int64
-    let user_id: String
-    let friend_id: String
-    let status: String
-    let created_at: String
-}
-
-struct AsyncProfileImage: View {
-    let userId: String
-    let supabaseClient: SupabaseClient
-    @State private var image: Image? = nil
-    var body: some View {
-        Group {
-            if let image = image {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .scaledToFill()
-                    .foregroundColor(.blue)
             }
         }
         .onAppear {
-            Task {
-                image = await fetchProfileImage(forUserId: userId, supabaseClient: supabaseClient)
+            loadOpenParties()
+        }
+        .refreshable {
+            loadOpenParties()
+        }
+    }
+    
+    private func loadOpenParties() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let response = try await supabaseClient
+                    .from("Parties")
+                    .select()
+                    .eq("privacy_option", value: "public")
+                    .eq("status", value: "open")
+                    .order("created_at", ascending: false)
+                    .execute()
+                
+                let decoder = JSONDecoder()
+                let parties = try decoder.decode([PartyData].self, from: response.data)
+                
+                await MainActor.run {
+                    self.openParties = parties
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to load parties: \(error.localizedDescription)"
+                    self.isLoading = false
+                }
             }
         }
     }
-} 
+}
+
+struct OpenPartyCardView: View {
+    let party: FriendsView.PartyData
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(party.party_name)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 12) {
+                        Text(party.memberLimit)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        
+                        if let betType = party.bet_type {
+                            Text(betType.capitalized)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.3))
+                                .foregroundColor(.blue.opacity(0.8))
+                                .cornerRadius(12)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // For now, just show a placeholder join button
+                Text("Available")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.green)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.green.opacity(0.2))
+                    .cornerRadius(20)
+            }
+            
+            Divider()
+                .background(Color.white.opacity(0.2))
+            
+            // Bet description
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Bet")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                
+                Text(party.bet)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
+                    .lineLimit(3)
+            }
+            
+            // Options if available
+            if !party.displayOptions.isEmpty && party.displayOptions != "No options available" {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Options")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                    
+                    Text(party.displayOptions)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(2)
+                }
+            }
+            
+            // Terms if available
+            if let terms = party.terms, !terms.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Terms")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                    
+                    Text(terms)
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+    }
+}
